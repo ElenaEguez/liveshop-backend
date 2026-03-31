@@ -1,0 +1,29 @@
+
+En el usuario no se aplico el descuento al momento de la venta , en el live en vivo al escoger el producto no me descuenta el cupon - ---- 
+Dashboard mostrar ventas por sucursal
+Filtrar por almacen para ver todas las ventas
+Filtrado por sucursal Arqueos de Caja
+
+El stock de variantes tambien debe disminuir cuando se compra el producto no solo el stock total (REVISAR QUE DESCUENTE POR VARIANTE )
+El descuento en la venta no se aplica 
+
+
+
+Reflejar automatiocamente el cambio en categoria de gasto 
+
+
+
+
+
+
+
+
+ 
+Cuando es al credito y se pago al menos una cuota o x cuotas hasta terminar el credito deberia reflejarse en el comprobante 
+
+
+Mostrar Turnos de Caja en gastos operativos , dentro del dashboard hacer el flujo de caja 
+
+No salen todos los estados en confirmar pedido 
+Horario la paz bolivia Caja abierta desde 13:00 ?
+En el modulo vender en la seccion de descuento deberia tener porcentaje para poder tener ambas opciones

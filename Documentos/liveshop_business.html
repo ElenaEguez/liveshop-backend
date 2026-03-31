@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiveShop Bolivia — Business Plan & Django Structure</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --blue: #1A56DB; --blue-dark: #0E4DA4; --blue-light: #DBEAFE;
+  --green: #16A34A; --green-light: #DCFCE7;
+  --orange: #D97706; --orange-light: #FEF3C7;
+  --red: #DC2626; --red-light: #FEE2E2;
+  --purple: #7C3AED; --purple-light: #EDE9FE;
+  --gray-900: #111827; --gray-800: #1F2937; --gray-700: #374151;
+  --gray-600: #4B5563; --gray-400: #9CA3AF; --gray-200: #E5E7EB;
+  --gray-100: #F9FAFB; --white: #FFFFFF;
+}
+body { font-family: 'Segoe UI', system-ui, Arial, sans-serif; background: var(--gray-100); color: var(--gray-900); }
+
+/* NAV */
+.topbar { background: var(--blue-dark); color: white; padding: 12px 32px; display: flex; align-items: center; justify-content: space-between; position: sticky; top:0; z-index:200; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+.topbar .brand { font-size: 1.1rem; font-weight: 800; }
+.topbar .brand span { color: #93C5FD; }
+.tab-nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab-btn { padding: 7px 16px; border-radius: 20px; font-size: 0.82rem; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.1); color: #BFDBFE; }
+.tab-btn.active { background: white; color: var(--blue-dark); }
+.tab-btn:hover:not(.active) { background: rgba(255,255,255,0.2); }
+
+/* TABS */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* PAGE HEADER */
+.page-header { background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%); color: white; padding: 48px 40px 40px; }
+.page-header h1 { font-size: 2rem; font-weight: 800; margin-bottom: 8px; }
+.page-header p { color: #BFDBFE; font-size: 1rem; max-width: 700px; }
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 32px; }
+.kpi-card { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 16px 20px; }
+.kpi-card .kpi-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #93C5FD; margin-bottom: 6px; font-weight: 700; }
+.kpi-card .kpi-value { font-size: 1.6rem; font-weight: 800; color: white; }
+.kpi-card .kpi-sub { font-size: 0.75rem; color: #BFDBFE; margin-top: 3px; }
+
+/* MAIN CONTENT */
+.main { max-width: 1400px; margin: 0 auto; padding: 32px 40px; }
+
+/* SECTION TITLES */
+.sec-title { font-size: 1.3rem; font-weight: 800; color: var(--gray-900); margin-bottom: 6px; }
+.sec-sub { font-size: 0.88rem; color: var(--gray-600); margin-bottom: 24px; }
+
+/* BMC */
+.bmc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.bmc-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.bmc-card { background: white; border-radius: 12px; padding: 18px 20px; border: 1px solid var(--gray-200); box-shadow: 0 1px 4px rgba(0,0,0,0.06); position: relative; overflow: hidden; }
+.bmc-card::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; }
+.bmc-card.kp::before { background: var(--purple); }
+.bmc-card.ka::before { background: var(--blue); }
+.bmc-card.vp::before { background: #059669; }
+.bmc-card.cr::before { background: #D97706; }
+.bmc-card.cs::before { background: var(--red); }
+.bmc-card.ch::before { background: #0891B2; }
+.bmc-card.rv::before { background: #16A34A; }
+.bmc-card.cost::before { background: #DC2626; }
+
+.bmc-card .bmc-icon { font-size: 1.4rem; margin-bottom: 6px; }
+.bmc-card .bmc-title { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-500); margin-bottom: 10px; }
+.bmc-card .bmc-items { list-style: none; }
+.bmc-card .bmc-items li { font-size: 0.82rem; color: var(--gray-700); padding: 3px 0; border-bottom: 1px solid var(--gray-100); display: flex; gap: 6px; align-items: flex-start; }
+.bmc-card .bmc-items li:last-child { border-bottom: none; }
+.bmc-card .bmc-items li::before { content: '▸'; color: var(--blue); font-size: 0.7rem; margin-top: 2px; flex-shrink: 0; }
+.bmc-card.vp { grid-column: 3; }
+.bmc-card .bmc-highlight { background: var(--blue-light); color: var(--blue-dark); font-size: 0.8rem; font-weight: 700; padding: 6px 10px; border-radius: 6px; margin-top: 10px; }
+
+/* FINANCIAL TABLES */
+.fin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
+.fin-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-bottom: 32px; }
+.card { background: white; border-radius: 14px; padding: 24px; border: 1px solid var(--gray-200); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.card-title { font-size: 0.88rem; font-weight: 800; color: var(--gray-700); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.card-sub { font-size: 0.78rem; color: var(--gray-400); margin-bottom: 16px; }
+
+.plan-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+.plan-card { border-radius: 14px; overflow: hidden; border: 2px solid transparent; transition: all 0.2s; }
+.plan-card.recommended { border-color: var(--blue); box-shadow: 0 4px 20px rgba(26,86,219,0.2); }
+.plan-header { padding: 20px; text-align: center; }
+.plan-name { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.plan-price { font-size: 2.2rem; font-weight: 900; margin: 8px 0 2px; }
+.plan-period { font-size: 0.75rem; opacity: 0.8; }
+.plan-badge { background: rgba(255,255,255,0.25); font-size: 0.68rem; font-weight: 700; padding: 3px 8px; border-radius: 10px; display: inline-block; margin-top: 6px; }
+.plan-body { background: white; padding: 20px; }
+.plan-feature { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--gray-700); padding: 5px 0; border-bottom: 1px solid var(--gray-100); }
+.plan-feature:last-child { border-bottom: none; }
+.check { color: var(--green); font-weight: 700; }
+.cross { color: var(--gray-400); }
+.plan-limit { font-size: 0.72rem; color: var(--gray-400); }
+
+/* PROJECTION TABLE */
+.proj-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+.proj-table th { background: var(--blue-dark); color: white; padding: 10px 14px; text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.proj-table td { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); }
+.proj-table tr:hover td { background: var(--gray-100); }
+.proj-table .num { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
+.proj-table .positive { color: var(--green); }
+.proj-table .negative { color: var(--red); }
+.proj-table .highlight-row td { background: #EFF6FF; font-weight: 700; }
+.proj-table .break-row td { background: #F0FDF4; font-weight: 700; border-top: 2px solid var(--green); }
+
+/* METRIC CARDS */
+.metric-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
+.metric-card { background: white; border-radius: 12px; padding: 16px 18px; border: 1px solid var(--gray-200); text-align: center; }
+.metric-card .m-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-400); font-weight: 700; margin-bottom: 6px; }
+.metric-card .m-value { font-size: 1.5rem; font-weight: 800; }
+.metric-card .m-desc { font-size: 0.72rem; color: var(--gray-400); margin-top: 4px; }
+
+/* BAR CHART */
+.bar-chart { display: flex; gap: 8px; align-items: flex-end; height: 160px; padding: 12px 0 0; }
+.bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bar { width: 100%; border-radius: 4px 4px 0 0; transition: all 0.3s; cursor: pointer; position: relative; }
+.bar:hover { opacity: 0.8; }
+.bar-label { font-size: 0.68rem; color: var(--gray-600); font-weight: 600; }
+.bar-val { font-size: 0.65rem; color: var(--gray-400); }
+
+/* DJANGO STRUCTURE */
+.code-block { background: #0F172A; border-radius: 12px; padding: 20px 24px; font-family: 'Courier New', monospace; font-size: 0.82rem; line-height: 1.7; overflow-x: auto; margin-bottom: 16px; }
+.c-dir { color: #60A5FA; }
+.c-file { color: #86EFAC; }
+.c-py { color: #FCD34D; }
+.c-comment { color: #64748B; }
+.c-class { color: #F9A8D4; }
+.c-field { color: #C4B5FD; }
+.c-str { color: #86EFAC; }
+.c-kw { color: #F9A8D4; font-weight: 700; }
+.c-fn { color: #60A5FA; }
+.c-num { color: #FB923C; }
+
+.app-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+.app-card { background: white; border-radius: 12px; padding: 18px 20px; border: 1px solid var(--gray-200); border-left: 4px solid; }
+.app-card .app-name { font-size: 0.9rem; font-weight: 800; margin-bottom: 4px; font-family: 'Courier New', monospace; }
+.app-card .app-desc { font-size: 0.78rem; color: var(--gray-600); margin-bottom: 10px; }
+.app-card .models-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.app-card .model-badge { font-size: 0.68rem; padding: 2px 8px; border-radius: 10px; font-family: 'Courier New', monospace; font-weight: 600; }
+
+/* OBJECTIVES */
+.obj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.obj-card { background: white; border-radius: 12px; padding: 20px 22px; border: 1px solid var(--gray-200); }
+.obj-card .obj-horizon { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+.obj-card .obj-items { list-style: none; }
+.obj-card .obj-items li { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 0.85rem; align-items: flex-start; }
+.obj-card .obj-items li:last-child { border-bottom: none; }
+.obj-icon { font-size: 1rem; flex-shrink: 0; }
+.obj-text strong { display: block; font-weight: 700; color: var(--gray-800); }
+.obj-text span { font-size: 0.75rem; color: var(--gray-500); }
+
+.okr-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+.okr-table th { background: var(--gray-800); color: white; padding: 10px 14px; text-align: left; font-size: 0.75rem; text-transform: uppercase; }
+.okr-table td { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); vertical-align: top; }
+.okr-table tr:hover td { background: var(--gray-100); }
+.obj-label { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
+
+/* PROGRESS BAR */
+.progress-bar-wrap { background: var(--gray-200); border-radius: 20px; height: 8px; overflow: hidden; margin-top: 6px; }
+.progress-bar-fill { height: 100%; border-radius: 20px; background: var(--blue); }
+
+/* REVENUE STREAM VISUAL */
+.rev-streams { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.rev-stream-card { background: white; border-radius: 12px; padding: 16px; border: 1px solid var(--gray-200); text-align: center; }
+.rev-pct { font-size: 2rem; font-weight: 900; }
+.rev-name { font-size: 0.75rem; font-weight: 700; color: var(--gray-600); margin: 4px 0; }
+.rev-desc { font-size: 0.7rem; color: var(--gray-400); }
+
+/* CHURN / UNIT ECONOMICS */
+.economics-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.eco-card { background: white; border-radius: 12px; padding: 20px; border: 1px solid var(--gray-200); }
+.eco-formula { background: var(--gray-100); border-radius: 8px; padding: 10px 14px; font-family: 'Courier New', monospace; font-size: 0.8rem; color: var(--gray-700); margin: 10px 0; text-align: center; }
+.eco-result { font-size: 1.8rem; font-weight: 900; text-align: center; }
+.eco-note { font-size: 0.75rem; color: var(--gray-500); text-align: center; margin-top: 6px; }
+
+/* RESPONSIVE */
+@media (max-width: 1100px) {
+  .bmc-grid { grid-template-columns: 1fr 1fr 1fr; }
+  .plan-cards, .metric-row { grid-template-columns: repeat(2, 1fr); }
+  .fin-grid, .fin-grid-3, .app-cards, .economics-grid { grid-template-columns: 1fr; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">🛒 LiveShop <span>Bolivia</span></div>
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="showTab('business')">🏢 Negocio</button>
+    <button class="tab-btn" onclick="showTab('financial')">💰 Finanzas</button>
+    <button class="tab-btn" onclick="showTab('objectives')">🎯 Objetivos</button>
+    <button class="tab-btn" onclick="showTab('django')">🐍 Django</button>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 1: BUSINESS MODEL CANVAS -->
+<!-- ============================================================ -->
+<div id="tab-business" class="tab-content active">
+  <div class="page-header">
+    <h1>🏢 Modelo de Negocio — Business Model Canvas</h1>
+    <p>LiveShop Bolivia: la primera plataforma SaaS especializada en live commerce para el mercado boliviano. Resuelve el caos post-transmisión que cuesta a los vendedores hasta 70% de sus ventas potenciales.</p>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Mercado Objetivo SCZ</div>
+        <div class="kpi-value">~8,500</div>
+        <div class="kpi-sub">vendedores activos en redes sociales</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Problema Validado</div>
+        <div class="kpi-value">60–70%</div>
+        <div class="kpi-sub">ventas perdidas post-live</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Ticket Promedio</div>
+        <div class="kpi-value">Bs. 220</div>
+        <div class="kpi-sub">MRR por vendedor activo</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Break-Even</div>
+        <div class="kpi-value">Mes 8</div>
+        <div class="kpi-sub">con 68 clientes pagantes</div>
+      </div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="sec-title">Business Model Canvas</div>
+    <div class="sec-sub">Adaptado al contexto boliviano — mercado de social commerce en Santa Cruz de la Sierra</div>
+
+    <div class="bmc-grid">
+      <!-- Socios Clave -->
+      <div class="bmc-card kp">
+        <div class="bmc-icon">🤝</div>
+        <div class="bmc-title">Socios Clave</div>
+        <ul class="bmc-items">
+          <li>Tigo Bolivia — integración Tigo Money (pago #1 en Bolivia)</li>
+          <li>Banco Unión — QR de pagos bancarios</li>
+          <li>Meta / TikTok — APIs de plataformas de transmisión</li>
+          <li>Cloudinary — almacenamiento de imágenes</li>
+          <li>Google (Gemini API) — IA gratuita para parseo</li>
+          <li>Groq — inferencia LLM gratuita</li>
+          <li>Influencers SCZ — canales de adquisición</li>
+          <li>Asociaciones de emprendedores (ADECRUZ)</li>
+        </ul>
+      </div>
+
+      <!-- Actividades Clave -->
+      <div class="bmc-card ka">
+        <div class="bmc-icon">⚙️</div>
+        <div class="bmc-title">Actividades Clave</div>
+        <ul class="bmc-items">
+          <li>Desarrollo continuo de la plataforma (Django + Angular)</li>
+          <li>Integración y mantenimiento de APIs de pago locales</li>
+          <li>Entrenamiento de modelos IA con español boliviano</li>
+          <li>Onboarding y capacitación de vendedores</li>
+          <li>Soporte técnico vía WhatsApp (canal natural)</li>
+          <li>Marketing en TikTok y grupos de Facebook bolivianos</li>
+          <li>Análisis de métricas y mejora continua del producto</li>
+        </ul>
+      </div>
+
+      <!-- Propuesta de Valor -->
+      <div class="bmc-card vp" style="grid-column:3">
+        <div class="bmc-icon">💎</div>
+        <div class="bmc-title">Propuesta de Valor</div>
+        <ul class="bmc-items">
+          <li><strong>Para vendedores:</strong> elimina el caos post-live y captura el 100% de pedidos automáticamente</li>
+          <li><strong>IA local:</strong> entiende el español boliviano y mensajes caóticos del chat</li>
+          <li><strong>Pagos bolivianos:</strong> Tigo Money + QR Banco Unión integrados nativamente</li>
+          <li><strong>WhatsApp nativo:</strong> confirmaciones automáticas en el canal que usan</li>
+          <li><strong>Mobile-first:</strong> diseñado para celulares Android de gama media</li>
+          <li><strong>Simple:</strong> funciona sin training técnico</li>
+        </ul>
+        <div class="bmc-highlight">🎯 "De vender por WhatsApp en caos → a un sistema profesional en 5 minutos"</div>
+      </div>
+
+      <!-- Relaciones con Clientes -->
+      <div class="bmc-card cr">
+        <div class="bmc-icon">💬</div>
+        <div class="bmc-title">Relaciones con Clientes</div>
+        <ul class="bmc-items">
+          <li>Soporte por WhatsApp Business (canal preferido en Bolivia)</li>
+          <li>Videos tutoriales en TikTok y YouTube</li>
+          <li>Grupo de WhatsApp / Facebook para comunidad de vendedores</li>
+          <li>Onboarding guiado paso a paso (in-app)</li>
+          <li>Programa de referidos: 1 mes gratis por referido activo</li>
+          <li>Reviews de vendedores beta como social proof</li>
+        </ul>
+      </div>
+
+      <!-- Segmentos de Clientes -->
+      <div class="bmc-card cs">
+        <div class="bmc-icon">👥</div>
+        <div class="bmc-title">Segmentos de Clientes</div>
+        <ul class="bmc-items">
+          <li><strong>Primario:</strong> Vendedoras de ropa, zapatos y accesorios en TikTok/Facebook Live (25-45 años, SCZ)</li>
+          <li><strong>Secundario:</strong> Vendedores de comida, cosméticos y productos del hogar</li>
+          <li><strong>Terciario:</strong> Negocios PYME que quieren entrar al live commerce</li>
+          <li><strong>Futuro:</strong> Agencias que manejan múltiples tiendas</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="bmc-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:0">
+      <!-- Canales -->
+      <div class="bmc-card ch">
+        <div class="bmc-icon">📡</div>
+        <div class="bmc-title">Canales</div>
+        <ul class="bmc-items">
+          <li>TikTok Ads (demo de la plataforma en acción)</li>
+          <li>Grupos de Facebook de emprendedores bolivianos</li>
+          <li>Referidos de vendedores satisfechos</li>
+          <li>Ferias de emprendimiento en SCZ</li>
+          <li>Influencers de ventas en Bolivia</li>
+          <li>SEO / Google: "como vender por TikTok Bolivia"</li>
+          <li>Alianzas con contadores y asesores de PYMES</li>
+        </ul>
+      </div>
+
+      <!-- Estructura de Costos -->
+      <div class="bmc-card cost">
+        <div class="bmc-icon">💸</div>
+        <div class="bmc-title">Estructura de Costos</div>
+        <ul class="bmc-items">
+          <li><strong>Fijos:</strong> Salarios del equipo (~Bs. 18,000/mes)</li>
+          <li><strong>Infraestructura:</strong> Railway Pro + Redis + Cloudinary (~Bs. 500/mes)</li>
+          <li><strong>APIs externas:</strong> Twilio WhatsApp, Gemini (escalable)</li>
+          <li><strong>Marketing digital:</strong> TikTok Ads (~Bs. 1,500/mes)</li>
+          <li><strong>Legal y contabilidad:</strong> ~Bs. 800/mes</li>
+          <li><strong>Total fijo estimado:</strong> Bs. 21,000/mes</li>
+        </ul>
+      </div>
+
+      <!-- Fuentes de Ingresos -->
+      <div class="bmc-card rv">
+        <div class="bmc-icon">💰</div>
+        <div class="bmc-title">Fuentes de Ingresos</div>
+        <ul class="bmc-items">
+          <li><strong>85%:</strong> Suscripciones SaaS (Bs. 99–499/mes)</li>
+          <li><strong>10%:</strong> Comisión por transacciones procesadas (0.5%)</li>
+          <li><strong>3%:</strong> Plan Enterprise para agencias multi-tienda</li>
+          <li><strong>2%:</strong> Servicios de setup y onboarding premium</li>
+        </ul>
+        <div class="bmc-highlight">💡 Sin comisión en plan Free → convierte a pagos naturalmente</div>
+      </div>
+    </div>
+
+    <!-- VENTAJAS COMPETITIVAS -->
+    <div style="margin-top:32px">
+      <div class="sec-title">Análisis Competitivo</div>
+      <div class="sec-sub">¿Por qué LiveShop Bolivia gana en el mercado local?</div>
+      <div class="fin-grid-3">
+        <div class="card">
+          <div class="card-title" style="color:var(--red)">❌ Competencia Global</div>
+          <div class="card-sub">TikTok Shop, Shopify, WooCommerce</div>
+          <ul style="list-style:none;font-size:0.82rem;color:var(--gray-700)">
+            <li style="padding:6px 0;border-bottom:1px solid var(--gray-100)">✗ Sin integración Tigo Money</li>
+            <li style="padding:6px 0;border-bottom:1px solid var(--gray-100)">✗ No disponible en Bolivia</li>
+            <li style="padding:6px 0;border-bottom:1px solid var(--gray-100)">✗ No entiende español boliviano</li>
+            <li style="padding:6px 0;border-bottom:1px solid var(--gray-100)">✗ Soporte en inglés o español formal</li>
+            <li style="padding:6px 0">✗ Precio en USD, barrera de pago</li>
+          </ul>
+        </div>
+        <div class="card" style="border-color:var(--orange)">
+          <div class="card-title" style="color:var(--orange)">⚠️ Solución Actual (WhatsApp)</div>
+          <div class="card-sub">Lo que hacen hoy los vendedores</div>
+          <ul style="list-style:none;font-size:0.82rem;color:var(--gray-700)">
+            <li style="padding:6px 0;border-bottom:1px solid var(--gray-100)">✗ Gestión manual = 3-4h post-live</li>
+            <li style="padding:6px 0;border-bottom:1px solid var(--gray-100)">✗ 60-70% de pedidos se pierden</li>
+            <li style="padding:6px 0;border-bottom:1px solid var(--gray-100)">✗ Sin estadísticas ni reportes</li>
+            <li style="padding:6px 0;border-bottom:1px solid var(--gray-100)">✗ No escala con más pedidos</li>
+            <li style="padding:6px 0">✓ Gratis (pero costoso en tiempo)</li>
+          </ul>
+        </div>
+        <div class="card" style="border-color:var(--green);background:var(--green-light)">
+          <div class="card-title" style="color:var(--green)">✅ LiveShop Bolivia</div>
+          <div class="card-sub">Ventaja única e insuperable</div>
+          <ul style="list-style:none;font-size:0.82rem;color:var(--gray-700)">
+            <li style="padding:6px 0;border-bottom:1px solid rgba(22,163,74,0.2)">✓ Pagos Tigo Money + Banco Unión</li>
+            <li style="padding:6px 0;border-bottom:1px solid rgba(22,163,74,0.2)">✓ IA entiende "quiero 2 del azul"</li>
+            <li style="padding:6px 0;border-bottom:1px solid rgba(22,163,74,0.2)">✓ WhatsApp nativo integrado</li>
+            <li style="padding:6px 0;border-bottom:1px solid rgba(22,163,74,0.2)">✓ Soporte en boliviano</li>
+            <li style="padding:6px 0">✓ Precio en Bs., sin USD</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 2: LÓGICA FINANCIERA -->
+<!-- ============================================================ -->
+<div id="tab-financial" class="tab-content">
+  <div class="page-header">
+    <h1>💰 Lógica Financiera Real</h1>
+    <p>Proyecciones conservadoras basadas en el mercado boliviano. Un negocio solo funciona si los números son honestos desde el día uno.</p>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">CAC objetivo</div>
+        <div class="kpi-value">Bs. 180</div>
+        <div class="kpi-sub">Costo adquisición por cliente</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">LTV estimado</div>
+        <div class="kpi-value">Bs. 2,640</div>
+        <div class="kpi-sub">Valor de vida del cliente (12 meses)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">LTV/CAC ratio</div>
+        <div class="kpi-value">14.7x</div>
+        <div class="kpi-sub">Saludable (meta: &gt; 3x)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Churn mensual</div>
+        <div class="kpi-value">6%</div>
+        <div class="kpi-sub">Estimado conservador</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- PLANES Y PRECIOS -->
+    <div class="sec-title">Estructura de Precios — Planes</div>
+    <div class="sec-sub">Diseñados para el poder adquisitivo boliviano y el ciclo de ventas de los emprendedores</div>
+
+    <div class="plan-cards">
+      <div class="plan-card">
+        <div class="plan-header" style="background:#475569">
+          <div class="plan-name" style="color:#CBD5E1">Free</div>
+          <div class="plan-price" style="color:white">Bs. 0</div>
+          <div class="plan-period" style="color:#CBD5E1">para siempre</div>
+          <span class="plan-badge">Enganche</span>
+        </div>
+        <div class="plan-body">
+          <div class="plan-feature"><span class="check">✓</span> 2 lives/mes</div>
+          <div class="plan-feature"><span class="check">✓</span> Hasta 30 pedidos/live</div>
+          <div class="plan-feature"><span class="check">✓</span> 10 productos en catálogo</div>
+          <div class="plan-feature"><span class="check">✓</span> Panel básico de pedidos</div>
+          <div class="plan-feature"><span class="cross">✗</span> <span class="plan-limit">Sin pagos integrados</span></div>
+          <div class="plan-feature"><span class="cross">✗</span> <span class="plan-limit">Sin IA parsing</span></div>
+          <div class="plan-feature"><span class="cross">✗</span> <span class="plan-limit">Sin WhatsApp auto</span></div>
+          <div class="plan-feature"><span class="cross">✗</span> <span class="plan-limit">Sin analytics</span></div>
+        </div>
+      </div>
+
+      <div class="plan-card">
+        <div class="plan-header" style="background:var(--blue)">
+          <div class="plan-name" style="color:#BFDBFE">Starter</div>
+          <div class="plan-price" style="color:white">Bs. 99</div>
+          <div class="plan-period" style="color:#BFDBFE">/mes</div>
+          <span class="plan-badge">Para iniciarse</span>
+        </div>
+        <div class="plan-body">
+          <div class="plan-feature"><span class="check">✓</span> 8 lives/mes</div>
+          <div class="plan-feature"><span class="check">✓</span> 100 pedidos/live</div>
+          <div class="plan-feature"><span class="check">✓</span> 50 productos</div>
+          <div class="plan-feature"><span class="check">✓</span> IA parsing básico</div>
+          <div class="plan-feature"><span class="check">✓</span> Tigo Money QR</div>
+          <div class="plan-feature"><span class="check">✓</span> WhatsApp confirmaciones</div>
+          <div class="plan-feature"><span class="cross">✗</span> <span class="plan-limit">Sin analytics avanzados</span></div>
+          <div class="plan-feature"><span class="cross">✗</span> <span class="plan-limit">Sin múltiples usuarios</span></div>
+        </div>
+      </div>
+
+      <div class="plan-card recommended">
+        <div class="plan-header" style="background:linear-gradient(135deg, #0E4DA4, #16A34A)">
+          <div class="plan-name" style="color:#BBF7D0">Pro ⭐</div>
+          <div class="plan-price" style="color:white">Bs. 220</div>
+          <div class="plan-period" style="color:#BBF7D0">/mes</div>
+          <span class="plan-badge">Más popular</span>
+        </div>
+        <div class="plan-body">
+          <div class="plan-feature"><span class="check">✓</span> Lives ilimitados</div>
+          <div class="plan-feature"><span class="check">✓</span> Pedidos ilimitados</div>
+          <div class="plan-feature"><span class="check">✓</span> Catálogo ilimitado</div>
+          <div class="plan-feature"><span class="check">✓</span> IA parsing completo</div>
+          <div class="plan-feature"><span class="check">✓</span> Tigo Money + Banco Unión</div>
+          <div class="plan-feature"><span class="check">✓</span> WhatsApp + SMS</div>
+          <div class="plan-feature"><span class="check">✓</span> Analytics completos</div>
+          <div class="plan-feature"><span class="check">✓</span> 2 usuarios (asistentes)</div>
+        </div>
+      </div>
+
+      <div class="plan-card">
+        <div class="plan-header" style="background:var(--purple)">
+          <div class="plan-name" style="color:#EDE9FE">Business</div>
+          <div class="plan-price" style="color:white">Bs. 499</div>
+          <div class="plan-period" style="color:#EDE9FE">/mes</div>
+          <span class="plan-badge">Agencias / PYMES</span>
+        </div>
+        <div class="plan-body">
+          <div class="plan-feature"><span class="check">✓</span> Todo en Pro</div>
+          <div class="plan-feature"><span class="check">✓</span> 5 tiendas en 1 cuenta</div>
+          <div class="plan-feature"><span class="check">✓</span> 10 usuarios</div>
+          <div class="plan-feature"><span class="check">✓</span> API acceso</div>
+          <div class="plan-feature"><span class="check">✓</span> Integraciones custom</div>
+          <div class="plan-feature"><span class="check">✓</span> Soporte prioritario</div>
+          <div class="plan-feature"><span class="check">✓</span> Reportes automatizados</div>
+          <div class="plan-feature"><span class="check">✓</span> Onboarding dedicado</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UNIT ECONOMICS -->
+    <div class="sec-title">Unit Economics — Los Números que Importan</div>
+    <div class="sec-sub">Estas métricas determinan si el negocio es sostenible o no</div>
+    <div class="economics-grid" style="margin-bottom:32px">
+      <div class="eco-card">
+        <div class="card-title">📊 CAC — Costo de Adquisición</div>
+        <div class="eco-formula">CAC = Gasto Marketing / Nuevos Clientes<br/>Bs. 1,500 / 8 clientes = Bs. 187</div>
+        <div class="eco-result" style="color:var(--blue)">Bs. 180–200</div>
+        <div class="eco-note">Meta: reducir a Bs. 120 con referidos orgánicos (mes 6+)</div>
+        <div style="margin-top:12px;font-size:0.78rem;color:var(--gray-600)">
+          <strong>Canales de adquisición:</strong><br/>
+          TikTok Ads (Bs. 800): ~4 clientes → CAC Bs. 200<br/>
+          Referidos (Bs. 0): ~3 clientes → CAC Bs. 0<br/>
+          Orgánico/SEO (Bs. 700): ~1 cliente → CAC Bs. 700
+        </div>
+      </div>
+      <div class="eco-card">
+        <div class="card-title">💎 LTV — Valor de Vida del Cliente</div>
+        <div class="eco-formula">LTV = ARPU × (1 / Churn Rate)<br/>Bs. 220 × (1 / 0.06) = Bs. 3,667</div>
+        <div class="eco-result" style="color:var(--green)">Bs. 2,640–3,667</div>
+        <div class="eco-note">Estimado conservador asumiendo mix de planes y churn del 6%</div>
+        <div style="margin-top:12px;font-size:0.78rem;color:var(--gray-600)">
+          <strong>Cálculo detallado:</strong><br/>
+          Mix: 40% Starter (Bs. 99) + 50% Pro (Bs. 220) + 10% Business (Bs. 499)<br/>
+          ARPU real = Bs. 39.6 + Bs. 110 + Bs. 49.9 = <strong>Bs. 199/mes</strong><br/>
+          LTV = 199 / 0.06 = <strong>Bs. 3,317</strong>
+        </div>
+      </div>
+      <div class="eco-card">
+        <div class="card-title">⚖️ LTV/CAC Ratio</div>
+        <div class="eco-formula">LTV/CAC = Bs. 3,317 / Bs. 190 = 17.5x</div>
+        <div class="eco-result" style="color:var(--green)">17.5x</div>
+        <div class="eco-note">Excelente. Meta industria SaaS: &gt; 3x. &gt; 10x = negocio muy saludable.</div>
+        <div style="margin-top:12px;font-size:0.78rem;color:var(--gray-600)">
+          <strong>Payback Period:</strong><br/>
+          Meses para recuperar CAC = Bs. 190 / Bs. 199 = <strong>0.95 meses ≈ 1 mes</strong><br/>
+          Esto significa que cada cliente es rentable desde el <strong>primer mes</strong> pagado.
+        </div>
+      </div>
+    </div>
+
+    <!-- PROYECCION MENSUAL -->
+    <div class="sec-title">Proyección Financiera — 12 Meses</div>
+    <div class="sec-sub">Escenario realista conservador para Bolivia. Asume crecimiento orgánico más referidos.</div>
+
+    <div class="card" style="margin-bottom:28px;overflow-x:auto">
+      <table class="proj-table">
+        <thead>
+          <tr>
+            <th>Mes</th>
+            <th>Clientes Free</th>
+            <th>Starter (Bs.99)</th>
+            <th>Pro (Bs.220)</th>
+            <th>Business (Bs.499)</th>
+            <th>MRR (Bs.)</th>
+            <th>Costos Fijos (Bs.)</th>
+            <th>Costos Variables (Bs.)</th>
+            <th>Resultado (Bs.)</th>
+            <th>Acumulado (Bs.)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Mar 2026 (S1-2)</td>
+            <td class="num">15</td><td class="num">2</td><td class="num">1</td><td class="num">0</td>
+            <td class="num">418</td>
+            <td class="num negative">21,000</td>
+            <td class="num negative">500</td>
+            <td class="num negative">(21,082)</td>
+            <td class="num negative">(21,082)</td>
+          </tr>
+          <tr>
+            <td>Abr 2026 (S3-4)</td>
+            <td class="num">35</td><td class="num">6</td><td class="num">3</td><td class="num">0</td>
+            <td class="num">1,254</td>
+            <td class="num negative">21,000</td>
+            <td class="num negative">600</td>
+            <td class="num negative">(20,346)</td>
+            <td class="num negative">(41,428)</td>
+          </tr>
+          <tr>
+            <td>May 2026 (S5-6)</td>
+            <td class="num">60</td><td class="num">12</td><td class="num">7</td><td class="num">1</td>
+            <td class="num">3,227</td>
+            <td class="num negative">21,000</td>
+            <td class="num negative">800</td>
+            <td class="num negative">(18,573)</td>
+            <td class="num negative">(60,001)</td>
+          </tr>
+          <tr>
+            <td>Jun 2026 (Beta)</td>
+            <td class="num">90</td><td class="num">20</td><td class="num">12</td><td class="num">2</td>
+            <td class="num">5,618</td>
+            <td class="num negative">21,000</td>
+            <td class="num negative">1,100</td>
+            <td class="num negative">(16,482)</td>
+            <td class="num negative">(76,483)</td>
+          </tr>
+          <tr>
+            <td>Jul 2026</td>
+            <td class="num">120</td><td class="num">30</td><td class="num">20</td><td class="num">3</td>
+            <td class="num">8,867</td>
+            <td class="num negative">22,000</td>
+            <td class="num negative">1,500</td>
+            <td class="num negative">(14,633)</td>
+            <td class="num negative">(91,116)</td>
+          </tr>
+          <tr>
+            <td>Ago 2026</td>
+            <td class="num">160</td><td class="num">42</td><td class="num">30</td><td class="num">5</td>
+            <td class="num">13,633</td>
+            <td class="num negative">22,000</td>
+            <td class="num negative">2,000</td>
+            <td class="num negative">(10,367)</td>
+            <td class="num negative">(101,483)</td>
+          </tr>
+          <tr>
+            <td>Sep 2026</td>
+            <td class="num">200</td><td class="num">55</td><td class="num">40</td><td class="num">7</td>
+            <td class="num">17,933</td>
+            <td class="num negative">22,000</td>
+            <td class="num negative">2,500</td>
+            <td class="num negative">(6,567)</td>
+            <td class="num negative">(108,050)</td>
+          </tr>
+          <tr>
+            <td>Oct 2026</td>
+            <td class="num">240</td><td class="num">65</td><td class="num">52</td><td class="num">10</td>
+            <td class="num">22,275</td>
+            <td class="num negative">23,000</td>
+            <td class="num negative">3,000</td>
+            <td class="num negative">(3,725)</td>
+            <td class="num negative">(111,775)</td>
+          </tr>
+          <tr class="break-row">
+            <td>🎯 Nov 2026</td>
+            <td class="num">280</td><td class="num">75</td><td class="num">62</td><td class="num">12</td>
+            <td class="num positive">26,013</td>
+            <td class="num negative">23,000</td>
+            <td class="num negative">3,200</td>
+            <td class="num positive">+1,813</td>
+            <td class="num negative">(109,962)</td>
+          </tr>
+          <tr>
+            <td>Dic 2026</td>
+            <td class="num">310</td><td class="num">88</td><td class="num">74</td><td class="num">14</td>
+            <td class="num positive">30,878</td>
+            <td class="num negative">23,000</td>
+            <td class="num negative">3,500</td>
+            <td class="num positive">+4,378</td>
+            <td class="num negative">(105,584)</td>
+          </tr>
+          <tr>
+            <td>Ene 2027</td>
+            <td class="num">350</td><td class="num">100</td><td class="num">85</td><td class="num">16</td>
+            <td class="num positive">34,784</td>
+            <td class="num negative">24,000</td>
+            <td class="num negative">4,000</td>
+            <td class="num positive">+6,784</td>
+            <td class="num negative">(98,800)</td>
+          </tr>
+          <tr class="highlight-row">
+            <td>Feb 2027</td>
+            <td class="num">390</td><td class="num">115</td><td class="num">98</td><td class="num">19</td>
+            <td class="num positive">39,987</td>
+            <td class="num negative">25,000</td>
+            <td class="num negative">4,500</td>
+            <td class="num positive">+10,487</td>
+            <td class="num negative">(88,313)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- NOTA IMPORTANTE -->
+    <div style="background:#FEF3C7;border-radius:12px;padding:20px 24px;border-left:4px solid var(--orange);margin-bottom:28px">
+      <div style="font-weight:800;color:var(--orange);margin-bottom:8px">⚠️ Supuestos Clave del Modelo</div>
+      <div style="font-size:0.82rem;color:#92400E;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <span>• Churn mensual: 6% (industria SaaS LATAM promedio: 5-8%)</span>
+        <span>• Conversión Free→Pago: 15% (meta conservadora)</span>
+        <span>• ARPU mezcla: Bs. 199/mes por cliente pagante</span>
+        <span>• Crecimiento nuevos clientes: 25-30 free + 8-12 pagantes/mes</span>
+        <span>• Inversión inicial necesaria: Bs. 112,000 (~$16,000 USD)</span>
+        <span>• Break-even operativo: Mes 8-9 (Noviembre 2026)</span>
+        <span>• Recuperación inversión total: Mes 18-20</span>
+        <span>• Equipo inicial: 2-3 personas part/full time</span>
+      </div>
+    </div>
+
+    <!-- FUENTES DE INGRESO -->
+    <div class="sec-title">Fuentes de Ingreso Diversificadas</div>
+    <div class="sec-sub">No depender solo de suscripciones — construir múltiples líneas de ingreso</div>
+    <div class="rev-streams">
+      <div class="rev-stream-card" style="border-top:4px solid var(--blue)">
+        <div class="rev-pct" style="color:var(--blue)">65%</div>
+        <div class="rev-name">Suscripciones SaaS</div>
+        <div class="rev-desc">Planes mensuales y anuales (-20% desc. anual)</div>
+      </div>
+      <div class="rev-stream-card" style="border-top:4px solid var(--green)">
+        <div class="rev-pct" style="color:var(--green)">20%</div>
+        <div class="rev-name">Comisión Transacciones</div>
+        <div class="rev-desc">0.5% sobre pagos procesados (Tigo / Banco Unión)</div>
+      </div>
+      <div class="rev-stream-card" style="border-top:4px solid var(--purple)">
+        <div class="rev-pct" style="color:var(--purple)">10%</div>
+        <div class="rev-name">Servicios Profesionales</div>
+        <div class="rev-desc">Setup, migración de catálogo, capacitación</div>
+      </div>
+      <div class="rev-stream-card" style="border-top:4px solid var(--orange)">
+        <div class="rev-pct" style="color:var(--orange)">5%</div>
+        <div class="rev-name">Enterprise / API</div>
+        <div class="rev-desc">Agencias y PYMES con necesidades custom</div>
+      </div>
+    </div>
+
+    <!-- ESTRATEGIA DE PRECIOS ANUAL -->
+    <div class="card">
+      <div class="card-title">📅 Descuento Anual — Estrategia de Retención</div>
+      <div class="card-sub">El pago anual elimina el churn y mejora el flujo de caja</div>
+      <table class="proj-table">
+        <thead>
+          <tr><th>Plan</th><th>Mensual</th><th>Anual (con -20%)</th><th>Ahorro para el cliente</th><th>Ingreso para nosotros</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Starter</td><td class="num">Bs. 99/mes</td><td class="num">Bs. 950/año</td><td class="num positive">Bs. 238</td><td class="num positive">950 (pago adelantado)</td></tr>
+          <tr><td>Pro</td><td class="num">Bs. 220/mes</td><td class="num">Bs. 2,112/año</td><td class="num positive">Bs. 528</td><td class="num positive">2,112 (pago adelantado)</td></tr>
+          <tr><td>Business</td><td class="num">Bs. 499/mes</td><td class="num">Bs. 4,790/año</td><td class="num positive">Bs. 1,198</td><td class="num positive">4,790 (pago adelantado)</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:12px;font-size:0.82rem;color:var(--gray-600);background:var(--green-light);padding:10px 14px;border-radius:8px">
+        💡 <strong>Estrategia:</strong> Ofrecer 2 meses gratis en anual. Si logras que el 30% pague anual, el flujo de caja mejora dramáticamente y el churn real baja a ~2% anual.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 3: OBJETIVOS -->
+<!-- ============================================================ -->
+<div id="tab-objectives" class="tab-content">
+  <div class="page-header">
+    <h1>🎯 Objetivos Claros — OKR Framework</h1>
+    <p>Objetivos medibles por horizonte temporal. Sin métricas claras, no hay forma de saber si el negocio avanza.</p>
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="kpi-label">Horizonte MVP</div><div class="kpi-value">6 meses</div><div class="kpi-sub">Producto funcional en mercado</div></div>
+      <div class="kpi-card"><div class="kpi-label">Meta Clientes año 1</div><div class="kpi-value">232</div><div class="kpi-sub">pagantes al final del año</div></div>
+      <div class="kpi-card"><div class="kpi-label">MRR objetivo año 1</div><div class="kpi-value">Bs. 39,987</div><div class="kpi-sub">~$5,800 USD/mes</div></div>
+      <div class="kpi-card"><div class="kpi-label">NPS objetivo</div><div class="kpi-value">&gt; 50</div><div class="kpi-sub">Vendedores muy satisfechos</div></div>
+    </div>
+  </div>
+  <div class="main">
+
+    <div class="sec-title">OKR por Horizonte Temporal</div>
+    <div class="sec-sub">Objectives & Key Results — lo que se mide, se logra</div>
+
+    <div class="obj-grid">
+      <div class="obj-card" style="border-left:4px solid var(--blue)">
+        <div class="obj-horizon" style="color:var(--blue)">🏃 Corto Plazo — Sprint 1-2 (0–30 días)</div>
+        <ul class="obj-items">
+          <li><span class="obj-icon">🔐</span><div class="obj-text"><strong>Base técnica funcional</strong><span>Django + Channels + Redis deployado en Railway con CI/CD básico activo</span></div></li>
+          <li><span class="obj-icon">👤</span><div class="obj-text"><strong>Registro y catálogo operativos</strong><span>Vendedor puede crear cuenta, tienda y subir productos con imágenes</span></div></li>
+          <li><span class="obj-icon">🧪</span><div class="obj-text"><strong>3 vendedores beta testeando</strong><span>Feedback cualitativo del flujo de onboarding antes del Sprint 3</span></div></li>
+          <li><span class="obj-icon">📊</span><div class="obj-text"><strong>Cobertura de tests &gt; 75%</strong><span>En los módulos auth, vendors y products</span></div></li>
+        </ul>
+      </div>
+
+      <div class="obj-card" style="border-left:4px solid var(--purple)">
+        <div class="obj-horizon" style="color:var(--purple)">🚀 Mediano Plazo — Sprint 3-6 (1–3 meses)</div>
+        <ul class="obj-items">
+          <li><span class="obj-icon">📡</span><div class="obj-text"><strong>Live WebSocket funcional</strong><span>Pedidos capturados en tiempo real, con IA parsing con ≥85% de precisión</span></div></li>
+          <li><span class="obj-icon">💳</span><div class="obj-text"><strong>Pago Tigo Money integrado</strong><span>Al menos 1 transacción real procesada en entorno de producción</span></div></li>
+          <li><span class="obj-icon">👥</span><div class="obj-text"><strong>10 vendedores activos pagantes</strong><span>Con al menos 3 lives cada uno y retroalimentación documentada</span></div></li>
+          <li><span class="obj-icon">💬</span><div class="obj-text"><strong>NPS inicial &gt; 30</strong><span>Encuesta a los primeros usuarios beta sobre el valor percibido</span></div></li>
+        </ul>
+      </div>
+
+      <div class="obj-card" style="border-left:4px solid var(--green)">
+        <div class="obj-horizon" style="color:var(--green)">📈 Largo Plazo — Sprint 7+ (3–12 meses)</div>
+        <ul class="obj-items">
+          <li><span class="obj-icon">💰</span><div class="obj-text"><strong>Break-even operativo</strong><span>MRR &gt; Costos fijos. Target: Noviembre 2026 con ~150 clientes pagantes</span></div></li>
+          <li><span class="obj-icon">🏪</span><div class="obj-text"><strong>50 vendedores Pro activos</strong><span>En Santa Cruz de la Sierra, con churn mensual &lt; 6%</span></div></li>
+          <li><span class="obj-icon">🤖</span><div class="obj-text"><strong>IA con datos propios</strong><span>Modelo fine-tuneado con mensajes bolivianos reales. Precisión &gt; 92%</span></div></li>
+          <li><span class="obj-icon">🗺️</span><div class="obj-text"><strong>Expansión a La Paz y Cochabamba</strong><span>Replicar el modelo con equipo de ventas local en otras ciudades</span></div></li>
+        </ul>
+      </div>
+
+      <div class="obj-card" style="border-left:4px solid var(--red)">
+        <div class="obj-horizon" style="color:var(--red)">🎯 Visión 3 años</div>
+        <ul class="obj-items">
+          <li><span class="obj-icon">🌎</span><div class="obj-text"><strong>Plataforma #1 de live commerce Bolivia</strong><span>1,500+ vendedores activos. Presencia en todas las ciudades principales</span></div></li>
+          <li><span class="obj-icon">💵</span><div class="obj-text"><strong>MRR &gt; Bs. 300,000/mes</strong><span>~$43,000 USD/mes. Equipo de 10-15 personas</span></div></li>
+          <li><span class="obj-icon">🔌</span><div class="obj-text"><strong>Ecosistema de integraciones</strong><span>Integración nativa con TikTok Shop Bolivia, Facebook Marketplace y más bancos</span></div></li>
+          <li><span class="obj-icon">🚀</span><div class="obj-text"><strong>Expansión regional</strong><span>Replicar modelo en Perú y Ecuador con pagos locales adaptados</span></div></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- OKR TABLE -->
+    <div class="sec-title" style="margin-top:12px">OKRs Q1 2026 — Métricas Rastreables</div>
+    <div class="card" style="overflow-x:auto">
+      <table class="okr-table">
+        <thead>
+          <tr><th>Objetivo (O)</th><th>Key Result (KR)</th><th>Unidad</th><th>Meta</th><th>Frecuencia Revisión</th><th>Dueño</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td rowspan="3"><strong>O1:</strong> Lanzar MVP técnico funcional</td>
+            <td>KR1.1: Deploy en producción (Railway) con uptime ≥ 95%</td>
+            <td>%</td><td>95%</td><td>Semanal</td><td>DevOps</td>
+          </tr>
+          <tr>
+            <td>KR1.2: API con &lt; 500ms P95 en todos los endpoints</td>
+            <td>ms</td><td>500ms</td><td>Por Sprint</td><td>Backend</td>
+          </tr>
+          <tr>
+            <td>KR1.3: Cobertura de tests automatizados ≥ 80%</td>
+            <td>%</td><td>80%</td><td>Por Sprint</td><td>Dev Team</td>
+          </tr>
+          <tr>
+            <td rowspan="3"><strong>O2:</strong> Validar product-market fit</td>
+            <td>KR2.1: 5 vendedores completan un live completo en la plataforma</td>
+            <td>Vendedores</td><td>5</td><td>Mensual</td><td>PO</td>
+          </tr>
+          <tr>
+            <td>KR2.2: IA parsea ≥ 85% de pedidos correctamente en pruebas</td>
+            <td>%</td><td>85%</td><td>Por Sprint</td><td>AI Dev</td>
+          </tr>
+          <tr>
+            <td>KR2.3: NPS de usuarios beta ≥ 30</td>
+            <td>Puntos NPS</td><td>30</td><td>Mensual</td><td>PO</td>
+          </tr>
+          <tr>
+            <td rowspan="2"><strong>O3:</strong> Generar primeros ingresos reales</td>
+            <td>KR3.1: 10 clientes con suscripción pagada activa en mes 3</td>
+            <td>Clientes</td><td>10</td><td>Mensual</td><td>PO + BD</td>
+          </tr>
+          <tr>
+            <td>KR3.2: MRR ≥ Bs. 2,000 al finalizar el Sprint 6</td>
+            <td>Bs./mes</td><td>2,000</td><td>Mensual</td><td>PO</td>
+          </tr>
+          <tr>
+            <td rowspan="2"><strong>O4:</strong> Retener clientes activos</td>
+            <td>KR4.1: Churn mensual &lt; 8% en los primeros 3 meses</td>
+            <td>%</td><td>&lt;8%</td><td>Mensual</td><td>PO</td>
+          </tr>
+          <tr>
+            <td>KR4.2: Tiempo de resolución de soporte &lt; 4 horas por WhatsApp</td>
+            <td>Horas</td><td>4h</td><td>Semanal</td><td>Soporte</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 4: DJANGO STRUCTURE -->
+<!-- ============================================================ -->
+<div id="tab-django" class="tab-content">
+  <div class="page-header">
+    <h1>🐍 Estructura Django — Lista para Codear</h1>
+    <p>Arquitectura modular con Django 5, DRF, Channels y Celery. Cada app tiene una responsabilidad única y clara.</p>
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="kpi-label">Apps Django</div><div class="kpi-value">6</div><div class="kpi-sub">apps modulares independientes</div></div>
+      <div class="kpi-card"><div class="kpi-label">Modelos</div><div class="kpi-value">18</div><div class="kpi-sub">entidades de la base de datos</div></div>
+      <div class="kpi-card"><div class="kpi-label">Stack</div><div class="kpi-value">Django 5</div><div class="kpi-sub">+ Channels + Celery + Redis</div></div>
+      <div class="kpi-card"><div class="kpi-label">Deploy</div><div class="kpi-value">Railway</div><div class="kpi-sub">ASGI con Daphne/Uvicorn</div></div>
+    </div>
+  </div>
+  <div class="main">
+
+    <!-- APPS OVERVIEW -->
+    <div class="sec-title">Apps del Proyecto</div>
+    <div class="sec-sub">Cada app es un módulo independiente con sus propios modelos, serializers, views y tests</div>
+    <div class="app-cards">
+      <div class="app-card" style="border-left-color:#1A56DB">
+        <div class="app-name">vendors/</div>
+        <div class="app-desc">Gestión de usuarios, tiendas y suscripciones</div>
+        <div class="models-list">
+          <span class="model-badge" style="background:#DBEAFE;color:#1E40AF">User</span>
+          <span class="model-badge" style="background:#DBEAFE;color:#1E40AF">Store</span>
+          <span class="model-badge" style="background:#DBEAFE;color:#1E40AF">Subscription</span>
+          <span class="model-badge" style="background:#DBEAFE;color:#1E40AF">StoreProfile</span>
+        </div>
+      </div>
+      <div class="app-card" style="border-left-color:#16A34A">
+        <div class="app-name">products/</div>
+        <div class="app-desc">Catálogo de productos con variaciones y stock</div>
+        <div class="models-list">
+          <span class="model-badge" style="background:#DCFCE7;color:#166534">Product</span>
+          <span class="model-badge" style="background:#DCFCE7;color:#166534">ProductVariant</span>
+          <span class="model-badge" style="background:#DCFCE7;color:#166534">Category</span>
+          <span class="model-badge" style="background:#DCFCE7;color:#166534">ProductImage</span>
+        </div>
+      </div>
+      <div class="app-card" style="border-left-color:#7C3AED">
+        <div class="app-name">streams/</div>
+        <div class="app-desc">Transmisiones en vivo y su ciclo de vida</div>
+        <div class="models-list">
+          <span class="model-badge" style="background:#EDE9FE;color:#5B21B6">LiveStream</span>
+          <span class="model-badge" style="background:#EDE9FE;color:#5B21B6">StreamProduct</span>
+          <span class="model-badge" style="background:#EDE9FE;color:#5B21B6">ChatMessage</span>
+        </div>
+      </div>
+      <div class="app-card" style="border-left-color:#D97706">
+        <div class="app-name">orders/</div>
+        <div class="app-desc">Pedidos, items y seguimiento de estados</div>
+        <div class="models-list">
+          <span class="model-badge" style="background:#FEF3C7;color:#92400E">Order</span>
+          <span class="model-badge" style="background:#FEF3C7;color:#92400E">OrderItem</span>
+          <span class="model-badge" style="background:#FEF3C7;color:#92400E">OrderStatusLog</span>
+        </div>
+      </div>
+      <div class="app-card" style="border-left-color:#DC2626">
+        <div class="app-name">payments/</div>
+        <div class="app-desc">Procesamiento de pagos locales bolivianos</div>
+        <div class="models-list">
+          <span class="model-badge" style="background:#FEE2E2;color:#991B1B">Payment</span>
+          <span class="model-badge" style="background:#FEE2E2;color:#991B1B">TigoMoneyTx</span>
+          <span class="model-badge" style="background:#FEE2E2;color:#991B1B">BankQR</span>
+        </div>
+      </div>
+      <div class="app-card" style="border-left-color:#0891B2">
+        <div class="app-name">notifications/</div>
+        <div class="app-desc">WhatsApp, FCM y email de confirmaciones</div>
+        <div class="models-list">
+          <span class="model-badge" style="background:#CFFAFE;color:#155E75">Notification</span>
+          <span class="model-badge" style="background:#CFFAFE;color:#155E75">NotificationLog</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ESTRUCTURA DE CARPETAS -->
+    <div class="sec-title">Estructura de Directorios Completa</div>
+    <div class="code-block">
+<span class="c-dir">liveshop_bolivia/</span>           <span class="c-comment"># Raíz del proyecto</span>
+<span class="c-dir">├── config/</span>                  <span class="c-comment"># Configuración global</span>
+<span class="c-dir">│   ├── settings/</span>
+<span class="c-py">│   │   ├── base.py</span>         <span class="c-comment"># Configuración base compartida</span>
+<span class="c-py">│   │   ├── development.py</span>  <span class="c-comment"># DEBUG=True, SQLite opcional</span>
+<span class="c-py">│   │   └── production.py</span>   <span class="c-comment"># PostgreSQL, Redis, HTTPS, WhiteNoise</span>
+<span class="c-py">│   ├── urls.py</span>             <span class="c-comment"># Router principal</span>
+<span class="c-py">│   ├── asgi.py</span>             <span class="c-comment"># ASGI con Channels (WebSocket)</span>
+<span class="c-py">│   └── celery.py</span>           <span class="c-comment"># Configuración Celery</span>
+│
+<span class="c-dir">├── apps/</span>
+<span class="c-dir">│   ├── vendors/</span>
+<span class="c-py">│   │   ├── models.py</span>       <span class="c-comment"># User, Store, Subscription</span>
+<span class="c-py">│   │   ├── serializers.py</span>  <span class="c-comment"># DRF serializers</span>
+<span class="c-py">│   │   ├── views.py</span>        <span class="c-comment"># ViewSets DRF</span>
+<span class="c-py">│   │   ├── urls.py</span>
+<span class="c-py">│   │   ├── permissions.py</span>  <span class="c-comment"># IsStoreOwner, IsSubscribed</span>
+<span class="c-py">│   │   ├── tasks.py</span>        <span class="c-comment"># Celery: send_welcome_email</span>
+<span class="c-py">│   │   ├── signals.py</span>      <span class="c-comment"># post_save: crear Store al crear User</span>
+<span class="c-py">│   │   └── tests/</span>
+<span class="c-py">│   │       ├── test_models.py</span>
+<span class="c-py">│   │       └── test_views.py</span>
+│   │
+<span class="c-dir">│   ├── products/</span>           <span class="c-comment"># (misma estructura)</span>
+<span class="c-dir">│   ├── streams/</span>
+<span class="c-dir">│   ├── orders/</span>
+<span class="c-dir">│   ├── payments/</span>
+<span class="c-dir">│   └── notifications/</span>
+│
+<span class="c-dir">├── channels_app/</span>           <span class="c-comment"># Django Channels (WebSocket)</span>
+<span class="c-py">│   ├── consumers/</span>
+<span class="c-py">│   │   ├── stream_consumer.py</span>  <span class="c-comment"># Live WebSocket principal</span>
+<span class="c-py">│   │   └── order_consumer.py</span>   <span class="c-comment"># Panel del vendedor</span>
+<span class="c-py">│   └── routing.py</span>          <span class="c-comment"># ws/stream/&lt;id&gt;/</span>
+│
+<span class="c-dir">├── ai/</span>                     <span class="c-comment"># Módulo de Inteligencia Artificial</span>
+<span class="c-py">│   ├── parsers/</span>
+<span class="c-py">│   │   ├── gemini_parser.py</span>    <span class="c-comment"># Parseo con Google Gemini</span>
+<span class="c-py">│   │   └── groq_parser.py</span>      <span class="c-comment"># Fallback con Groq/Llama3</span>
+<span class="c-py">│   ├── chatbot.py</span>          <span class="c-comment"># ChatBot en tiempo real del live</span>
+<span class="c-py">│   └── intent_detector.py</span>  <span class="c-comment"># Detecta intención de compra</span>
+│
+<span class="c-dir">├── integrations/</span>           <span class="c-comment"># Integraciones con terceros</span>
+<span class="c-py">│   ├── tigo_money.py</span>       <span class="c-comment"># API Tigo Money Bolivia</span>
+<span class="c-py">│   ├── banco_union.py</span>       <span class="c-comment"># QR Banco Unión</span>
+<span class="c-py">│   └── whatsapp.py</span>         <span class="c-comment"># Twilio / Meta WhatsApp API</span>
+│
+<span class="c-dir">├── core/</span>                   <span class="c-comment"># Utilidades globales</span>
+<span class="c-py">│   ├── models.py</span>           <span class="c-comment"># BaseModel con UUID + timestamps</span>
+<span class="c-py">│   ├── pagination.py</span>
+<span class="c-py">│   ├── exceptions.py</span>       <span class="c-comment"># Custom exceptions DRF</span>
+<span class="c-py">│   └── utils.py</span>
+│
+<span class="c-file">├── requirements/</span>
+<span class="c-file">│   ├── base.txt</span>            <span class="c-comment"># Django, DRF, Channels, Celery, psycopg2</span>
+<span class="c-file">│   ├── development.txt</span>     <span class="c-comment"># pytest, factory-boy, black, flake8</span>
+<span class="c-file">│   └── production.txt</span>      <span class="c-comment"># gunicorn, daphne, whitenoise, sentry-sdk</span>
+│
+<span class="c-file">├── .env.example</span>
+<span class="c-file">├── .github/workflows/</span>
+<span class="c-py">│   └── ci.yml</span>              <span class="c-comment"># GitHub Actions: test + deploy</span>
+<span class="c-file">├── Dockerfile</span>
+<span class="c-file">├── railway.toml</span>
+<span class="c-file">└── manage.py</span>
+    </div>
+
+    <!-- MODELOS CLAVE -->
+    <div class="sec-title">Modelos Django — Código Real</div>
+
+    <!-- core/models.py -->
+    <div style="margin-bottom:8px;font-size:0.85rem;font-weight:700;color:var(--gray-600)">📄 core/models.py — BaseModel para todos los modelos</div>
+    <div class="code-block">
+<span class="c-kw">import</span> uuid
+<span class="c-kw">from</span> django.db <span class="c-kw">import</span> models
+
+<span class="c-kw">class</span> <span class="c-class">BaseModel</span>(models.Model):
+    <span class="c-str">"""Modelo base con UUID, created_at y updated_at."""</span>
+    <span class="c-field">id</span> = models.UUIDField(primary_key=<span class="c-kw">True</span>, default=uuid.uuid4, editable=<span class="c-kw">False</span>)
+    <span class="c-field">created_at</span> = models.DateTimeField(auto_now_add=<span class="c-kw">True</span>)
+    <span class="c-field">updated_at</span> = models.DateTimeField(auto_now=<span class="c-kw">True</span>)
+
+    <span class="c-kw">class</span> <span class="c-class">Meta</span>:
+        abstract = <span class="c-kw">True</span>
+    </div>
+
+    <!-- vendors/models.py -->
+    <div style="margin-bottom:8px;font-size:0.85rem;font-weight:700;color:var(--gray-600)">📄 apps/vendors/models.py</div>
+    <div class="code-block">
+<span class="c-kw">from</span> django.contrib.auth.models <span class="c-kw">import</span> AbstractUser
+<span class="c-kw">from</span> django.db <span class="c-kw">import</span> models
+<span class="c-kw">from</span> core.models <span class="c-kw">import</span> BaseModel
+
+<span class="c-kw">class</span> <span class="c-class">User</span>(AbstractUser):
+    <span class="c-str">"""Usuario extendido con perfil de vendedor."""</span>
+    <span class="c-field">phone</span> = models.CharField(max_length=<span class="c-num">20</span>, blank=<span class="c-kw">True</span>)
+    <span class="c-field">is_vendor</span> = models.BooleanField(default=<span class="c-kw">False</span>)
+    <span class="c-field">avatar_url</span> = models.URLField(blank=<span class="c-kw">True</span>)
+
+<span class="c-kw">class</span> <span class="c-class">Store</span>(BaseModel):
+    <span class="c-str">"""Tienda del vendedor."""</span>
+    <span class="c-kw">class</span> <span class="c-class">Status</span>(models.TextChoices):
+        ACTIVE = <span class="c-str">'active'</span>, <span class="c-str">'Activa'</span>
+        SUSPENDED = <span class="c-str">'suspended'</span>, <span class="c-str">'Suspendida'</span>
+        TRIAL = <span class="c-str">'trial'</span>, <span class="c-str">'Prueba'</span>
+
+    <span class="c-field">owner</span> = models.OneToOneField(User, on_delete=models.CASCADE, related_name=<span class="c-str">'store'</span>)
+    <span class="c-field">name</span> = models.CharField(max_length=<span class="c-num">120</span>)
+    <span class="c-field">slug</span> = models.SlugField(unique=<span class="c-kw">True</span>)  <span class="c-comment"># liveshop.bo/tienda-maria</span>
+    <span class="c-field">logo</span> = models.URLField(blank=<span class="c-kw">True</span>)
+    <span class="c-field">description</span> = models.TextField(blank=<span class="c-kw">True</span>)
+    <span class="c-field">whatsapp</span> = models.CharField(max_length=<span class="c-num">20</span>, blank=<span class="c-kw">True</span>)
+    <span class="c-field">status</span> = models.CharField(max_length=<span class="c-num">20</span>, choices=Status.choices, default=Status.TRIAL)
+
+    <span class="c-kw">def</span> <span class="c-fn">__str__</span>(self): <span class="c-kw">return</span> self.name
+
+<span class="c-kw">class</span> <span class="c-class">Subscription</span>(BaseModel):
+    <span class="c-str">"""Suscripción activa de la tienda."""</span>
+    <span class="c-kw">class</span> <span class="c-class">Plan</span>(models.TextChoices):
+        FREE = <span class="c-str">'free'</span>, <span class="c-str">'Free'</span>
+        STARTER = <span class="c-str">'starter'</span>, <span class="c-str">'Starter (Bs.99)'</span>
+        PRO = <span class="c-str">'pro'</span>, <span class="c-str">'Pro (Bs.220)'</span>
+        BUSINESS = <span class="c-str">'business'</span>, <span class="c-str">'Business (Bs.499)'</span>
+
+    <span class="c-field">store</span> = models.OneToOneField(Store, on_delete=models.CASCADE, related_name=<span class="c-str">'subscription'</span>)
+    <span class="c-field">plan</span> = models.CharField(max_length=<span class="c-num">20</span>, choices=Plan.choices, default=Plan.FREE)
+    <span class="c-field">price_bs</span> = models.DecimalField(max_digits=<span class="c-num">8</span>, decimal_places=<span class="c-num">2</span>, default=<span class="c-num">0</span>)
+    <span class="c-field">start_date</span> = models.DateField()
+    <span class="c-field">end_date</span> = models.DateField(null=<span class="c-kw">True</span>, blank=<span class="c-kw">True</span>)
+    <span class="c-field">is_annual</span> = models.BooleanField(default=<span class="c-kw">False</span>)
+    <span class="c-field">is_active</span> = models.BooleanField(default=<span class="c-kw">True</span>)
+
+    <span class="c-kw">@property</span>
+    <span class="c-kw">def</span> <span class="c-fn">lives_per_month_limit</span>(self):
+        limits = {<span class="c-str">'free'</span>: <span class="c-num">2</span>, <span class="c-str">'starter'</span>: <span class="c-num">8</span>, <span class="c-str">'pro'</span>: <span class="c-kw">None</span>, <span class="c-str">'business'</span>: <span class="c-kw">None</span>}
+        <span class="c-kw">return</span> limits.get(self.plan)
+    </div>
+
+    <!-- orders/models.py -->
+    <div style="margin-bottom:8px;font-size:0.85rem;font-weight:700;color:var(--gray-600)">📄 apps/orders/models.py</div>
+    <div class="code-block">
+<span class="c-kw">class</span> <span class="c-class">Order</span>(BaseModel):
+    <span class="c-kw">class</span> <span class="c-class">Status</span>(models.TextChoices):
+        PENDING = <span class="c-str">'pending'</span>, <span class="c-str">'Pendiente'</span>
+        CONFIRMED = <span class="c-str">'confirmed'</span>, <span class="c-str">'Confirmado'</span>
+        PAID = <span class="c-str">'paid'</span>, <span class="c-str">'Pagado'</span>
+        SHIPPED = <span class="c-str">'shipped'</span>, <span class="c-str">'Enviado'</span>
+        DELIVERED = <span class="c-str">'delivered'</span>, <span class="c-str">'Entregado'</span>
+        CANCELLED = <span class="c-str">'cancelled'</span>, <span class="c-str">'Cancelado'</span>
+
+    <span class="c-kw">class</span> <span class="c-class">Source</span>(models.TextChoices):
+        FORM = <span class="c-str">'form'</span>, <span class="c-str">'Formulario web'</span>
+        AI_CHAT = <span class="c-str">'ai_chat'</span>, <span class="c-str">'IA del chat'</span>
+        MANUAL = <span class="c-str">'manual'</span>, <span class="c-str">'Manual del vendedor'</span>
+
+    <span class="c-field">stream</span> = models.ForeignKey(<span class="c-str">'streams.LiveStream'</span>, on_delete=models.PROTECT, related_name=<span class="c-str">'orders'</span>)
+    <span class="c-field">store</span> = models.ForeignKey(<span class="c-str">'vendors.Store'</span>, on_delete=models.PROTECT, related_name=<span class="c-str">'orders'</span>)
+    <span class="c-field">order_number</span> = models.CharField(max_length=<span class="c-num">20</span>, unique=<span class="c-kw">True</span>, editable=<span class="c-kw">False</span>)
+    <span class="c-field">buyer_name</span> = models.CharField(max_length=<span class="c-num">120</span>)
+    <span class="c-field">buyer_phone</span> = models.CharField(max_length=<span class="c-num">20</span>)
+    <span class="c-field">buyer_address</span> = models.TextField(blank=<span class="c-kw">True</span>)
+    <span class="c-field">total_bs</span> = models.DecimalField(max_digits=<span class="c-num">10</span>, decimal_places=<span class="c-num">2</span>)
+    <span class="c-field">status</span> = models.CharField(max_length=<span class="c-num">20</span>, choices=Status.choices, default=Status.PENDING)
+    <span class="c-field">source</span> = models.CharField(max_length=<span class="c-num">20</span>, choices=Source.choices, default=Source.FORM)
+    <span class="c-field">ai_confidence</span> = models.FloatField(null=<span class="c-kw">True</span>, blank=<span class="c-kw">True</span>)  <span class="c-comment"># 0.0 - 1.0</span>
+    <span class="c-field">notes</span> = models.TextField(blank=<span class="c-kw">True</span>)
+    <span class="c-field">whatsapp_sent</span> = models.BooleanField(default=<span class="c-kw">False</span>)
+
+    <span class="c-kw">def</span> <span class="c-fn">save</span>(self, *args, **kwargs):
+        <span class="c-kw">if not</span> self.order_number:
+            <span class="c-kw">import</span> random
+            self.order_number = <span class="c-str">f"LS-{random.randint(10000, 99999)}"</span>
+        <span class="c-kw">super</span>().save(*args, **kwargs)
+    </div>
+
+    <!-- channels_app/consumers -->
+    <div style="margin-bottom:8px;font-size:0.85rem;font-weight:700;color:var(--gray-600)">📄 channels_app/consumers/stream_consumer.py — WebSocket del Live</div>
+    <div class="code-block">
+<span class="c-kw">import</span> json
+<span class="c-kw">from</span> channels.generic.websocket <span class="c-kw">import</span> AsyncWebsocketConsumer
+<span class="c-kw">from</span> channels.db <span class="c-kw">import</span> database_sync_to_async
+<span class="c-kw">from</span> ai.parsers.gemini_parser <span class="c-kw">import</span> GeminiOrderParser
+
+<span class="c-kw">class</span> <span class="c-class">StreamConsumer</span>(AsyncWebsocketConsumer):
+    <span class="c-str">"""WebSocket para compradores durante el live."""</span>
+
+    <span class="c-kw">async def</span> <span class="c-fn">connect</span>(self):
+        self.stream_id = self.scope[<span class="c-str">'url_route'</span>][<span class="c-str">'kwargs'</span>][<span class="c-str">'stream_id'</span>]
+        self.group_name = <span class="c-str">f"stream_{self.stream_id}"</span>
+        <span class="c-comment"># Unirse al grupo del live</span>
+        <span class="c-kw">await</span> self.channel_layer.group_add(self.group_name, self.channel_name)
+        <span class="c-kw">await</span> self.accept()
+        <span class="c-comment"># Enviar estado inicial del live</span>
+        stream_data = <span class="c-kw">await</span> self.<span class="c-fn">get_stream_data</span>()
+        <span class="c-kw">await</span> self.<span class="c-fn">send_json</span>({<span class="c-str">'type'</span>: <span class="c-str">'stream_state'</span>, <span class="c-str">'data'</span>: stream_data})
+
+    <span class="c-kw">async def</span> <span class="c-fn">receive</span>(self, text_data):
+        data = json.loads(text_data)
+        msg_type = data.get(<span class="c-str">'type'</span>)
+
+        <span class="c-kw">if</span> msg_type == <span class="c-str">'order_intent'</span>:
+            <span class="c-kw">await</span> self.<span class="c-fn">handle_order_intent</span>(data)
+        <span class="c-kw">elif</span> msg_type == <span class="c-str">'chat_message'</span>:
+            <span class="c-kw">await</span> self.<span class="c-fn">broadcast_chat</span>(data)
+
+    <span class="c-kw">async def</span> <span class="c-fn">handle_order_intent</span>(self, data):
+        parser = GeminiOrderParser()
+        result = <span class="c-kw">await</span> parser.<span class="c-fn">parse</span>(
+            text=data[<span class="c-str">'text'</span>],
+            stream_context=<span class="c-kw">await</span> self.<span class="c-fn">get_active_products</span>()
+        )
+        <span class="c-kw">if</span> result[<span class="c-str">'confidence'</span>] >= <span class="c-num">0.85</span>:
+            order = <span class="c-kw">await</span> self.<span class="c-fn">create_order</span>(result, data[<span class="c-str">'buyer'</span>])
+            <span class="c-kw">await</span> self.<span class="c-fn">send_json</span>({<span class="c-str">'type'</span>: <span class="c-str">'order_confirmed'</span>, <span class="c-str">'order_number'</span>: order.order_number})
+            <span class="c-comment"># Broadcast al panel del vendedor</span>
+            <span class="c-kw">await</span> self.channel_layer.group_send(
+                <span class="c-str">f"vendor_{self.stream_id}"</span>,
+                {<span class="c-str">'type'</span>: <span class="c-str">'new_order'</span>, <span class="c-str">'order'</span>: order.<span class="c-fn">to_dict</span>()}
+            )
+        <span class="c-kw">else</span>:
+            <span class="c-kw">await</span> self.<span class="c-fn">send_json</span>({<span class="c-str">'type'</span>: <span class="c-str">'confirm_order'</span>, <span class="c-str">'parsed'</span>: result})
+    </div>
+
+    <!-- ai/parsers/gemini_parser.py -->
+    <div style="margin-bottom:8px;font-size:0.85rem;font-weight:700;color:var(--gray-600)">📄 ai/parsers/gemini_parser.py — Parseo con IA</div>
+    <div class="code-block">
+<span class="c-kw">import</span> google.generativeai <span class="c-kw">as</span> genai
+<span class="c-kw">import</span> json
+<span class="c-kw">from</span> django.conf <span class="c-kw">import</span> settings
+
+<span class="c-kw">class</span> <span class="c-class">GeminiOrderParser</span>:
+    <span class="c-str">"""Parsea mensajes de chat en pedidos estructurados usando Gemini."""</span>
+
+    <span class="c-kw">def</span> <span class="c-fn">__init__</span>(self):
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        self.model = genai.GenerativeModel(<span class="c-str">'gemini-1.5-flash'</span>)  <span class="c-comment"># gratis</span>
+
+    <span class="c-kw">async def</span> <span class="c-fn">parse</span>(self, text: str, stream_context: dict) -> dict:
+        products_info = json.dumps(stream_context[<span class="c-str">'products'</span>], ensure_ascii=<span class="c-kw">False</span>)
+
+        prompt = <span class="c-str">f"""
+Eres un asistente de ventas boliviano. Analiza este mensaje de un comprador
+durante un live de ventas y extrae el pedido en formato JSON.
+
+Productos disponibles: {products_info}
+
+Mensaje del comprador: "{text}"
+
+Responde SOLO con JSON válido en este formato:
+{{
+  "has_order_intent": true/false,
+  "confidence": 0.0-1.0,
+  "items": [
+    {{"product_id": "uuid", "variant": "color/talla", "quantity": 1}}
+  ],
+  "notes": "observaciones del parseo"
+}}
+
+Considera variaciones del español boliviano: 'uno pa mi', 'apúntame',
+'me llevo', 'quiero', 'dame', 'ponme', 'pido', etc.
+"""</span>
+
+        response = self.model.generate_content(prompt)
+        clean = response.text.strip().replace(<span class="c-str">'```json'</span>, <span class="c-str">''</span>).replace(<span class="c-str">'```'</span>, <span class="c-str">''</span>)
+        result = json.loads(clean)
+        <span class="c-kw">return</span> result
+
+    <span class="c-kw">async def</span> <span class="c-fn">parse_with_fallback</span>(self, text: str, context: dict) -> dict:
+        <span class="c-str">"""Intenta Gemini, usa Groq como fallback."""</span>
+        <span class="c-kw">try</span>:
+            <span class="c-kw">return await</span> self.<span class="c-fn">parse</span>(text, context)
+        <span class="c-kw">except Exception</span>:
+            <span class="c-kw">from</span> ai.parsers.groq_parser <span class="c-kw">import</span> GroqOrderParser
+            <span class="c-kw">return await</span> GroqOrderParser().<span class="c-fn">parse</span>(text, context)
+    </div>
+
+    <!-- requirements -->
+    <div style="margin-bottom:8px;font-size:0.85rem;font-weight:700;color:var(--gray-600)">📄 requirements/base.txt</div>
+    <div class="code-block">
+<span class="c-comment"># Core</span>
+<span class="c-py">django==5.1.4</span>
+<span class="c-py">djangorestframework==3.15.2</span>
+<span class="c-py">django-channels==4.1.0</span>
+<span class="c-py">channels-redis==4.2.0</span>
+<span class="c-py">celery==5.4.0</span>
+<span class="c-py">redis==5.2.0</span>
+
+<span class="c-comment"># Database</span>
+<span class="c-py">psycopg2-binary==2.9.9</span>
+<span class="c-py">django-environ==0.11.2</span>
+
+<span class="c-comment"># Auth</span>
+<span class="c-py">djangorestframework-simplejwt==5.3.1</span>
+<span class="c-py">django-allauth==65.3.0</span>
+
+<span class="c-comment"># Storage & Files</span>
+<span class="c-py">cloudinary==1.41.0</span>
+<span class="c-py">django-cloudinary-storage==0.3.0</span>
+<span class="c-py">Pillow==11.0.0</span>
+
+<span class="c-comment"># AI</span>
+<span class="c-py">google-generativeai==0.8.3</span>
+<span class="c-py">groq==0.12.0</span>
+<span class="c-py">openai-whisper==20240930</span>  <span class="c-comment"># para subtítulos opcionales</span>
+
+<span class="c-comment"># Notifications</span>
+<span class="c-py">twilio==9.3.7</span>
+
+<span class="c-comment"># Utils</span>
+<span class="c-py">django-filter==24.3</span>
+<span class="c-py">django-cors-headers==4.6.0</span>
+<span class="c-py">django-extensions==3.2.3</span>
+<span class="c-py">python-slugify==8.0.4</span>
+    </div>
+
+    <!-- railway.toml -->
+    <div style="margin-bottom:8px;font-size:0.85rem;font-weight:700;color:var(--gray-600)">📄 railway.toml — Deploy en Railway (gratis)</div>
+    <div class="code-block">
+[build]
+  builder = <span class="c-str">"nixpacks"</span>
+  buildCommand = <span class="c-str">"pip install -r requirements/production.txt"</span>
+
+[deploy]
+  startCommand = <span class="c-str">"daphne -b 0.0.0.0 -p $PORT config.asgi:application"</span>
+  healthcheckPath = <span class="c-str">"/api/v1/health/"</span>
+  restartPolicyType = <span class="c-str">"on_failure"</span>
+  restartPolicyMaxRetries = <span class="c-num">3</span>
+
+[[services]]
+  name = <span class="c-str">"web"</span>
+
+[[services]]
+  name = <span class="c-str">"celery-worker"</span>
+  startCommand = <span class="c-str">"celery -A config worker --loglevel=info"</span>
+
+[[services]]
+  name = <span class="c-str">"celery-beat"</span>
+  startCommand = <span class="c-str">"celery -A config beat --loglevel=info"</span>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

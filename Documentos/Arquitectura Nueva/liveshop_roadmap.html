@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiveShop Bolivia — Product Roadmap</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset & Base ─────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0b0c0f;
+    --surface:   #131519;
+    --surface2:  #1a1c22;
+    --border:    #252830;
+    --border2:   #32363f;
+
+    --ink:       #e8eaf0;
+    --ink2:      #9499a8;
+    --ink3:      #5a5f6e;
+
+    /* Fases */
+    --p0:  #f59e0b;  /* Fundación   — ámbar */
+    --p0l: #2a1f06;
+    --p1:  #3b82f6;  /* MVP Core    — azul */
+    --p1l: #0a1628;
+    --p2:  #10b981;  /* Live Engine — esmeralda */
+    --p2l: #051a12;
+    --p3:  #8b5cf6;  /* Pagos       — violeta */
+    --p3l: #120d24;
+    --p4:  #ef4444;  /* Growth      — rojo */
+    --p4l: #1f0808;
+
+    --must:   #ef4444;
+    --should: #f59e0b;
+    --could:  #10b981;
+    --wont:   #5a5f6e;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.65;
+    min-height: 100vh;
+  }
+
+  /* ── Noise overlay ───────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0; opacity: .4;
+  }
+
+  /* ── Layout ──────────────────────────────────────────── */
+  main { position: relative; z-index: 1; max-width: 1060px; margin: 0 auto; padding: 0 32px 120px; }
+
+  /* ── Header ──────────────────────────────────────────── */
+  header {
+    padding: 64px 0 52px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 56px;
+  }
+  .header-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 3px;
+    text-transform: uppercase; color: var(--p1);
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 20px;
+  }
+  .header-label::before {
+    content: '';
+    width: 28px; height: 1px;
+    background: var(--p1);
+    display: inline-block;
+  }
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(30px, 5vw, 52px);
+    font-weight: 800; line-height: 1.1;
+    color: var(--ink);
+    margin-bottom: 16px;
+  }
+  h1 em {
+    font-style: normal;
+    background: linear-gradient(120deg, var(--p1) 0%, var(--p2) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header-sub {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 17px; color: var(--ink2);
+    max-width: 580px; line-height: 1.5;
+    margin-bottom: 32px;
+  }
+  .header-meta {
+    display: flex; flex-wrap: wrap; gap: 24px;
+    font-size: 11px; color: var(--ink3); letter-spacing: .5px;
+  }
+  .header-meta span { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--p2); }
+
+  /* ── Nav fases ───────────────────────────────────────── */
+  .phase-nav {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 56px;
+  }
+  .phase-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border2);
+    font-size: 11px; letter-spacing: .5px;
+    cursor: pointer; text-decoration: none;
+    transition: all .2s;
+    color: var(--ink2);
+    background: var(--surface);
+  }
+  .phase-pill:hover { border-color: var(--ink3); color: var(--ink); }
+  .phase-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Section headers ─────────────────────────────────── */
+  .section { margin-bottom: 72px; }
+  .section-head {
+    display: flex; align-items: flex-start; gap: 16px;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+    white-space: nowrap; margin-top: 4px;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px; font-weight: 700;
+  }
+  .section-sub {
+    font-size: 12px; color: var(--ink2);
+    margin-top: 4px; font-style: italic;
+  }
+
+  /* ── MVP Definition box ──────────────────────────────── */
+  .mvp-box {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-left: 3px solid var(--p1);
+    border-radius: 0 10px 10px 0;
+    padding: 24px 28px;
+    margin-bottom: 28px;
+  }
+  .mvp-box-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px; font-weight: 700;
+    color: var(--p1); margin-bottom: 10px;
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+  .mvp-box p { color: var(--ink2); font-size: 13px; line-height: 1.7; }
+  .mvp-box strong { color: var(--ink); }
+
+  /* ── MoSCoW table ────────────────────────────────────── */
+  .moscow-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  @media (max-width: 640px) { .moscow-grid { grid-template-columns: 1fr; } }
+
+  .moscow-card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px; overflow: hidden;
+  }
+  .moscow-header {
+    padding: 10px 16px;
+    font-family: 'Syne', sans-serif;
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 2px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .moscow-body { padding: 14px 16px; }
+  .moscow-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12.5px; color: var(--ink2);
+  }
+  .moscow-item:last-child { border-bottom: none; }
+  .moscow-icon { flex-shrink: 0; margin-top: 1px; font-size: 11px; }
+
+  /* ── Phase cards ─────────────────────────────────────── */
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 12px; overflow: hidden;
+    margin-bottom: 20px;
+    transition: border-color .2s;
+  }
+  .phase-card:hover { border-color: var(--border2); }
+
+  .phase-header {
+    padding: 20px 24px;
+    display: flex; align-items: center;
+    gap: 16px; flex-wrap: wrap;
+    cursor: pointer;
+    user-select: none;
+  }
+  .phase-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 4px 10px; border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .phase-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 17px; font-weight: 700;
+    flex: 1;
+  }
+  .phase-timeline {
+    font-size: 11px; color: var(--ink3);
+    letter-spacing: .5px;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .phase-body { padding: 0 24px 24px; }
+
+  .phase-goal {
+    font-size: 12.5px; color: var(--ink2);
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-radius: 8px;
+    border-left: 3px solid;
+    margin-bottom: 20px;
+    font-style: italic;
+  }
+
+  /* Tabla de features ─── */
+  .feat-table { width: 100%; border-collapse: collapse; }
+  .feat-table th {
+    text-align: left; padding: 8px 12px;
+    font-size: 10px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--ink3);
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .feat-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top; font-size: 12.5px;
+  }
+  .feat-table tr:last-child td { border-bottom: none; }
+  .feat-table tr:hover td { background: rgba(255,255,255,.015); }
+
+  .feat-name { color: var(--ink); font-weight: 500; }
+  .feat-desc { color: var(--ink2); font-size: 12px; }
+  .feat-tech { color: var(--ink3); font-size: 11px; font-style: italic; }
+  .feat-effort {
+    font-size: 11px; text-align: center;
+    white-space: nowrap;
+  }
+
+  /* Esfuerzo dots */
+  .effort-dots { display: flex; gap: 3px; justify-content: center; }
+  .effort-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--border2);
+  }
+  .effort-dot.on { background: currentColor; }
+
+  .prio-tag {
+    display: inline-block; font-size: 10px;
+    padding: 2px 7px; border-radius: 3px;
+    font-family: 'DM Mono', monospace;
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+
+  /* ── Sprint blocks ───────────────────────────────────── */
+  .sprint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
+  @media (max-width: 640px) { .sprint-grid { grid-template-columns: 1fr; } }
+
+  .sprint-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .sprint-label {
+    font-size: 10px; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--ink3);
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .sprint-label::before {
+    content: '';
+    display: inline-block;
+    width: 14px; height: 1px;
+    background: currentColor;
+  }
+  .sprint-item {
+    display: flex; align-items: flex-start; gap: 6px;
+    padding: 4px 0;
+    color: var(--ink2); font-size: 12px;
+  }
+  .sprint-check { color: var(--p2); flex-shrink: 0; font-size: 11px; margin-top: 2px; }
+
+  /* ── KPIs / OKRs ─────────────────────────────────────── */
+  .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 28px; }
+  @media (max-width: 640px) { .kpi-row { grid-template-columns: 1fr 1fr; } }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .kpi-label { font-size: 10px; color: var(--ink3); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .kpi-value { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; line-height: 1; }
+  .kpi-sub { font-size: 11px; color: var(--ink2); margin-top: 6px; }
+
+  /* ── Timeline visual ─────────────────────────────────── */
+  .timeline {
+    position: relative;
+    padding-left: 28px;
+    margin-bottom: 28px;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute; left: 7px; top: 8px; bottom: 8px;
+    width: 1px; background: var(--border2);
+  }
+  .tl-item { position: relative; margin-bottom: 20px; }
+  .tl-dot {
+    position: absolute; left: -25px; top: 4px;
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid;
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+  .tl-week {
+    font-size: 10px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--ink3);
+    margin-bottom: 4px;
+  }
+  .tl-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px; font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .tl-desc { font-size: 12px; color: var(--ink2); }
+  .tl-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .tl-tag {
+    font-size: 10px; letter-spacing: .5px;
+    padding: 2px 8px; border-radius: 3px;
+    background: var(--surface2);
+    color: var(--ink3);
+    border: 1px solid var(--border);
+  }
+
+  /* ── What's OUT box ──────────────────────────────────── */
+  .out-box {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px; padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+  .out-box-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px; font-weight: 700;
+    color: var(--ink3); text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 12px;
+  }
+  .out-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 6px 0; border-bottom: 1px solid var(--border);
+    font-size: 12.5px;
+  }
+  .out-item:last-child { border-bottom: none; }
+  .out-x { color: var(--ink3); flex-shrink: 0; font-size: 14px; }
+  .out-name { color: var(--ink2); }
+  .out-reason { color: var(--ink3); font-size: 11.5px; margin-top: 2px; }
+
+  /* ── Decision log ────────────────────────────────────── */
+  .decision-table { width: 100%; border-collapse: collapse; }
+  .decision-table th {
+    text-align: left; padding: 8px 12px;
+    font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--ink3); background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .decision-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12.5px; vertical-align: top;
+  }
+  .decision-table tr:last-child td { border-bottom: none; }
+  .dec-decision { color: var(--ink); font-weight: 500; }
+  .dec-alt { color: var(--ink3); font-size: 11.5px; }
+  .dec-reason { color: var(--ink2); font-size: 12px; }
+
+  /* ── Definition of done ──────────────────────────────── */
+  .dod-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .dod-grid { grid-template-columns: 1fr 1fr; } }
+
+  .dod-card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px; padding: 16px;
+  }
+  .dod-phase { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink3); margin-bottom: 10px; }
+  .dod-item { display: flex; gap: 8px; padding: 4px 0; font-size: 12px; color: var(--ink2); }
+  .dod-check { flex-shrink: 0; }
+
+  /* ── Footer ──────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0 0;
+    margin-top: 80px;
+    display: flex; align-items: center;
+    justify-content: space-between; flex-wrap: gap;
+    color: var(--ink3); font-size: 11px;
+  }
+  footer span { color: var(--p1); }
+
+  /* ── Helpers ─────────────────────────────────────────── */
+  .row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .alert {
+    background: var(--surface); border: 1px solid var(--border2);
+    border-left: 3px solid var(--p0);
+    border-radius: 0 8px 8px 0; padding: 14px 18px;
+    font-size: 12.5px; color: var(--ink2);
+    margin-bottom: 20px;
+  }
+  .alert strong { color: var(--ink); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  .mono { font-family: 'DM Mono', monospace; }
+</style>
+</head>
+<body>
+<main>
+
+<!-- ══════════════════════════════════════════════
+     HEADER
+════════════════════════════════════════════════ -->
+<header>
+  <div class="header-label">Product Roadmap · v1.0 · 2025</div>
+  <h1>LiveShop Bolivia<br><em>Roadmap & MVP</em></h1>
+  <p class="header-sub">
+    Plataforma profesional para automatizar, controlar stock en tiempo real y evitar sobreventas en lives de TikTok, Facebook e Instagram.
+  </p>
+  <div class="header-meta">
+    <span><span class="dot" style="background:var(--p0)"></span>Fase 0 — Fundación (Sem. 1–2)</span>
+    <span><span class="dot" style="background:var(--p1)"></span>Fase 1 — MVP Core (Sem. 3–8)</span>
+    <span><span class="dot" style="background:var(--p2)"></span>Fase 2 — Live Engine + Pagos (Sem. 9–16)</span>
+    <span><span class="dot" style="background:var(--p4)"></span>Fase 3 — Growth (Sem. 17–24)</span>
+  </div>
+</header>
+
+<!-- Nav rápido -->
+<nav class="phase-nav">
+  <a href="#mvp" class="phase-pill"><span class="phase-dot" style="background:var(--p1)"></span>MVP Definition</a>
+  <a href="#fase0" class="phase-pill"><span class="phase-dot" style="background:var(--p0)"></span>Fase 0 · Fundación</a>
+  <a href="#fase1" class="phase-pill"><span class="phase-dot" style="background:var(--p1)"></span>Fase 1 · MVP Core</a>
+  <a href="#fase2" class="phase-pill"><span class="phase-dot" style="background:var(--p2)"></span>Fase 2 · Live Engine + Pagos</a>
+  <a href="#fase3" class="phase-pill"><span class="phase-dot" style="background:var(--p4)"></span>Fase 3 · Growth</a>
+  <a href="#decisions" class="phase-pill"><span class="phase-dot" style="background:var(--ink3)"></span>Decisiones técnicas</a>
+  <a href="#dod" class="phase-pill"><span class="phase-dot" style="background:var(--ink3)"></span>Definition of Done</a>
+</nav>
+
+<!-- ══════════════════════════════════════════════
+     01 · MVP DEFINITION
+════════════════════════════════════════════════ -->
+<section class="section" id="mvp">
+  <div class="section-head">
+    <div class="section-num" style="background:var(--p1l);color:var(--p1);border:1px solid rgba(59,130,246,.2)">MVP</div>
+    <div>
+      <div class="section-title" style="color:var(--p1)">Definición del MVP</div>
+      <div class="section-sub">Qué es el mínimo real para tener un cliente pagando y un live funcionando</div>
+    </div>
+  </div>
+
+  <div class="mvp-box">
+    <div class="mvp-box-title">¿Qué es el MVP de LiveShop?</div>
+    <p>
+      Un vendedor puede <strong>crear su cuenta, cargar productos con stock, abrir una sesión de live y recibir reservas automáticas en tiempo real</strong> mientras transmite en TikTok o Facebook.
+      Al terminar el live, tiene un <strong>panel con todos los pedidos organizados</strong>, puede confirmar stock y enviar un mensaje de WhatsApp al comprador.
+      No necesita Tigo Money integrado. No necesita IA. No necesita analytics avanzados.
+      <br><br>
+      <strong>El MVP resuelve UN problema concreto:</strong> el vendedor deja de perder pedidos por caos post-live.
+    </p>
+  </div>
+
+  <div class="alert">
+    <strong>Regla de oro del MVP:</strong> Si un feature no es necesario para que el primer cliente haga su primer live y cierre su primer pedido en la plataforma, no entra al MVP.
+  </div>
+
+  <div class="moscow-grid">
+    <!-- MUST HAVE -->
+    <div class="moscow-card">
+      <div class="moscow-header" style="background:rgba(239,68,68,.08);color:var(--must)">
+        <span>●</span> MUST HAVE — Sin esto no hay MVP
+      </div>
+      <div class="moscow-body">
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--must)">▸</span>Registro y autenticación de vendedor (multi-tenant)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--must)">▸</span>Catálogo de productos con stock y variantes (talla/color)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--must)">▸</span>Crear sesión de live + agregar productos al live</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--must)">▸</span>Reservas en tiempo real vía WebSocket durante el live</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--must)">▸</span>Descuento automático de stock al reservar (sin sobreventas)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--must)">▸</span>Panel post-live con lista de pedidos organizada</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--must)">▸</span>Formulario de datos del comprador (nombre, teléfono, dirección)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--must)">▸</span>Notificación WhatsApp manual (link directo wa.me)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--must)">▸</span>Deploy funcional en Railway (ASGI + Daphne)</div>
+      </div>
+    </div>
+
+    <!-- SHOULD HAVE -->
+    <div class="moscow-card">
+      <div class="moscow-header" style="background:rgba(245,158,11,.08);color:var(--should)">
+        <span>●</span> SHOULD HAVE — Fase 2
+      </div>
+      <div class="moscow-body">
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--should)">▸</span>Notificaciones WhatsApp automáticas (Twilio API)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--should)">▸</span>Embed de TikTok/FB en el panel del vendedor</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--should)">▸</span>Estado de pedido (pendiente / confirmado / enviado)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--should)">▸</span>Expiración automática de reservas (configurable)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--should)">▸</span>Exportar pedidos a Excel</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--should)">▸</span>Historial de lives anteriores</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--should)">▸</span>Vista del comprador (página pública del live)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--should)">▸</span>Panel de analytics básico (ventas por live)</div>
+      </div>
+    </div>
+
+    <!-- COULD HAVE -->
+    <div class="moscow-card">
+      <div class="moscow-header" style="background:rgba(16,185,129,.08);color:var(--could)">
+        <span>●</span> COULD HAVE — Fase 3–4
+      </div>
+      <div class="moscow-body">
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--could)">▸</span>Tigo Money integrado (webhook + confirmación automática)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--could)">▸</span>Banco Unión QR generado automáticamente</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--could)">▸</span>IA para parsear "apúntame 2 del azul" desde chat</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--could)">▸</span>Reportes mensuales automáticos PDF</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--could)">▸</span>Dominio personalizado por vendedor</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--could)">▸</span>Multi-usuario por cuenta (hasta 3)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--could)">▸</span>Programa de referidos</div>
+      </div>
+    </div>
+
+    <!-- WON'T HAVE -->
+    <div class="moscow-card">
+      <div class="moscow-header" style="background:rgba(90,95,110,.1);color:var(--wont)">
+        <span>●</span> WON'T HAVE — Fuera del scope año 1
+      </div>
+      <div class="moscow-body">
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--wont)">▸</span>App móvil nativa (iOS/Android)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--wont)">▸</span>Procesamiento propio de video/stream</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--wont)">▸</span>Marketplace propio (el video siempre se embebe)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--wont)">▸</span>Integración con pasarelas internacionales (Stripe, PayPal)</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--wont)">▸</span>ERP o sistema de contabilidad propio</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--wont)">▸</span>Logística / delivery integrado</div>
+        <div class="moscow-item"><span class="moscow-icon" style="color:var(--wont)">▸</span>Soporte multiidioma</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs MVP -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-label">Tiempo al MVP</div>
+      <div class="kpi-value" style="color:var(--p1)">8 sem.</div>
+      <div class="kpi-sub">Desde arranque hasta primer live real</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Clientes beta meta</div>
+      <div class="kpi-value" style="color:var(--p2)">3–5</div>
+      <div class="kpi-sub">Vendedores activos en SCZ con live real</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Definición de éxito</div>
+      <div class="kpi-value" style="color:var(--p0)">1 live</div>
+      <div class="kpi-sub">Un vendedor completa un live completo sin sobreventas</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     FASE 0 · FUNDACIÓN
+════════════════════════════════════════════════ -->
+<section class="section" id="fase0">
+  <div class="section-head">
+    <div class="section-num" style="background:var(--p0l);color:var(--p0);border:1px solid rgba(245,158,11,.2)">FASE 0</div>
+    <div>
+      <div class="section-title" style="color:var(--p0)">Fundación</div>
+      <div class="section-sub">Semanas 1–2 · Setup del proyecto, estructura base, deploy funcional en Railway</div>
+    </div>
+  </div>
+
+  <div class="phase-goal" style="border-color:var(--p0)">
+    Objetivo: tener el esqueleto del proyecto corriendo en producción antes de escribir una sola línea de lógica de negocio. Nada de features hasta que el entorno esté estable.
+  </div>
+
+  <div class="sprint-grid">
+    <div class="sprint-block">
+      <div class="sprint-label" style="color:var(--p0)">Semana 1 — Estructura Django</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Crear repositorio GitHub con estructura de apps Django</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Configurar settings: base / dev / prod con variables de entorno</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Setup ASGI con Daphne (HTTP + WebSocket)</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Conectar Supabase (PostgreSQL) + migrations iniciales</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Conectar Upstash Redis (Channel Layers + Celery broker)</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Configurar Cloudflare R2 para imágenes</div>
+    </div>
+    <div class="sprint-block">
+      <div class="sprint-label" style="color:var(--p0)">Semana 2 — Deploy y CI/CD</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Deploy Railway: Web Service (Daphne) + Worker (Celery)</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>GitHub Actions: test → lint → deploy automático</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Cloudflare: proxy + SSL + CDN para Angular</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Angular SPA: scaffolding inicial con routing y auth guard</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Health-check endpoint respondiendo /api/health/</div>
+      <div class="sprint-item"><span class="sprint-check">✓</span>Cobertura tests ≥ 1 (al menos el health-check)</div>
+    </div>
+  </div>
+
+  <div class="out-box">
+    <div class="out-box-title">❌ No entra en Fase 0</div>
+    <div class="out-item">
+      <span class="out-x">—</span>
+      <div><div class="out-name">Features de producto</div><div class="out-reason">El entorno debe estar 100% estable antes de construir lógica</div></div>
+    </div>
+    <div class="out-item">
+      <span class="out-x">—</span>
+      <div><div class="out-name">Diseño de UI/UX detallado</div><div class="out-reason">Primero que funcione, luego que se vea bien</div></div>
+    </div>
+    <div class="out-item">
+      <span class="out-x">—</span>
+      <div><div class="out-name">Integraciones externas (WhatsApp, pagos)</div><div class="out-reason">Esas son Fase 2 y 3</div></div>
+    </div>
+  </div>
+
+  <div class="alert"><strong>Criterio de salida de Fase 0:</strong> Un request HTTP llega desde internet → pasa por Cloudflare → llega a Railway → devuelve 200 OK. Un mensaje WebSocket de prueba llega a Django Channels a través de Upstash Redis. El pipeline CI/CD despliega automáticamente al hacer push a main.</div>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     FASE 1 · MVP CORE
+════════════════════════════════════════════════ -->
+<section class="section" id="fase1">
+  <div class="section-head">
+    <div class="section-num" style="background:var(--p1l);color:var(--p1);border:1px solid rgba(59,130,246,.2)">FASE 1</div>
+    <div>
+      <div class="section-title" style="color:var(--p1)">MVP Core</div>
+      <div class="section-sub">Semanas 3–8 · Multi-tenant, catálogo, sesiones de live, reservas en tiempo real</div>
+    </div>
+  </div>
+
+  <div class="phase-goal" style="border-color:var(--p1)">
+    Objetivo: un vendedor puede crear su cuenta, cargar productos con stock, abrir un live, recibir reservas automáticas en tiempo real y ver los pedidos organizados al terminar. Sin Tigo Money, sin IA, sin analytics. Solo el flujo central.
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-label">Semanas</div>
+      <div class="kpi-value" style="color:var(--p1)">6</div>
+      <div class="kpi-sub">Semanas 3 a 8</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Criterio de éxito</div>
+      <div class="kpi-value" style="color:var(--p1)">1 live</div>
+      <div class="kpi-sub">Completo sin sobreventas</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Cobertura tests</div>
+      <div class="kpi-value" style="color:var(--p1)">≥ 75%</div>
+      <div class="kpi-sub">En tenants, catalog y sessions</div>
+    </div>
+  </div>
+
+  <table class="feat-table">
+    <thead>
+      <tr>
+        <th>MÓDULO / FEATURE</th>
+        <th>DESCRIPCIÓN</th>
+        <th>STACK</th>
+        <th style="text-align:center">ESFUERZO</th>
+        <th style="text-align:center">PRIORIDAD</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- tenants -->
+      <tr>
+        <td colspan="5" style="background:var(--surface2);color:var(--ink3);font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px 12px;">
+          APP: tenants/ — Semana 3
+        </td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Modelo Tenant + User</div></td>
+        <td><div class="feat-desc">Cada vendedor es un tenant aislado. UUID como PK. Roles: owner / collaborator.</div></td>
+        <td><div class="feat-tech">Django ORM · PostgreSQL</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p1)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">media</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(239,68,68,.1);color:var(--must)">MUST</span></td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">TenantMiddleware</div></td>
+        <td><div class="feat-desc">Cada request queda aislado por tenant desde el middleware. Cero filtros manuales en cada vista.</div></td>
+        <td><div class="feat-tech">Django middleware</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p1)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot on"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">alta</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(239,68,68,.1);color:var(--must)">MUST</span></td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Auth JWT + refresh</div></td>
+        <td><div class="feat-desc">Login, logout, refresh token. djangorestframework-simplejwt. Angular interceptor para headers automáticos.</div></td>
+        <td><div class="feat-tech">DRF · simplejwt · Angular</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p1)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">media</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(239,68,68,.1);color:var(--must)">MUST</span></td>
+      </tr>
+      <!-- catalog -->
+      <tr>
+        <td colspan="5" style="background:var(--surface2);color:var(--ink3);font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px 12px;">
+          APP: catalog/ — Semana 4
+        </td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Modelo Product + variantes</div></td>
+        <td><div class="feat-desc">Producto con nombre, precio, stock total, imagen URL. Variantes como JSON field (talla S: 10, color azul: 5).</div></td>
+        <td><div class="feat-tech">Django ORM · JSONField</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p1)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">media</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(239,68,68,.1);color:var(--must)">MUST</span></td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">CRUD API catálogo</div></td>
+        <td><div class="feat-desc">ViewSets DRF con TenantMixin. Subida de imágenes a Cloudflare R2 vía presigned URL. Listado paginado.</div></td>
+        <td><div class="feat-tech">DRF ViewSet · Cloudflare R2</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p1)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">media</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(239,68,68,.1);color:var(--must)">MUST</span></td>
+      </tr>
+      <!-- sessions -->
+      <tr>
+        <td colspan="5" style="background:var(--surface2);color:var(--ink3);font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px 12px;">
+          APP: sessions/ — Semanas 5–6 (núcleo del negocio)
+        </td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Modelo LiveSession + SessionProduct</div></td>
+        <td><div class="feat-desc">LiveSession: estado (draft/active/ended), stream_url, scheduled_at. SessionProduct: qué productos van en ese live con precio promo y stock reservado.</div></td>
+        <td><div class="feat-tech">Django ORM</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p1)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">media</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(239,68,68,.1);color:var(--must)">MUST</span></td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">WebSocket Consumer (reservas en tiempo real)</div></td>
+        <td><div class="feat-desc">Comprador se conecta al canal del live. Envía {product_id, qty}. El consumer descuenta stock atómicamente (select_for_update), crea Reservation y hace broadcast del nuevo stock a todos los conectados.</div></td>
+        <td><div class="feat-tech">Django Channels 4 · Upstash Redis · select_for_update</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p1)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot on"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">alta</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(239,68,68,.1);color:var(--must)">MUST</span></td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Control de sobreventas</div></td>
+        <td><div class="feat-desc">Si stock = 0, el consumer rechaza la reserva y notifica al comprador. Stock visible en tiempo real para todos los conectados al canal. Sin race conditions.</div></td>
+        <td><div class="feat-tech">PostgreSQL transaction · Django Channels broadcast</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p1)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot on"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">alta</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(239,68,68,.1);color:var(--must)">MUST</span></td>
+      </tr>
+      <!-- orders -->
+      <tr>
+        <td colspan="5" style="background:var(--surface2);color:var(--ink3);font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px 12px;">
+          APP: orders/ — Semanas 7–8
+        </td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Modelo Order + OrderItem + Customer</div></td>
+        <td><div class="feat-desc">Customer con nombre/teléfono/ciudad. Order con total, dirección, estado. OrderItem con cantidad y precio unitario.</div></td>
+        <td><div class="feat-tech">Django ORM</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p1)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">media</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(239,68,68,.1);color:var(--must)">MUST</span></td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Panel post-live Angular</div></td>
+        <td><div class="feat-desc">Tabla de pedidos filtrable por estado. Confirmar/rechazar desde la UI. Link directo wa.me/?text=... para WhatsApp manual. Exportar a CSV básico.</div></td>
+        <td><div class="feat-tech">Angular · DRF</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p1)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">media</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(239,68,68,.1);color:var(--must)">MUST</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:20px" class="alert"><strong>Criterio de salida de Fase 1:</strong> Un vendedor crea cuenta → carga 5 productos con stock → crea un live → 3 compradores se conectan via WebSocket → reservan productos → el stock se actualiza en tiempo real para todos → no se producen sobreventas → el vendedor ve los pedidos organizados en el panel post-live.</div>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     FASE 2 · LIVE ENGINE + PAGOS
+════════════════════════════════════════════════ -->
+<section class="section" id="fase2">
+  <div class="section-head">
+    <div class="section-num" style="background:var(--p2l);color:var(--p2);border:1px solid rgba(16,185,129,.2)">FASE 2</div>
+    <div>
+      <div class="section-title" style="color:var(--p2)">Live Engine + Pagos</div>
+      <div class="section-sub">Semanas 9–16 · WhatsApp automático, flujo de comprobante, confirmación de pago, analytics</div>
+    </div>
+  </div>
+
+  <div class="phase-goal" style="border-color:var(--p2)">
+    Objetivo: la plataforma se vuelve profesional y autónoma. El vendedor asigna su QR/datos bancarios una sola vez — el sistema notifica al comprador, recibe el comprobante y el vendedor confirma con un click. Sin API de pagos, sin responsabilidad financiera, funciona con cualquier método boliviano. Meta: 3 primeros clientes pagando Bs. 300/mes.
+  </div>
+
+  <!-- Flujo de pagos -->
+  <div class="mvp-box" style="border-color:var(--p2);margin-bottom:24px">
+    <div class="mvp-box-title" style="color:var(--p2)">Flujo de pago — Simple · Robusto · Sin responsabilidad financiera</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px;">
+      <div style="text-align:center;padding:14px 8px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2)">
+        <div style="font-size:20px;margin-bottom:8px">1️⃣</div>
+        <div style="font-size:11px;color:var(--ink);font-weight:600;margin-bottom:4px">Vendedor configura</div>
+        <div style="font-size:10px;color:var(--ink3);line-height:1.4">Sube su QR y/o datos bancarios una sola vez en el perfil</div>
+      </div>
+      <div style="text-align:center;padding:14px 8px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2)">
+        <div style="font-size:20px;margin-bottom:8px">2️⃣</div>
+        <div style="font-size:11px;color:var(--ink);font-weight:600;margin-bottom:4px">Comprador recibe</div>
+        <div style="font-size:10px;color:var(--ink3);line-height:1.4">WhatsApp con resumen + total + QR/datos de pago</div>
+      </div>
+      <div style="text-align:center;padding:14px 8px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2)">
+        <div style="font-size:20px;margin-bottom:8px">3️⃣</div>
+        <div style="font-size:11px;color:var(--ink);font-weight:600;margin-bottom:4px">Comprador paga</div>
+        <div style="font-size:10px;color:var(--ink3);line-height:1.4">Tigo Money, Banco Unión, transferencia — el método que prefiera</div>
+      </div>
+      <div style="text-align:center;padding:14px 8px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2)">
+        <div style="font-size:20px;margin-bottom:8px">4️⃣</div>
+        <div style="font-size:11px;color:var(--ink);font-weight:600;margin-bottom:4px">Sube comprobante</div>
+        <div style="font-size:10px;color:var(--ink3);line-height:1.4">Foto del comprobante aparece en el panel del vendedor</div>
+      </div>
+      <div style="text-align:center;padding:14px 8px;background:var(--p2l);border-radius:8px;border:1px solid rgba(16,185,129,.3)">
+        <div style="font-size:20px;margin-bottom:8px">5️⃣</div>
+        <div style="font-size:11px;color:var(--p2);font-weight:600;margin-bottom:4px">Vendedor confirma</div>
+        <div style="font-size:10px;color:var(--ink3);line-height:1.4">Un click → stock descontado + pedido confirmado + WA al comprador</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-label">Meta clientes</div>
+      <div class="kpi-value" style="color:var(--p2)">3</div>
+      <div class="kpi-sub">Primeros pagos reales al fin de la fase</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Latencia WS</div>
+      <div class="kpi-value" style="color:var(--p2)">&lt;200ms</div>
+      <div class="kpi-sub">Reserva confirmada en pantalla</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">NPS beta</div>
+      <div class="kpi-value" style="color:var(--p2)">≥ 30</div>
+      <div class="kpi-sub">Encuesta post-live a cada usuario</div>
+    </div>
+  </div>
+
+  <table class="feat-table">
+    <thead>
+      <tr>
+        <th>FEATURE</th>
+        <th>DESCRIPCIÓN</th>
+        <th>STACK</th>
+        <th style="text-align:center">ESFUERZO</th>
+        <th style="text-align:center">PRIORIDAD</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td colspan="5" style="background:var(--surface2);color:var(--ink3);font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px 12px;">
+          APP: notifications/ — Semanas 9–10
+        </td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">WhatsApp automático (Twilio)</div></td>
+        <td><div class="feat-desc">Confirmación de reserva, recordatorio de pago y actualización de estado enviados automáticamente via Celery task. Templates aprobados por WhatsApp Business.</div></td>
+        <td><div class="feat-tech">Twilio WhatsApp API · Celery</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p2)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot on"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">alta</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(245,158,11,.1);color:var(--should)">SHOULD</span></td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Expiración automática de reservas</div></td>
+        <td><div class="feat-desc">Celery Beat task que expira reservas no convertidas después de N minutos (configurable por tenant). Devuelve stock automáticamente.</div></td>
+        <td><div class="feat-tech">Celery Beat · Upstash Redis</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p2)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">media</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(245,158,11,.1);color:var(--should)">SHOULD</span></td>
+      </tr>
+      <tr>
+        <td colspan="5" style="background:var(--surface2);color:var(--ink3);font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px 12px;">
+          Vista del comprador + estados — Semanas 11–12
+        </td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Página pública del comprador</div></td>
+        <td><div class="feat-desc">URL pública liveshop.bo/live/[slug] donde el comprador ve el catálogo del live, el embed del video y puede reservar. Sin login requerido para el comprador.</div></td>
+        <td><div class="feat-tech">Angular · Django Channels</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p2)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot on"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">alta</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(245,158,11,.1);color:var(--should)">SHOULD</span></td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Máquina de estados del pedido</div></td>
+        <td><div class="feat-desc">8 estados: draft → pending_payment → payment_confirmed → preparing → shipped → delivered / cancelled / refunded. Transiciones con validación y log de cambios.</div></td>
+        <td><div class="feat-tech">Django state machine · DRF</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p2)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">media</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(245,158,11,.1);color:var(--should)">SHOULD</span></td>
+      </tr>
+      <tr>
+        <td colspan="5" style="background:var(--surface2);color:var(--ink3);font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px 12px;">
+          Analytics + exportación — Semanas 13–14
+        </td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Dashboard analytics básico</div></td>
+        <td><div class="feat-desc">Por live: total pedidos, productos más vendidos, ingresos totales, tasa de conversión reservas→pedidos. Por mes: MRR del tenant, crecimiento.</div></td>
+        <td><div class="feat-tech">Django aggregations · Angular Charts</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p2)">
+            <div class="effort-dot on"></div><div class="effort-dot on"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">media</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(245,158,11,.1);color:var(--should)">SHOULD</span></td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Exportar pedidos a Excel</div></td>
+        <td><div class="feat-desc">Un click en el panel post-live descarga todos los pedidos del live en .xlsx con openpyxl. Columnas: nombre, teléfono, producto, cantidad, total, estado.</div></td>
+        <td><div class="feat-tech">openpyxl · DRF StreamingHttpResponse</div></td>
+        <td><div class="feat-effort">
+          <div class="effort-dots" style="color:var(--p2)">
+            <div class="effort-dot on"></div><div class="effort-dot"></div><div class="effort-dot"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">baja</div>
+        </div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(245,158,11,.1);color:var(--should)">SHOULD</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     FASE 3 · GROWTH
+════════════════════════════════════════════════ -->
+<section class="section" id="fase3">
+  <div class="section-head">
+    <div class="section-num" style="background:var(--p3l);color:var(--p3);border:1px solid rgba(139,92,246,.2)">FASE 3</div>
+    <div>
+      <div class="section-title" style="color:var(--p4)">Growth & Escala</div>
+      <div class="section-sub">Semanas 17–24 · IA boliviana, onboarding guiado, referidos, expansión La Paz</div>
+    </div>
+  </div>
+
+  <div class="phase-goal" style="border-color:var(--p3)">
+    Objetivo: el ciclo completo es automático — reserva → pago → confirmación → actualización de estado → WhatsApp al comprador, sin intervención del vendedor. Meta: 10 clientes pagantes y MRR ≥ Bs. 3,000.
+  </div>
+
+  <div class="alert" style="border-color:var(--p3)">
+    <strong>Riesgo principal de esta fase:</strong> La integración con Tigo Money requiere un acuerdo comercial formal con Tigo Bolivia. Iniciar ese proceso en paralelo con la Fase 2, no esperar a la Fase 3 para contactarlos.
+  </div>
+
+  <div class="sprint-grid">
+    <div class="sprint-block">
+      <div class="sprint-label" style="color:var(--p3)">Tigo Money (Semanas 15–17)</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>Integrar API Tigo Money: generar QR de cobro dinámico</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>Webhook endpoint para recibir confirmación de pago</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>Verificación HMAC de autenticidad del webhook</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>Modelo Payment con estado: pending → confirmed → failed</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>Transición automática del pedido al confirmar pago</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>Al menos 1 transacción real procesada en producción</div>
+    </div>
+    <div class="sprint-block">
+      <div class="sprint-label" style="color:var(--p3)">Banco Unión QR (Semanas 18–20)</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>Integrar generación de QR Banco Unión estático/dinámico</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>Payment providers como clases intercambiables (Strategy pattern)</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>UI: el comprador elige Tigo Money o QR Banco Unión</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>Reconciliación manual fallback (si webhook falla)</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>Tests de integración con mocks de ambas APIs</div>
+      <div class="sprint-item"><span class="sprint-check" style="color:var(--p3)">→</span>10 clientes pagantes + MRR ≥ Bs. 3,000</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     
+<section class="section" id="fase3_growth">
+  <div class="section-head">
+    <div class="section-num" style="background:var(--p4l);color:var(--p4);border:1px solid rgba(239,68,68,.2)">FASE 4</div>
+    <div>
+      <div class="section-title" style="color:var(--p4)">Growth & Escala</div>
+      <div class="section-sub">Semanas 21–28 · IA boliviana, referidos, multi-usuario, expansión La Paz</div>
+    </div>
+  </div>
+
+  <div class="phase-goal" style="border-color:var(--p4)">
+    Objetivo: escalar de 10 a 42+ clientes activos. Automatizar lo que no escala manualmente. Introducir features que aumentan retención y reducen churn. Meta: Bs. 10,000+ netos/mes, churn ≤ 3%.
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-label">Clientes meta</div>
+      <div class="kpi-value" style="color:var(--p4)">42+</div>
+      <div class="kpi-sub">Activos al final de la fase</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Churn objetivo</div>
+      <div class="kpi-value" style="color:var(--p4)">≤ 3%</div>
+      <div class="kpi-sub">Con buen onboarding y soporte</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">NPS objetivo</div>
+      <div class="kpi-value" style="color:var(--p4)">≥ 50</div>
+      <div class="kpi-sub">Promotores activos que refieren</div>
+    </div>
+  </div>
+
+  <table class="feat-table">
+    <thead>
+      <tr>
+        <th>FEATURE</th>
+        <th>DESCRIPCIÓN</th>
+        <th style="text-align:center">IMPACTO</th>
+        <th style="text-align:center">SEMANAS</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><div class="feat-name">IA para parsear reservas del chat</div></td>
+        <td><div class="feat-desc">El comprador escribe en el chat de TikTok/FB "apúntame 2 del azul talla M". La IA (Gemini/Groq) parsea y crea la reserva automáticamente. Diferenciador clave vs. cualquier competidor.</div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(16,185,129,.1);color:var(--could)">ALTO</span></td>
+        <td style="text-align:center;color:var(--ink2)">21–23</td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Programa de referidos</div></td>
+        <td><div class="feat-desc">1 mes gratis para el referidor cuando el referido hace su primer pago. Tracking via código único por tenant. Reduce CAC significativamente.</div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(16,185,129,.1);color:var(--could)">ALTO</span></td>
+        <td style="text-align:center;color:var(--ink2)">22–23</td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Multi-usuario por cuenta</div></td>
+        <td><div class="feat-desc">Hasta 3 usuarios por tenant con roles: owner (todo), collaborator (gestión pedidos), viewer (solo analytics). Necesario para vendedores con equipo.</div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(16,185,129,.1);color:var(--could)">MEDIO</span></td>
+        <td style="text-align:center;color:var(--ink2)">24–25</td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Onboarding guiado (14 días)</div></td>
+        <td><div class="feat-desc">Checklist interactivo: configurar productos → hacer live de prueba → primera reserva. Progress bar visible en el dashboard. El 80% del churn ocurre en los primeros 14 días.</div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(16,185,129,.1);color:var(--could)">MUY ALTO</span></td>
+        <td style="text-align:center;color:var(--ink2)">21–22</td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Reportes mensuales PDF automáticos</div></td>
+        <td><div class="feat-desc">Email automático el 1 de cada mes con el resumen del mes: ventas, pedidos, productos top, comparativa vs. mes anterior. Aumenta percepción de valor.</div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(16,185,129,.1);color:var(--could)">MEDIO</span></td>
+        <td style="text-align:center;color:var(--ink2)">26–27</td>
+      </tr>
+      <tr>
+        <td><div class="feat-name">Expansión a La Paz</div></td>
+        <td><div class="feat-desc">1 asesor comercial remoto en La Paz. Primeros 5 clientes paceños. Ajustar onboarding para mercado paceño (diferencias culturales vs. SCZ).</div></td>
+        <td style="text-align:center"><span class="prio-tag" style="background:rgba(16,185,129,.1);color:var(--could)">ALTO</span></td>
+        <td style="text-align:center;color:var(--ink2)">26–28</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     DECISIONES TÉCNICAS
+════════════════════════════════════════════════ -->
+<section class="section" id="decisions">
+  <div class="section-head">
+    <div class="section-num" style="background:var(--surface2);color:var(--ink2);border:1px solid var(--border2)">ADR</div>
+    <div>
+      <div class="section-title">Decisiones de arquitectura clave</div>
+      <div class="section-sub">Por qué elegimos X sobre Y — para no revisitar estas decisiones</div>
+    </div>
+  </div>
+
+  <table class="decision-table">
+    <thead>
+      <tr>
+        <th>DECISIÓN TOMADA</th>
+        <th>ALTERNATIVA DESCARTADA</th>
+        <th>RAZÓN</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><div class="dec-decision">El video no pasa por nuestros servidores — embed de TikTok/FB</div></td>
+        <td><div class="dec-alt">Procesar/retransmitir el video nosotros</div></td>
+        <td><div class="dec-reason">El streaming de video costaría $200–500 USD/mes desde el arranque. Con embed: $0 de ancho de banda de video.</div></td>
+      </tr>
+      <tr>
+        <td><div class="dec-decision">Django Channels 4 + Upstash Redis para WebSockets</div></td>
+        <td><div class="dec-alt">Node.js / Socket.io / Pusher</div></td>
+        <td><div class="dec-reason">El equipo tiene Django como stack principal. No tiene sentido agregar un runtime diferente. Upstash Redis serverless escala sin gestión.</div></td>
+      </tr>
+      <tr>
+        <td><div class="dec-decision">PostgreSQL con select_for_update() para control de stock</div></td>
+        <td><div class="dec-alt">Redis como contador atómico</div></td>
+        <td><div class="dec-reason">El stock tiene que ser consistente con los pedidos y el historial. Redis como contador pierde consistencia transaccional. PostgreSQL garantiza ACID.</div></td>
+      </tr>
+      <tr>
+        <td><div class="dec-decision">Railway para deploy (no VPS propio)</div></td>
+        <td><div class="dec-alt">DigitalOcean Droplet, AWS EC2</div></td>
+        <td><div class="dec-reason">Railway maneja SSL, CI/CD y reinicio automático. El fundador no pierde tiempo en DevOps. A 100 clientes se evalúa migrar.</div></td>
+      </tr>
+      <tr>
+        <td><div class="dec-decision">Supabase para PostgreSQL (no Railway PG)</div></td>
+        <td><div class="dec-alt">Railway PostgreSQL, PlanetScale</div></td>
+        <td><div class="dec-reason">Supabase tiene backups automáticos, connection pooling y el free tier más generoso. Reduce riesgo de pérdida de datos.</div></td>
+      </tr>
+      <tr>
+        <td><div class="dec-decision">Pagos sin API — QR del vendedor + comprobante manual</div></td>
+        <td><div class="dec-alt">Integración API Tigo Money / Banco Unión</div></td>
+        <td><div class="dec-reason">Sin acuerdo comercial, sin webhooks, sin responsabilidad financiera. El vendedor ya tiene su QR. El sistema sólo organiza el flujo. Cero semanas de integración ahorradas.</div></td>
+      </tr>
+      <tr>
+        <td><div class="dec-decision">Plan único Bs. 300/mes (sin PRO/ENTERPRISE)</div></td>
+        <td><div class="dec-alt">Multi-plan con features diferenciadas</div></td>
+        <td><div class="dec-reason">Un solo plan elimina fricción de elección. Con &lt; 50 clientes, la complejidad de múltiples planes no vale la pena. Revisar en Año 2 con datos reales.</div></td>
+      </tr>
+      <tr>
+        <td><div class="dec-decision">Comisión asesor 25% pago único (sin retención)</div></td>
+        <td><div class="dec-alt">25% conversión + 12% retención mensual</div></td>
+        <td><div class="dec-reason">Comisión recurrente complica la contabilidad y genera conflictos si el cliente cancela. Pago único es simple, predecible y motiva cierres rápidos.</div></td>
+      </tr>
+      <tr>
+        <td><div class="dec-decision">Variantes como JSONField en Product</div></td>
+        <td><div class="dec-alt">Tabla ProductVariant separada</div></td>
+        <td><div class="dec-reason">En el MVP, la estructura de variantes varía mucho por producto. JSONField es más flexible para empezar. Migrar a tabla relacional cuando haya datos reales.</div></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     DEFINITION OF DONE
+════════════════════════════════════════════════ -->
+<section class="section" id="dod">
+  <div class="section-head">
+    <div class="section-num" style="background:var(--surface2);color:var(--ink2);border:1px solid var(--border2)">DoD</div>
+    <div>
+      <div class="section-title">Definition of Done por fase</div>
+      <div class="section-sub">Una fase no termina hasta que todos los criterios están cumplidos</div>
+    </div>
+  </div>
+
+  <div class="dod-grid">
+    <div class="dod-card">
+      <div class="dod-phase" style="color:var(--p0)">● Fase 0 — Fundación</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Request HTTP desde internet → 200 OK en Railway</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>WebSocket de prueba conecta a través de Upstash Redis</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Push a main → deploy automático en 5 minutos</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Cloudflare CDN sirviendo Angular SPA</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Supabase: migrations corren sin error</div>
+    </div>
+
+    <div class="dod-card">
+      <div class="dod-phase" style="color:var(--p1)">● Fase 1 — MVP Core</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>3 compradores en simultáneo reservan sin sobreventas</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Stock actualizado en &lt; 500ms para todos los conectados</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Panel post-live muestra pedidos correctamente</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Tests cobertura ≥ 75% en tenants, catalog, sessions</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>3 vendedores beta lo usan en un live real</div>
+    </div>
+
+    <div class="dod-card">
+      <div class="dod-phase" style="color:var(--p2)">● Fase 2 — Live Engine + Pagos</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Vendedor configura QR → comprador recibe WhatsApp con total + QR</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Comprador sube comprobante → visible en panel del vendedor</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Vendedor confirma → stock descontado + WA automático al comprador</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>NPS ≥ 30 en encuesta post-live</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>3 primeros clientes pagando Bs. 300/mes</div>
+    </div>
+
+    <div class="dod-card">
+      <div class="dod-phase" style="color:var(--p4)">● Fase 3 — Growth</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Onboarding: ≥ 70% de nuevos completan el checklist en 14 días</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>IA parsea reservas del chat con ≥ 85% de precisión</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Referidos ≥ 20% de los nuevos clientes del mes</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Churn mensual ≤ 3% · NPS ≥ 50</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>42+ clientes activos · Bs. 10K+ neto/mes</div>
+    </div>
+
+    
+
+    <div class="dod-card">
+      <div class="dod-phase" style="color:var(--ink3)">● Criterio global (todas las fases)</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Uptime ≥ 99% en el mes anterior</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>P95 latencia API &lt; 500ms</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Cero errores #REF / datos perdidos en producción</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>CHANGELOG actualizado con cada deploy</div>
+      <div class="dod-item"><span class="dod-check" style="color:var(--p2)">✓</span>Sin deuda técnica crítica sin documentar</div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div>LiveShop Bolivia — <span>Product Roadmap v1.0</span> · 2025</div>
+  <div>Django 5 · Angular · WebSockets · Railway · Supabase · Upstash · Cloudflare</div>
+</footer>
+
+</main>
+</body>
+</html>

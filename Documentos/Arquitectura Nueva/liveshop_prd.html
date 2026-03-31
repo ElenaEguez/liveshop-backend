@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiveShop Bolivia — PRD v1.0</title>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:ital,wght@0,400;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #f8f7f4;
+  --surface:  #ffffff;
+  --surface2: #f2f0ec;
+  --border:   #e4e0d8;
+  --border2:  #ccc8be;
+
+  --ink:      #1a1916;
+  --ink2:     #4a4740;
+  --ink3:     #8a877e;
+
+  --blue:     #1d4ed8;
+  --blue-l:   #eff6ff;
+  --blue-b:   #bfdbfe;
+  --green:    #15803d;
+  --green-l:  #f0fdf4;
+  --green-b:  #bbf7d0;
+  --amber:    #b45309;
+  --amber-l:  #fffbeb;
+  --amber-b:  #fde68a;
+  --red:      #b91c1c;
+  --red-l:    #fef2f2;
+  --red-b:    #fecaca;
+  --purple:   #7c3aed;
+  --purple-l: #f5f3ff;
+  --purple-b: #ddd6fe;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Epilogue', sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* ── Layout ── */
+.page-wrap { max-width: 900px; margin: 0 auto; padding: 0 32px 120px; }
+
+/* ── Cover ── */
+.cover {
+  padding: 72px 0 56px;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 64px;
+}
+.cover-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--ink3);
+  margin-bottom: 24px;
+}
+h1 {
+  font-size: clamp(32px, 5vw, 52px);
+  font-weight: 800; line-height: 1.05;
+  letter-spacing: -1.5px;
+  margin-bottom: 12px;
+}
+.cover-sub {
+  font-size: 16px; color: var(--ink2);
+  font-style: italic; margin-bottom: 36px;
+  max-width: 560px;
+}
+.cover-meta {
+  display: flex; gap: 32px; flex-wrap: wrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--ink3);
+}
+.cover-meta strong { color: var(--ink); }
+
+/* ── TOC ── */
+.toc {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 24px 28px;
+  margin-bottom: 64px;
+}
+.toc-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--ink3);
+  margin-bottom: 16px;
+}
+.toc-list { list-style: none; }
+.toc-list li {
+  display: flex; align-items: baseline;
+  gap: 8px; padding: 5px 0;
+  border-bottom: 1px dotted var(--border);
+}
+.toc-list li:last-child { border-bottom: none; }
+.toc-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--ink3);
+  min-width: 24px; flex-shrink: 0;
+}
+.toc-list a {
+  color: var(--blue); text-decoration: none;
+  font-size: 13px;
+}
+.toc-list a:hover { text-decoration: underline; }
+
+/* ── Sections ── */
+.section { margin-bottom: 80px; }
+.section-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--ink3);
+  margin-bottom: 8px;
+}
+h2 {
+  font-size: 26px; font-weight: 800;
+  letter-spacing: -0.5px; margin-bottom: 6px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--ink);
+}
+h3 {
+  font-size: 16px; font-weight: 700;
+  margin: 28px 0 12px; color: var(--ink);
+}
+h4 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--ink3);
+  margin: 20px 0 8px;
+}
+p { margin-bottom: 14px; color: var(--ink2); font-size: 14px; }
+p:last-child { margin-bottom: 0; }
+
+/* ── Callout boxes ── */
+.callout {
+  border-left: 3px solid;
+  padding: 14px 18px;
+  border-radius: 0 6px 6px 0;
+  margin: 20px 0;
+  font-size: 13.5px;
+}
+.callout.blue  { border-color: var(--blue);  background: var(--blue-l);  color: var(--blue); }
+.callout.green { border-color: var(--green); background: var(--green-l); color: var(--green); }
+.callout.amber { border-color: var(--amber); background: var(--amber-l); color: var(--amber); }
+.callout.red   { border-color: var(--red);   background: var(--red-l);   color: var(--red); }
+.callout strong { color: inherit; }
+.callout p { color: inherit; margin-bottom: 6px; font-size: 13.5px; }
+
+/* ── Tables ── */
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+th {
+  text-align: left; padding: 9px 12px;
+  background: var(--ink); color: white;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+}
+td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:nth-child(even) td { background: var(--surface2); }
+td:first-child { font-weight: 600; color: var(--ink); }
+
+/* ── User stories ── */
+.story {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.story-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+.story-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 1px;
+  background: var(--ink); color: white;
+  padding: 2px 7px; border-radius: 3px;
+  flex-shrink: 0;
+}
+.story-title { font-size: 13px; font-weight: 700; color: var(--ink); flex: 1; }
+.story-body { padding: 14px 16px; }
+.story-as {
+  font-size: 13px; color: var(--ink2);
+  margin-bottom: 8px;
+  font-style: italic;
+}
+.story-as strong { color: var(--ink); font-style: normal; }
+.story-criteria { margin-top: 10px; }
+.criteria-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--ink3);
+  margin-bottom: 6px;
+}
+.criteria-item {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 4px 0; font-size: 13px; color: var(--ink2);
+}
+.criteria-check { color: var(--green); flex-shrink: 0; margin-top: 2px; }
+.story-tags {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; padding: 2px 8px; border-radius: 3px;
+  letter-spacing: .5px;
+}
+
+/* ── Wireframe boxes ── */
+.wireframe {
+  background: var(--surface);
+  border: 1.5px dashed var(--border2);
+  border-radius: 8px; padding: 20px;
+  margin: 16px 0; font-size: 13px;
+}
+.wireframe-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--ink3);
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.wireframe-title::after {
+  content: ''; flex: 1; height: 1px;
+  background: var(--border);
+}
+.wf-row {
+  display: flex; gap: 10px; margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.wf-box {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px; padding: 8px 12px;
+  font-size: 12px; color: var(--ink2);
+  flex: 1; min-width: 120px;
+}
+.wf-box.primary {
+  background: var(--blue-l);
+  border-color: var(--blue-b);
+  color: var(--blue); font-weight: 600;
+}
+.wf-box.danger {
+  background: var(--red-l);
+  border-color: var(--red-b);
+  color: var(--red);
+}
+.wf-box.success {
+  background: var(--green-l);
+  border-color: var(--green-b);
+  color: var(--green); font-weight: 600;
+}
+.wf-box.full { flex: none; width: 100%; }
+.wf-label { font-size: 10px; color: var(--ink3); margin-bottom: 3px; }
+.wf-content { font-weight: 600; }
+.wf-divider {
+  border: none; border-top: 1px dashed var(--border);
+  margin: 10px 0;
+}
+
+/* ── Flow diagram ── */
+.flow {
+  display: flex; align-items: flex-start;
+  gap: 0; flex-wrap: nowrap;
+  overflow-x: auto; padding: 20px 0;
+  margin: 16px 0;
+}
+.flow-step {
+  display: flex; flex-direction: column; align-items: center;
+  flex-shrink: 0;
+}
+.flow-node {
+  background: var(--surface);
+  border: 1.5px solid var(--border2);
+  border-radius: 6px; padding: 10px 14px;
+  text-align: center; font-size: 12px;
+  font-weight: 600; color: var(--ink);
+  min-width: 100px; max-width: 130px;
+  position: relative;
+}
+.flow-node.active { border-color: var(--blue); background: var(--blue-l); color: var(--blue); }
+.flow-node.success { border-color: var(--green); background: var(--green-l); color: var(--green); }
+.flow-node.warn { border-color: var(--amber); background: var(--amber-l); color: var(--amber); }
+.flow-sub { font-size: 10px; color: var(--ink3); margin-top: 6px; text-align: center; max-width: 120px; }
+.flow-arrow {
+  display: flex; align-items: center;
+  padding: 0 6px; margin-top: 20px;
+  color: var(--ink3); font-size: 14px; flex-shrink: 0;
+}
+
+/* ── State machine ── */
+.states {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin: 12px 0;
+}
+.state-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 20px;
+  font-size: 12px; font-weight: 600;
+  border: 1.5px solid;
+}
+.state-arrow { color: var(--ink3); font-size: 12px; margin: 0 4px; }
+
+/* ── Rules ── */
+.rule-list { list-style: none; margin: 8px 0; }
+.rule-item {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 7px 0; border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+.rule-item:last-child { border-bottom: none; }
+.rule-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--ink3);
+  flex-shrink: 0; min-width: 24px; margin-top: 3px;
+}
+.rule-text { color: var(--ink2); }
+.rule-text strong { color: var(--ink); }
+
+/* ── API spec ── */
+.endpoint {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px; margin-bottom: 12px;
+  overflow: hidden;
+}
+.ep-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+.ep-method {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 3px;
+  flex-shrink: 0;
+}
+.ep-method.get    { background: var(--blue-l);   color: var(--blue); }
+.ep-method.post   { background: var(--green-l);  color: var(--green); }
+.ep-method.patch  { background: var(--amber-l);  color: var(--amber); }
+.ep-method.delete { background: var(--red-l);    color: var(--red); }
+.ep-method.ws     { background: var(--purple-l); color: var(--purple); }
+.ep-path {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: var(--ink); flex: 1;
+}
+.ep-desc { font-size: 12px; color: var(--ink3); }
+.ep-body { padding: 12px 14px; font-size: 12.5px; color: var(--ink2); }
+.ep-body code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; background: var(--surface2);
+  padding: 1px 5px; border-radius: 3px;
+  color: var(--ink);
+}
+
+/* ── Model fields ── */
+.model-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px; margin-bottom: 16px;
+  overflow: hidden;
+}
+.model-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 700;
+  padding: 10px 14px;
+  background: var(--ink); color: white;
+  letter-spacing: .5px;
+}
+.model-fields { padding: 0; }
+.field-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.field-row:last-child { border-bottom: none; }
+.field-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px; color: var(--blue);
+  min-width: 160px; flex-shrink: 0;
+}
+.field-type {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px; color: var(--purple);
+  min-width: 120px; flex-shrink: 0;
+}
+.field-desc { color: var(--ink2); font-size: 12px; flex: 1; }
+.field-req {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; padding: 1px 6px; border-radius: 2px;
+  flex-shrink: 0;
+}
+.field-req.req  { background: var(--red-l);   color: var(--red); }
+.field-req.opt  { background: var(--surface2); color: var(--ink3); }
+.field-req.auto { background: var(--purple-l); color: var(--purple); }
+
+/* ── Misc ── */
+hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+
+footer {
+  border-top: 2px solid var(--ink);
+  padding: 24px 0 0; margin-top: 80px;
+  display: flex; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--ink3);
+}
+
+/* Print styles */
+@media print {
+  body { background: white; font-size: 12px; }
+  .page-wrap { padding: 0; max-width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+<!-- ══════════ COVER ══════════ -->
+<div class="cover">
+  <div class="cover-label">Product Requirements Document · MVP · v1.0</div>
+  <h1>LiveShop Bolivia<br>PRD</h1>
+  <p class="cover-sub">Plataforma profesional para automatizar, controlar stock en tiempo real y evitar sobreventas en lives de TikTok, Facebook e Instagram.</p>
+  <div class="cover-meta">
+    <span><strong>Versión:</strong> 1.0 — MVP</span>
+    <span><strong>Estado:</strong> En revisión</span>
+    <span><strong>Stack:</strong> Django 5 · Angular · WebSockets</span>
+    <span><strong>Alcance:</strong> Fases 0 y 1 del Roadmap (Sem. 1–8)</span>
+  </div>
+</div>
+
+<!-- ══════════ TOC ══════════ -->
+<div class="toc">
+  <div class="toc-title">Índice</div>
+  <ul class="toc-list">
+    <li><span class="toc-num">01</span><a href="#s1">Contexto y problema</a></li>
+    <li><span class="toc-num">02</span><a href="#s2">Usuarios y roles</a></li>
+    <li><span class="toc-num">03</span><a href="#s3">User stories del MVP</a></li>
+    <li><span class="toc-num">04</span><a href="#s4">Flujos de pantalla</a></li>
+    <li><span class="toc-num">05</span><a href="#s5">Reglas de negocio críticas</a></li>
+    <li><span class="toc-num">06</span><a href="#s6">Modelos de datos</a></li>
+    <li><span class="toc-num">07</span><a href="#s7">Máquinas de estado</a></li>
+    <li><span class="toc-num">08</span><a href="#s8">Especificación de API</a></li>
+    <li><span class="toc-num">09</span><a href="#s9">Requisitos no funcionales</a></li>
+    <li><span class="toc-num">10</span><a href="#s10">Criterios de aceptación del MVP</a></li>
+  </ul>
+</div>
+
+<!-- ══════════════════════════════════════
+     01 · CONTEXTO Y PROBLEMA
+═══════════════════════════════════════ -->
+<section class="section" id="s1">
+  <div class="section-num">01</div>
+  <h2>Contexto y problema</h2>
+
+  <h3>El problema que resolvemos</h3>
+  <p>Los vendedores bolivianos en TikTok, Facebook e Instagram hacen lives de ventas en los que pueden recibir decenas o cientos de comentarios por producto en minutos. Hoy gestionan eso manualmente: anotan en papel, responden por WhatsApp uno a uno, y al terminar el live descubren que vendieron el mismo producto varias veces o que perdieron pedidos que no anotaron.</p>
+
+  <div class="callout red">
+    <strong>El dato clave:</strong> Los vendedores pierden entre el 60% y el 70% de sus ventas potenciales por caos post-live. No por falta de demanda — por falta de herramientas.
+  </div>
+
+  <h3>La solución en una frase</h3>
+  <p>LiveShop automatiza las reservas durante el live, controla el stock en tiempo real para que nunca se venda lo que no hay, y entrega al vendedor un panel ordenado con todos los pedidos al terminar.</p>
+
+  <h3>Lo que NO hace el MVP</h3>
+  <ul class="rule-list">
+    <li class="rule-item"><span class="rule-num">✗</span><span class="rule-text">No procesa pagos — el vendedor usa su propio QR/datos bancarios</span></li>
+    <li class="rule-item"><span class="rule-num">✗</span><span class="rule-text">No transmite video — embebe el live desde TikTok/Facebook/Instagram</span></li>
+    <li class="rule-item"><span class="rule-num">✗</span><span class="rule-text">No envía WhatsApp automático — eso es Fase 2</span></li>
+    <li class="rule-item"><span class="rule-num">✗</span><span class="rule-text">No tiene analytics avanzados — eso es Fase 2</span></li>
+    <li class="rule-item"><span class="rule-num">✗</span><span class="rule-text">No tiene IA para parsear comentarios — eso es Fase 3</span></li>
+  </ul>
+</section>
+
+<!-- ══════════════════════════════════════
+     02 · USUARIOS Y ROLES
+═══════════════════════════════════════ -->
+<section class="section" id="s2">
+  <div class="section-num">02</div>
+  <h2>Usuarios y roles</h2>
+
+  <table>
+    <thead><tr><th>Rol</th><th>Quién es</th><th>Qué puede hacer</th><th>Accede por</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Vendedor (Owner)</td>
+        <td>Dueño de la cuenta y del negocio. Paga la suscripción.</td>
+        <td>Todo: crear cuenta, gestionar catálogo, crear y controlar lives, ver y confirmar pedidos.</td>
+        <td>Login con email + contraseña. JWT.</td>
+      </tr>
+      <tr>
+        <td>Comprador (Buyer)</td>
+        <td>Cliente del vendedor que ve el live.</td>
+        <td>Ver catálogo del live, reservar productos, ingresar sus datos, subir comprobante de pago.</td>
+        <td>URL pública del live. Sin login requerido.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout blue">
+    <strong>Multi-tenant:</strong> Cada vendedor es un tenant aislado. Un vendedor nunca puede ver ni modificar datos de otro vendedor. El <code>TenantMiddleware</code> aplica este aislamiento en cada request desde el JWT.
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     03 · USER STORIES DEL MVP
+═══════════════════════════════════════ -->
+<section class="section" id="s3">
+  <div class="section-num">03</div>
+  <h2>User stories del MVP</h2>
+
+  <!-- ── Auth ── -->
+  <h3>Autenticación</h3>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-01</span>
+      <span class="story-title">Registro de vendedor</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor nuevo</strong>, quiero crear una cuenta con mi nombre de negocio, email y contraseña, para empezar a usar la plataforma.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Formulario con: nombre del negocio, email, contraseña, confirmar contraseña.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Email con formato válido. Contraseña mínimo 8 caracteres.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Email único — si ya existe, mostrar error claro.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Al registrarse exitosamente, crear el Tenant y el User owner automáticamente.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Redirigir al dashboard después del registro.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-02</span>
+      <span class="story-title">Login y sesión</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor registrado</strong>, quiero iniciar sesión con mi email y contraseña para acceder a mi cuenta.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Login con email + contraseña. Retorna access token (15 min) + refresh token (7 días).</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Angular interceptor renueva el access token automáticamente con el refresh token.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Si el refresh token expira, redirigir al login.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Credenciales incorrectas: mensaje "Email o contraseña incorrectos" (no revelar cuál es el error).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Catálogo ── -->
+  <h3>Gestión de catálogo</h3>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-03</span>
+      <span class="story-title">Crear producto con stock</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor</strong>, quiero agregar un producto con nombre, precio, stock y foto, para tenerlo disponible en mis lives.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Campos: nombre (requerido), precio en Bs. (requerido), stock total (requerido, entero ≥ 0), descripción (opcional), imagen (opcional).</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Imagen sube directo a Cloudflare R2 via presigned URL. Máx. 5 MB. Formatos: JPG, PNG, WEBP.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Variantes como campo JSON libre: ej. <code>{"talla S": 10, "talla M": 5, "talla L": 3}</code>. Si se definen variantes, el stock total se calcula automáticamente como suma de variantes.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>El producto queda asociado al tenant del vendedor logueado.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>El producto recién creado aparece en la lista del catálogo.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-04</span>
+      <span class="story-title">Editar y desactivar producto</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor</strong>, quiero editar el precio o stock de un producto y poder ocultarlo sin eliminarlo.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Todos los campos editables excepto el ID.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Si el producto tiene reservas activas, no se puede reducir el stock por debajo de las reservas actuales.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Toggle "activo/inactivo" — los productos inactivos no aparecen en el catálogo de nuevos lives.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>No se puede eliminar un producto con pedidos asociados — solo desactivar.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Lives ── -->
+  <h3>Gestión de lives</h3>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-05</span>
+      <span class="story-title">Crear sesión de live</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor</strong>, quiero crear una sesión de live con título y URL del stream para preparar mi próxima transmisión.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Campos: título del live (requerido), URL del stream de TikTok/FB/IG (opcional, se puede agregar después), fecha programada (opcional).</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Al crear el live, el estado inicial es <code>draft</code>.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Se genera automáticamente un slug único para la URL pública: <code>liveshop.bo/live/[slug]</code>.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>El slug es legible: basado en el título + ID corto. Ej: <code>ropa-verano-2025-a3f</code>.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-06</span>
+      <span class="story-title">Agregar productos al live</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor</strong>, quiero seleccionar qué productos van en mi live y asignarles un precio de oferta específico para esa sesión.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Buscar y seleccionar productos del catálogo del vendedor.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Cada SessionProduct tiene: precio de oferta (puede ser diferente al precio base), stock disponible para ese live (≤ stock del producto).</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>No se puede agregar el mismo producto dos veces al mismo live.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Mínimo 1 producto para poder iniciar el live.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Se puede agregar/quitar productos mientras el live está en <code>draft</code>. No se puede modificar una vez en <code>live</code>.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-07</span>
+      <span class="story-title">Iniciar y finalizar el live</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor</strong>, quiero iniciar mi live con un botón y finalizarlo cuando termino la transmisión.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Botón "Iniciar live" — transiciona de <code>draft</code> a <code>live</code>. Requiere al menos 1 producto.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Al iniciar: registrar <code>started_at</code>, abrir el canal WebSocket de esa sesión.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Botón "Finalizar live" — transiciona de <code>live</code> a <code>ended</code>. Confirmar con diálogo "¿Estás seguro?".</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Al finalizar: registrar <code>ended_at</code>, cerrar WebSocket, redirigir al panel post-live.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>No se puede reiniciar un live que ya terminó.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Reservas ── -->
+  <h3>Reservas en tiempo real (núcleo del negocio)</h3>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-08</span>
+      <span class="story-title">Comprador ve el catálogo del live en tiempo real</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>comprador</strong>, quiero ver los productos del live con el stock disponible actualizado en tiempo real para saber qué puedo comprar.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Acceder a la URL pública <code>/live/[slug]</code> sin login.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Ver: embed del video del live (iframe de TikTok/FB), lista de productos con imagen, nombre, precio y stock disponible.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>El stock se actualiza automáticamente en pantalla cuando otros compradores reservan (sin recargar la página).</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Producto con stock 0: mostrar "Agotado" y deshabilitar el botón de reserva.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Si el live no está activo (<code>draft</code> o <code>ended</code>): mostrar mensaje apropiado.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-09</span>
+      <span class="story-title">Comprador reserva un producto</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>comprador</strong>, quiero reservar un producto durante el live ingresando mis datos, para asegurarme de que no se agote antes de que pueda pagarlo.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Botón "Reservar" en cada producto con stock disponible.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Modal/formulario: nombre, teléfono (WhatsApp), cantidad, variante (si aplica), ciudad/dirección.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Al confirmar: enviar mensaje WebSocket al servidor con <code>{product_id, qty, variant, customer_data}</code>.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Si hay stock suficiente: crear Reservation, descontar stock, broadcast nuevo stock a todos los conectados, mostrar confirmación al comprador.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Si no hay stock suficiente: rechazar con mensaje "Lo sentimos, stock insuficiente" — sin crear nada.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>La reserva tiene expiración de 24 hs por defecto (configurable por el vendedor en Fase 2).</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Un comprador (mismo teléfono) puede reservar el mismo producto múltiples veces, pero la cantidad total no puede superar el stock disponible.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-10</span>
+      <span class="story-title">Vendedor ve reservas en tiempo real durante el live</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor</strong>, quiero ver en mi panel las reservas que van entrando en tiempo real para saber cómo va el live.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Panel del vendedor durante el live muestra: stock actual por producto, lista de reservas entrando con nombre del comprador y producto.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Cada nueva reserva aparece en la lista sin recargar la página (WebSocket push).</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Contador de reservas activas visible en la parte superior.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Post-live ── -->
+  <h3>Panel post-live</h3>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-11</span>
+      <span class="story-title">Ver pedidos organizados post-live</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor</strong>, quiero ver todos los pedidos del live organizados en una tabla filtrable para gestionar las entregas.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Tabla con columnas: # pedido, nombre del comprador, teléfono, producto + variante, cantidad, precio unitario, total, estado, fecha.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Filtrar por estado del pedido (pendiente / confirmado / cancelado).</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Buscar por nombre o teléfono del comprador.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Resumen al tope: total de pedidos, total de ingresos, productos más pedidos.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>El panel es accesible después de finalizar el live y en cualquier momento futuro desde el historial.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-12</span>
+      <span class="story-title">Convertir reservas en pedidos</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor</strong>, quiero convertir las reservas activas en pedidos formales para hacer el seguimiento del pago y la entrega.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Botón "Crear pedido" por reserva, o "Crear todos los pedidos" en bulk.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Al crear el pedido: crear Order + OrderItems, transicionar la Reservation a <code>converted</code>, el pedido empieza en <code>pending_payment</code>.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>El vendedor puede rechazar una reserva (devuelve stock, marca la reserva como <code>cancelled</code>).</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-13</span>
+      <span class="story-title">Enviar datos de pago al comprador (manual)</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor</strong>, quiero enviar al comprador el resumen de su pedido y mis datos de pago por WhatsApp con un click.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Botón "Enviar por WhatsApp" en cada pedido — abre <code>wa.me/[telefono]?text=[mensaje preformateado]</code> en nueva pestaña.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Mensaje pre-armado incluye: resumen del pedido, total a pagar, datos bancarios del vendedor (configurados en el perfil).</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Si el vendedor no tiene datos bancarios configurados, mostrar aviso antes de enviar.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="story">
+    <div class="story-header">
+      <span class="story-id">US-14</span>
+      <span class="story-title">Configurar datos de pago del vendedor</span>
+      <span class="tag" style="background:var(--red-l);color:var(--red);border:1px solid var(--red-b)">MUST</span>
+    </div>
+    <div class="story-body">
+      <p class="story-as">Como <strong>vendedor</strong>, quiero configurar mis datos de pago (QR y/o datos bancarios) para que se envíen automáticamente a mis compradores.</p>
+      <div class="story-criteria">
+        <div class="criteria-label">Criterios de aceptación</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Sección "Métodos de pago" en configuración del perfil.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Subir imagen de QR (Tigo Money, Banco Unión u otro) — se sube a R2.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Texto libre para datos adicionales: número de cuenta, banco, nombre titular.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Opción de tener múltiples métodos de pago activos.</div>
+        <div class="criteria-item"><span class="criteria-check">✓</span>Previsualización de cómo se verá el mensaje enviado al comprador.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     04 · FLUJOS DE PANTALLA
+═══════════════════════════════════════ -->
+<section class="section" id="s4">
+  <div class="section-num">04</div>
+  <h2>Flujos de pantalla</h2>
+
+  <!-- Flujo A -->
+  <h3>Flujo A — Vendedor prepara y ejecuta un live</h3>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-node">Login</div>
+      <div class="flow-sub">email + contraseña</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node active">Dashboard</div>
+      <div class="flow-sub">lista de lives</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node">Nuevo live</div>
+      <div class="flow-sub">título + URL stream</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node">Agregar productos</div>
+      <div class="flow-sub">del catálogo</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node active">Iniciar live</div>
+      <div class="flow-sub">estado → live</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node success">Finalizar</div>
+      <div class="flow-sub">→ panel post-live</div>
+    </div>
+  </div>
+
+  <!-- Flujo B -->
+  <h3>Flujo B — Comprador reserva durante el live</h3>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-node">Entra a /live/[slug]</div>
+      <div class="flow-sub">sin login</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node">Ve catálogo + video</div>
+      <div class="flow-sub">stock en tiempo real</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node active">Click "Reservar"</div>
+      <div class="flow-sub">selecciona producto</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node">Ingresa sus datos</div>
+      <div class="flow-sub">nombre, tel, cantidad</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node success">Reserva confirmada</div>
+      <div class="flow-sub">stock actualizado</div>
+    </div>
+  </div>
+
+  <!-- Flujo C -->
+  <h3>Flujo C — Vendedor gestiona pedidos post-live</h3>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-node">Panel post-live</div>
+      <div class="flow-sub">lista de reservas</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node active">Crea pedidos</div>
+      <div class="flow-sub">de reservas activas</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node">Envía WA</div>
+      <div class="flow-sub">link wa.me con total + QR</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node warn">Espera comprobante</div>
+      <div class="flow-sub">fase 2: upload</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-node success">Confirma pago</div>
+      <div class="flow-sub">stock descontado</div>
+    </div>
+  </div>
+
+  <!-- Wireframes clave -->
+  <h3>Wireframe — Panel durante el live (vendedor)</h3>
+  <div class="wireframe">
+    <div class="wireframe-title">Panel Live — Vista del vendedor</div>
+    <div class="wf-row">
+      <div class="wf-box full"><div class="wf-label">HEADER</div><div class="wf-content">🔴 EN VIVO: "Ropa de Verano" · 00:23:45 · [Finalizar live]</div></div>
+    </div>
+    <div class="wf-row">
+      <div class="wf-box" style="flex:2">
+        <div class="wf-label">EMBED VIDEO</div>
+        <div class="wf-content" style="text-align:center;padding:30px 0;color:var(--ink3)">[iframe TikTok/Facebook Live]</div>
+      </div>
+      <div class="wf-box" style="flex:1">
+        <div class="wf-label">STOCK EN TIEMPO REAL</div>
+        <div style="margin-top:6px;font-size:12px">
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">Camisa Azul M <strong style="color:var(--green)">8 disponibles</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">Vestido Negro S <strong style="color:var(--amber)">2 disponibles</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0">Falda Roja <strong style="color:var(--red)">AGOTADA</strong></div>
+        </div>
+      </div>
+    </div>
+    <hr class="wf-divider">
+    <div class="wf-row">
+      <div class="wf-box full">
+        <div class="wf-label">RESERVAS RECIENTES (12 en total)</div>
+        <div style="font-size:12px;margin-top:6px">
+          <div style="padding:4px 0;border-bottom:1px solid var(--border)">• <strong>Ana García</strong> reservó 2x Camisa Azul M — hace 30s</div>
+          <div style="padding:4px 0;border-bottom:1px solid var(--border)">• <strong>María López</strong> reservó 1x Vestido Negro S — hace 1m</div>
+          <div style="padding:4px 0">• <strong>Carlos Pérez</strong> reservó 3x Camisa Azul L — hace 2m</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Wireframe — Vista del comprador (/live/[slug])</h3>
+  <div class="wireframe">
+    <div class="wireframe-title">Vista pública del comprador</div>
+    <div class="wf-row">
+      <div class="wf-box full"><div class="wf-label">HEADER</div><div class="wf-content">LiveShop · Ropa de Verano 2025 · 🔴 EN VIVO</div></div>
+    </div>
+    <div class="wf-row">
+      <div class="wf-box" style="flex:1.5">
+        <div class="wf-label">VIDEO EMBED</div>
+        <div style="text-align:center;padding:24px;color:var(--ink3);font-size:12px">[Live TikTok/Facebook embebido]</div>
+      </div>
+      <div class="wf-box" style="flex:1">
+        <div class="wf-label">CATÁLOGO</div>
+        <div style="font-size:12px;margin-top:6px">
+          <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+            <strong>Camisa Azul</strong><br>Bs. 120 · Stock: 8<br>
+            <span style="background:var(--blue-l);color:var(--blue);padding:2px 8px;border-radius:3px;font-size:11px">Reservar</span>
+          </div>
+          <div style="padding:8px 0">
+            <strong>Falda Roja</strong><br>Bs. 85 · <span style="color:var(--red)">Agotada</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Wireframe — Panel post-live</h3>
+  <div class="wireframe">
+    <div class="wireframe-title">Panel post-live — Gestión de pedidos</div>
+    <div class="wf-row">
+      <div class="wf-box"><div class="wf-label">TOTAL RESERVAS</div><div class="wf-content" style="font-size:20px">18</div></div>
+      <div class="wf-box success"><div class="wf-label">INGRESOS ESTIMADOS</div><div class="wf-content" style="font-size:20px">Bs. 2,340</div></div>
+      <div class="wf-box primary"><div class="wf-label">PEDIDOS CREADOS</div><div class="wf-content" style="font-size:20px">12</div></div>
+      <div class="wf-box"><div class="wf-label">PENDIENTES</div><div class="wf-content" style="font-size:20px">6</div></div>
+    </div>
+    <hr class="wf-divider">
+    <div style="font-size:12px">
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <span style="background:var(--surface2);padding:3px 10px;border-radius:3px;border:1px solid var(--border)">Todos (18)</span>
+        <span style="background:var(--amber-l);padding:3px 10px;border-radius:3px;border:1px solid var(--amber-b);color:var(--amber)">Pendiente pago (6)</span>
+        <span style="background:var(--green-l);padding:3px 10px;border-radius:3px;border:1px solid var(--green-b);color:var(--green)">Confirmado (12)</span>
+      </div>
+      <table style="font-size:12px">
+        <tr style="background:var(--surface2)"><td>#</td><td>Comprador</td><td>Producto</td><td>Total</td><td>Estado</td><td>Acción</td></tr>
+        <tr><td>001</td><td>Ana García · 7912-3456</td><td>Camisa Azul M x2</td><td>Bs. 240</td><td>⏳ Pendiente</td><td>[📱 WA] [✓ Confirmar]</td></tr>
+        <tr><td>002</td><td>María López · 7823-1234</td><td>Vestido Negro S x1</td><td>Bs. 180</td><td>✅ Confirmado</td><td>[Ver]</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     05 · REGLAS DE NEGOCIO
+═══════════════════════════════════════ -->
+<section class="section" id="s5">
+  <div class="section-num">05</div>
+  <h2>Reglas de negocio críticas</h2>
+
+  <h3>Control de stock (sin sobreventas)</h3>
+  <div class="callout red">
+    <strong>Regla cardinal:</strong> El stock visible y el stock real nunca pueden divergir. Cada reserva descuenta el stock en la misma transacción de base de datos que la crea. Sin dos pasos separados.
+  </div>
+  <ul class="rule-list">
+    <li class="rule-item"><span class="rule-num">RN-01</span><span class="rule-text">Toda operación de reserva usa <strong>SELECT FOR UPDATE</strong> en PostgreSQL para evitar race conditions con múltiples compradores simultáneos.</span></li>
+    <li class="rule-item"><span class="rule-num">RN-02</span><span class="rule-text">Stock disponible = stock del SessionProduct − reservas activas del mismo SessionProduct. El campo <code>stock_reserved</code> en SessionProduct se actualiza atómicamente.</span></li>
+    <li class="rule-item"><span class="rule-num">RN-03</span><span class="rule-text">Si <code>qty_requested > stock_disponible</code>, la reserva se rechaza con error y no se crea ningún registro. No hay reservas parciales.</span></li>
+    <li class="rule-item"><span class="rule-num">RN-04</span><span class="rule-text">Al rechazar una reserva (vendedor), el stock reservado se devuelve inmediatamente y se hace broadcast a todos los conectados al canal.</span></li>
+    <li class="rule-item"><span class="rule-num">RN-05</span><span class="rule-text">Las reservas expiradas (pasado el tiempo límite sin convertirse a pedido) devuelven el stock automáticamente via Celery Beat task. Se ejecuta cada 15 minutos.</span></li>
+    <li class="rule-item"><span class="rule-num">RN-06</span><span class="rule-text">Al confirmar el pago de un pedido, el stock no se modifica nuevamente — ya fue descontado en el momento de la reserva. El stock real se descuenta en la reserva, no en el pago.</span></li>
+  </ul>
+
+  <h3>Aislamiento multi-tenant</h3>
+  <ul class="rule-list">
+    <li class="rule-item"><span class="rule-num">RN-07</span><span class="rule-text">Cada request autenticado lleva el <code>tenant_id</code> en el JWT. El <strong>TenantMiddleware</strong> lo extrae y lo inyecta en el contexto del request.</span></li>
+    <li class="rule-item"><span class="rule-num">RN-08</span><span class="rule-text">Todos los ViewSets de DRF heredan de <strong>TenantMixin</strong> que filtra el queryset por <code>tenant=request.tenant</code> automáticamente.</span></li>
+    <li class="rule-item"><span class="rule-num">RN-09</span><span class="rule-text">El consumer WebSocket valida que el <code>session_id</code> pertenece al tenant del token antes de conectar.</span></li>
+    <li class="rule-item"><span class="rule-num">RN-10</span><span class="rule-text">La URL pública del comprador <code>/live/[slug]</code> no requiere autenticación, pero solo expone los datos del live específico (no datos del tenant).</span></li>
+  </ul>
+
+  <h3>Ciclo de vida del live</h3>
+  <ul class="rule-list">
+    <li class="rule-item"><span class="rule-num">RN-11</span><span class="rule-text">Un vendedor no puede tener dos lives en estado <code>live</code> simultáneamente.</span></li>
+    <li class="rule-item"><span class="rule-num">RN-12</span><span class="rule-text">No se pueden agregar ni quitar productos de un live en estado <code>live</code> o <code>ended</code>.</span></li>
+    <li class="rule-item"><span class="rule-num">RN-13</span><span class="rule-text">Un live en estado <code>ended</code> es inmutable — no puede volver a <code>live</code>. Para repetir, se crea un nuevo live.</span></li>
+  </ul>
+
+  <h3>Pedidos y pagos</h3>
+  <ul class="rule-list">
+    <li class="rule-item"><span class="rule-num">RN-14</span><span class="rule-text">El total del pedido = suma de (precio_unitario × cantidad) de cada OrderItem. El precio unitario se congela en el momento de crear el pedido (no cambia si el vendedor edita el precio del producto después).</span></li>
+    <li class="rule-item"><span class="rule-num">RN-15</span><span class="rule-text">Un pedido cancelado devuelve el stock al producto (no al SessionProduct, que ya cerró).</span></li>
+    <li class="rule-item"><span class="rule-num">RN-16</span><span class="rule-text">No se pueden eliminar pedidos — solo cancelar. El historial es permanente.</span></li>
+  </ul>
+</section>
+
+<!-- ══════════════════════════════════════
+     06 · MODELOS DE DATOS
+═══════════════════════════════════════ -->
+<section class="section" id="s6">
+  <div class="section-num">06</div>
+  <h2>Modelos de datos</h2>
+
+  <div class="callout blue">
+    Todos los modelos incluyen <strong>created_at</strong> y <strong>updated_at</strong> automáticos. Las PK son UUID v4 excepto donde se indica.
+  </div>
+
+  <div class="model-block">
+    <div class="model-name">tenants.Tenant</div>
+    <div class="model-fields">
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUIDField</span><span class="field-desc">PK generado automáticamente</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">name</span><span class="field-type">CharField(100)</span><span class="field-desc">Nombre del negocio del vendedor</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">slug</span><span class="field-type">SlugField</span><span class="field-desc">Identificador URL-friendly, único, generado del name</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">is_active</span><span class="field-type">BooleanField</span><span class="field-desc">True mientras la suscripción esté vigente</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">payment_methods</span><span class="field-type">JSONField</span><span class="field-desc">Lista de métodos de pago: [{type, label, qr_url, details}]</span><span class="field-req opt">OPT</span></div>
+    </div>
+  </div>
+
+  <div class="model-block">
+    <div class="model-name">tenants.User</div>
+    <div class="model-fields">
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUIDField</span><span class="field-desc">PK</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">tenant</span><span class="field-type">ForeignKey(Tenant)</span><span class="field-desc">Tenant al que pertenece</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">email</span><span class="field-type">EmailField</span><span class="field-desc">Único globalmente</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">role</span><span class="field-type">CharField</span><span class="field-desc">owner | collaborator | viewer</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">is_active</span><span class="field-type">BooleanField</span><span class="field-desc">Default True</span><span class="field-req auto">AUTO</span></div>
+    </div>
+  </div>
+
+  <div class="model-block">
+    <div class="model-name">catalog.Product</div>
+    <div class="model-fields">
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUIDField</span><span class="field-desc">PK</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">tenant</span><span class="field-type">ForeignKey(Tenant)</span><span class="field-desc">Propietario del producto</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">name</span><span class="field-type">CharField(200)</span><span class="field-desc">Nombre del producto</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">price</span><span class="field-type">DecimalField(10,2)</span><span class="field-desc">Precio base en Bs.</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">stock</span><span class="field-type">PositiveIntegerField</span><span class="field-desc">Stock total disponible en el catálogo</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">variants</span><span class="field-type">JSONField</span><span class="field-desc">Ej: {"S": 10, "M": 5} — si existe, stock = sum(variants.values())</span><span class="field-req opt">OPT</span></div>
+      <div class="field-row"><span class="field-name">image_url</span><span class="field-type">URLField</span><span class="field-desc">URL en Cloudflare R2</span><span class="field-req opt">OPT</span></div>
+      <div class="field-row"><span class="field-name">description</span><span class="field-type">TextField</span><span class="field-desc">Descripción larga</span><span class="field-req opt">OPT</span></div>
+      <div class="field-row"><span class="field-name">is_active</span><span class="field-type">BooleanField</span><span class="field-desc">Default True</span><span class="field-req auto">AUTO</span></div>
+    </div>
+  </div>
+
+  <div class="model-block">
+    <div class="model-name">sessions.LiveSession</div>
+    <div class="model-fields">
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUIDField</span><span class="field-desc">PK. También es el nombre del canal WebSocket</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">tenant</span><span class="field-type">ForeignKey(Tenant)</span><span class="field-desc">Tenant del vendedor</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">title</span><span class="field-type">CharField(200)</span><span class="field-desc">Título del live</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">slug</span><span class="field-type">SlugField</span><span class="field-desc">URL pública: /live/[slug]. Único.</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">stream_url</span><span class="field-type">URLField</span><span class="field-desc">URL del live en TikTok/FB/IG para el embed</span><span class="field-req opt">OPT</span></div>
+      <div class="field-row"><span class="field-name">status</span><span class="field-type">CharField</span><span class="field-desc">draft | live | ended</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">started_at</span><span class="field-type">DateTimeField</span><span class="field-desc">Timestamp al transicionar a live</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">ended_at</span><span class="field-type">DateTimeField</span><span class="field-desc">Timestamp al transicionar a ended</span><span class="field-req auto">AUTO</span></div>
+    </div>
+  </div>
+
+  <div class="model-block">
+    <div class="model-name">sessions.SessionProduct</div>
+    <div class="model-fields">
+      <div class="field-row"><span class="field-name">session</span><span class="field-type">ForeignKey(LiveSession)</span><span class="field-desc">Live al que pertenece</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">product</span><span class="field-type">ForeignKey(Product)</span><span class="field-desc">Producto del catálogo</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">promo_price</span><span class="field-type">DecimalField(10,2)</span><span class="field-desc">Precio de oferta para este live específico</span><span class="field-req opt">OPT</span></div>
+      <div class="field-row"><span class="field-name">stock_allocated</span><span class="field-type">PositiveIntegerField</span><span class="field-desc">Unidades asignadas a este live</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">stock_reserved</span><span class="field-type">PositiveIntegerField</span><span class="field-desc">Unidades reservadas actualmente. Default 0. Actualizado atómicamente.</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">sort_order</span><span class="field-type">PositiveSmallIntegerField</span><span class="field-desc">Orden de aparición en el catálogo del live</span><span class="field-req opt">OPT</span></div>
+    </div>
+  </div>
+
+  <div class="model-block">
+    <div class="model-name">orders.Reservation</div>
+    <div class="model-fields">
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUIDField</span><span class="field-desc">PK</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">session_product</span><span class="field-type">ForeignKey(SessionProduct)</span><span class="field-desc">Qué producto en qué live</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">customer_name</span><span class="field-type">CharField(100)</span><span class="field-desc">Nombre del comprador</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">customer_phone</span><span class="field-type">CharField(20)</span><span class="field-desc">Número WhatsApp del comprador</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">customer_city</span><span class="field-type">CharField(100)</span><span class="field-desc">Ciudad para la entrega</span><span class="field-req opt">OPT</span></div>
+      <div class="field-row"><span class="field-name">qty</span><span class="field-type">PositiveSmallIntegerField</span><span class="field-desc">Cantidad reservada</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">variant</span><span class="field-type">CharField(50)</span><span class="field-desc">Variante elegida. Ej: "talla M", "color azul"</span><span class="field-req opt">OPT</span></div>
+      <div class="field-row"><span class="field-name">status</span><span class="field-type">CharField</span><span class="field-desc">active | converted | expired | cancelled</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">expires_at</span><span class="field-type">DateTimeField</span><span class="field-desc">created_at + 24 hs por defecto</span><span class="field-req auto">AUTO</span></div>
+    </div>
+  </div>
+
+  <div class="model-block">
+    <div class="model-name">orders.Order</div>
+    <div class="model-fields">
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUIDField</span><span class="field-desc">PK</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">tenant</span><span class="field-type">ForeignKey(Tenant)</span><span class="field-desc">Vendedor dueño del pedido</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">session</span><span class="field-type">ForeignKey(LiveSession)</span><span class="field-desc">Live en que se originó</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">customer_name</span><span class="field-type">CharField(100)</span><span class="field-desc">Copiado de la reserva</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">customer_phone</span><span class="field-type">CharField(20)</span><span class="field-desc">Copiado de la reserva</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">address</span><span class="field-type">TextField</span><span class="field-desc">Dirección de entrega</span><span class="field-req opt">OPT</span></div>
+      <div class="field-row"><span class="field-name">total</span><span class="field-type">DecimalField(10,2)</span><span class="field-desc">Calculado: sum(items). Congelado al crear.</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">status</span><span class="field-type">CharField</span><span class="field-desc">pending_payment | payment_confirmed | preparing | shipped | delivered | cancelled</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">notes</span><span class="field-type">TextField</span><span class="field-desc">Notas internas del vendedor</span><span class="field-req opt">OPT</span></div>
+    </div>
+  </div>
+
+  <div class="model-block">
+    <div class="model-name">orders.OrderItem</div>
+    <div class="model-fields">
+      <div class="field-row"><span class="field-name">order</span><span class="field-type">ForeignKey(Order)</span><span class="field-desc">Pedido al que pertenece</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">product</span><span class="field-type">ForeignKey(Product)</span><span class="field-desc">Producto pedido</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">qty</span><span class="field-type">PositiveSmallIntegerField</span><span class="field-desc">Cantidad</span><span class="field-req req">REQ</span></div>
+      <div class="field-row"><span class="field-name">unit_price</span><span class="field-type">DecimalField(10,2)</span><span class="field-desc">Precio en el momento de la venta (congelado)</span><span class="field-req auto">AUTO</span></div>
+      <div class="field-row"><span class="field-name">variant</span><span class="field-type">CharField(50)</span><span class="field-desc">Variante elegida</span><span class="field-req opt">OPT</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     07 · MÁQUINAS DE ESTADO
+═══════════════════════════════════════ -->
+<section class="section" id="s7">
+  <div class="section-num">07</div>
+  <h2>Máquinas de estado</h2>
+
+  <h3>LiveSession</h3>
+  <div class="states">
+    <span class="state-pill" style="border-color:var(--border2);color:var(--ink2)">draft</span>
+    <span class="state-arrow">→</span>
+    <span class="state-pill" style="border-color:var(--red);background:var(--red-l);color:var(--red)">live</span>
+    <span class="state-arrow">→</span>
+    <span class="state-pill" style="border-color:var(--border2);color:var(--ink3)">ended</span>
+  </div>
+  <table>
+    <thead><tr><th>Transición</th><th>Disparador</th><th>Condición</th><th>Efecto</th></tr></thead>
+    <tbody>
+      <tr><td>draft → live</td><td>Vendedor click "Iniciar live"</td><td>Al menos 1 SessionProduct. No hay otro live en estado <code>live</code> para este tenant.</td><td>Registra <code>started_at</code>. Abre canal WebSocket.</td></tr>
+      <tr><td>live → ended</td><td>Vendedor click "Finalizar live"</td><td>Siempre permitido si está en <code>live</code>.</td><td>Registra <code>ended_at</code>. Cierra WebSocket. Redirige al panel post-live.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Reservation</h3>
+  <div class="states">
+    <span class="state-pill" style="border-color:var(--blue);background:var(--blue-l);color:var(--blue)">active</span>
+    <span class="state-arrow">→</span>
+    <span class="state-pill" style="border-color:var(--green);background:var(--green-l);color:var(--green)">converted</span>
+  </div>
+  <div class="states">
+    <span class="state-pill" style="border-color:var(--blue);background:var(--blue-l);color:var(--blue)">active</span>
+    <span class="state-arrow">→</span>
+    <span class="state-pill" style="border-color:var(--ink3);color:var(--ink3)">expired</span>
+    <span class="state-arrow">|</span>
+    <span class="state-pill" style="border-color:var(--red);background:var(--red-l);color:var(--red)">cancelled</span>
+  </div>
+  <table>
+    <thead><tr><th>Transición</th><th>Disparador</th><th>Efecto</th></tr></thead>
+    <tbody>
+      <tr><td>active → converted</td><td>Vendedor crea el pedido desde la reserva</td><td>Crea Order + OrderItems. La reservation queda como historial.</td></tr>
+      <tr><td>active → expired</td><td>Celery Beat (cada 15 min): <code>expires_at &lt; now()</code></td><td>Devuelve <code>qty</code> al <code>stock_reserved</code> del SessionProduct. Broadcast nuevo stock.</td></tr>
+      <tr><td>active → cancelled</td><td>Vendedor rechaza la reserva manualmente</td><td>Devuelve stock. Broadcast nuevo stock.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Order</h3>
+  <div class="states" style="flex-wrap:wrap">
+    <span class="state-pill" style="border-color:var(--amber);background:var(--amber-l);color:var(--amber)">pending_payment</span>
+    <span class="state-arrow">→</span>
+    <span class="state-pill" style="border-color:var(--blue);background:var(--blue-l);color:var(--blue)">payment_confirmed</span>
+    <span class="state-arrow">→</span>
+    <span class="state-pill" style="border-color:var(--purple);background:var(--purple-l);color:var(--purple)">preparing</span>
+    <span class="state-arrow">→</span>
+    <span class="state-pill" style="border-color:var(--ink2);color:var(--ink2)">shipped</span>
+    <span class="state-arrow">→</span>
+    <span class="state-pill" style="border-color:var(--green);background:var(--green-l);color:var(--green)">delivered</span>
+  </div>
+  <div class="callout amber" style="margin-top:12px">
+    <strong>cancelled</strong> es posible desde cualquier estado excepto <strong>delivered</strong>. Al cancelar se libera el stock al producto (no al SessionProduct que ya cerró).
+  </div>
+  <table>
+    <thead><tr><th>Transición</th><th>Disparador (MVP)</th></tr></thead>
+    <tbody>
+      <tr><td>pending_payment → payment_confirmed</td><td>Vendedor click "Confirmar pago" en el panel</td></tr>
+      <tr><td>payment_confirmed → preparing</td><td>Vendedor click "Preparando"</td></tr>
+      <tr><td>preparing → shipped</td><td>Vendedor click "Enviado"</td></tr>
+      <tr><td>shipped → delivered</td><td>Vendedor click "Entregado"</td></tr>
+      <tr><td>cualquiera → cancelled</td><td>Vendedor click "Cancelar"</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════
+     08 · API SPEC
+═══════════════════════════════════════ -->
+<section class="section" id="s8">
+  <div class="section-num">08</div>
+  <h2>Especificación de API</h2>
+
+  <div class="callout blue">
+    Base URL: <code>/api/v1/</code> · Autenticación: Bearer JWT en header <code>Authorization</code> · Formato: JSON · Versión: v1
+  </div>
+
+  <h3>Auth</h3>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/api/v1/auth/register/</span><span class="ep-desc">Crear cuenta de vendedor</span></div>
+    <div class="ep-body">Body: <code>{"business_name", "email", "password", "password_confirm"}</code> → Crea Tenant + User owner → Retorna <code>access_token, refresh_token</code></div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/api/v1/auth/token/</span><span class="ep-desc">Login</span></div>
+    <div class="ep-body">Body: <code>{"email", "password"}</code> → Retorna <code>access_token</code> (15 min) + <code>refresh_token</code> (7 días)</div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/api/v1/auth/token/refresh/</span><span class="ep-desc">Renovar access token</span></div>
+    <div class="ep-body">Body: <code>{"refresh"}</code> → Retorna nuevo <code>access_token</code></div>
+  </div>
+
+  <h3>Catálogo</h3>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/api/v1/catalog/products/</span><span class="ep-desc">Listar productos del tenant</span></div>
+    <div class="ep-body">Params: <code>?is_active=true&search=[q]&page=1</code> · Paginado por 20</div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/api/v1/catalog/products/</span><span class="ep-desc">Crear producto</span></div>
+    <div class="ep-body">Body: <code>{"name", "price", "stock", "variants"?, "description"?, "image_url"?}</code></div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method patch">PATCH</span><span class="ep-path">/api/v1/catalog/products/{id}/</span><span class="ep-desc">Editar producto</span></div>
+    <div class="ep-body">Body parcial. Validar que stock ≥ reservas activas si se reduce.</div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/api/v1/catalog/products/presigned-upload/</span><span class="ep-desc">Obtener URL de subida a R2</span></div>
+    <div class="ep-body">Body: <code>{"filename", "content_type"}</code> → Retorna <code>{"upload_url", "public_url"}</code> para subir directo desde el browser</div>
+  </div>
+
+  <h3>Lives (Sessions)</h3>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/api/v1/sessions/</span><span class="ep-desc">Listar lives del tenant</span></div>
+    <div class="ep-body">Params: <code>?status=live|draft|ended&page=1</code> · Ordenado por <code>created_at desc</code></div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/api/v1/sessions/</span><span class="ep-desc">Crear live</span></div>
+    <div class="ep-body">Body: <code>{"title", "stream_url"?, "scheduled_at"?}</code> · Estado inicial: draft</div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/api/v1/sessions/{id}/start/</span><span class="ep-desc">Iniciar live</span></div>
+    <div class="ep-body">Sin body. Valida: status=draft, ≥1 SessionProduct. Transiciona a live.</div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/api/v1/sessions/{id}/end/</span><span class="ep-desc">Finalizar live</span></div>
+    <div class="ep-body">Sin body. Valida: status=live. Transiciona a ended.</div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/api/v1/sessions/{id}/products/</span><span class="ep-desc">Agregar producto al live</span></div>
+    <div class="ep-body">Body: <code>{"product_id", "stock_allocated", "promo_price"?, "sort_order"?}</code> · Solo si status=draft</div>
+  </div>
+
+  <h3>Live público (comprador — sin auth)</h3>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/api/v1/public/live/{slug}/</span><span class="ep-desc">Info del live para el comprador</span></div>
+    <div class="ep-body">Retorna: título, stream_url, status, lista de SessionProducts con stock disponible. No retorna datos privados del tenant.</div>
+  </div>
+
+  <h3>WebSocket — Reservas en tiempo real</h3>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method ws">WS</span><span class="ep-path">ws://[host]/ws/live/{session_id}/</span><span class="ep-desc">Canal del live</span></div>
+    <div class="ep-body">
+      <strong>Sin auth requerida para conectar</strong> (compradores públicos).<br><br>
+      <strong>Mensajes cliente → servidor:</strong><br>
+      <code>{"type": "reserve", "product_id": "uuid", "qty": 2, "variant": "M", "customer": {"name", "phone", "city"}}</code><br><br>
+      <strong>Mensajes servidor → cliente (broadcast):</strong><br>
+      <code>{"type": "stock.update", "product_id": "uuid", "stock_available": 6}</code><br>
+      <code>{"type": "reservation.confirmed", "reservation_id": "uuid", "message": "¡Reservado!"}</code><br>
+      <code>{"type": "reservation.rejected", "reason": "stock_insuficiente"}</code><br>
+      <code>{"type": "session.ended"}</code>
+    </div>
+  </div>
+
+  <h3>Pedidos</h3>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/api/v1/orders/?session={id}</span><span class="ep-desc">Listar pedidos de un live</span></div>
+    <div class="ep-body">Params: <code>?status=pending_payment|payment_confirmed&search=[q]</code></div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/api/v1/orders/from-reservation/{reservation_id}/</span><span class="ep-desc">Crear pedido desde reserva</span></div>
+    <div class="ep-body">Sin body adicional. Crea Order + OrderItems desde la Reservation. Transiciona la Reservation a converted.</div>
+  </div>
+  <div class="endpoint">
+    <div class="ep-header"><span class="ep-method patch">PATCH</span><span class="ep-path">/api/v1/orders/{id}/transition/</span><span class="ep-desc">Cambiar estado del pedido</span></div>
+    <div class="ep-body">Body: <code>{"status": "payment_confirmed"}</code> · Valida la transición según la máquina de estados.</div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     09 · REQUISITOS NO FUNCIONALES
+═══════════════════════════════════════ -->
+<section class="section" id="s9">
+  <div class="section-num">09</div>
+  <h2>Requisitos no funcionales</h2>
+
+  <div class="grid2">
+    <div>
+      <h3>Rendimiento</h3>
+      <ul class="rule-list">
+        <li class="rule-item"><span class="rule-num">RNF-01</span><span class="rule-text">Latencia P95 del WebSocket de reserva: <strong>&lt; 500ms</strong> end-to-end.</span></li>
+        <li class="rule-item"><span class="rule-num">RNF-02</span><span class="rule-text">Broadcast del stock actualizado a todos los conectados: <strong>&lt; 1 segundo</strong>.</span></li>
+        <li class="rule-item"><span class="rule-num">RNF-03</span><span class="rule-text">API REST: P95 <strong>&lt; 800ms</strong> para endpoints de lista con paginación.</span></li>
+        <li class="rule-item"><span class="rule-num">RNF-04</span><span class="rule-text">Soportar <strong>50 conexiones WebSocket simultáneas</strong> por live sin degradación.</span></li>
+      </ul>
+    </div>
+    <div>
+      <h3>Disponibilidad</h3>
+      <ul class="rule-list">
+        <li class="rule-item"><span class="rule-num">RNF-05</span><span class="rule-text">Uptime objetivo: <strong>99%</strong> mensual.</span></li>
+        <li class="rule-item"><span class="rule-num">RNF-06</span><span class="rule-text">Railway reinicia el proceso automáticamente en caso de crash.</span></li>
+        <li class="rule-item"><span class="rule-num">RNF-07</span><span class="rule-text">Backups automáticos de Supabase diarios con retención de 7 días.</span></li>
+      </ul>
+    </div>
+    <div>
+      <h3>Seguridad</h3>
+      <ul class="rule-list">
+        <li class="rule-item"><span class="rule-num">RNF-08</span><span class="rule-text">JWT con expiración corta (15 min access). Refresh tokens almacenados en httpOnly cookie.</span></li>
+        <li class="rule-item"><span class="rule-num">RNF-09</span><span class="rule-text">Rate limiting: máx 100 requests/min por IP en la API pública del comprador.</span></li>
+        <li class="rule-item"><span class="rule-num">RNF-10</span><span class="rule-text">URLs de R2 firmadas con expiración. No acceso público directo a los buckets.</span></li>
+        <li class="rule-item"><span class="rule-num">RNF-11</span><span class="rule-text">HTTPS obligatorio en todos los endpoints (Cloudflare SSL).</span></li>
+      </ul>
+    </div>
+    <div>
+      <h3>Testing</h3>
+      <ul class="rule-list">
+        <li class="rule-item"><span class="rule-num">RNF-12</span><span class="rule-text">Cobertura de tests ≥ 75% en los módulos <code>tenants</code>, <code>catalog</code>, <code>sessions</code>, <code>orders</code>.</span></li>
+        <li class="rule-item"><span class="rule-num">RNF-13</span><span class="rule-text">Tests de integración del WebSocket consumer con al menos 3 escenarios: reserva exitosa, stock insuficiente, live ya terminado.</span></li>
+        <li class="rule-item"><span class="rule-num">RNF-14</span><span class="rule-text">Tests de la máquina de estados de Order y Reservation cubriendo todas las transiciones válidas e inválidas.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     10 · CRITERIOS DE ACEPTACIÓN
+═══════════════════════════════════════ -->
+<section class="section" id="s10">
+  <div class="section-num">10</div>
+  <h2>Criterios de aceptación del MVP</h2>
+
+  <div class="callout green">
+    <strong>El MVP está listo cuando todos estos escenarios funcionan de punta a punta en producción</strong> (no en local), con datos reales, con al menos un vendedor beta real.
+  </div>
+
+  <table>
+    <thead><tr><th>#</th><th>Escenario</th><th>Resultado esperado</th></tr></thead>
+    <tbody>
+      <tr><td>AC-01</td><td>Vendedor se registra, crea 5 productos con stock, crea un live y agrega los productos.</td><td>Todo sin errores. El live aparece en el dashboard en estado draft.</td></tr>
+      <tr><td>AC-02</td><td>Vendedor inicia el live. 3 compradores diferentes se conectan a la URL pública en simultáneo.</td><td>Los 3 ven el catálogo con el stock actualizado en tiempo real.</td></tr>
+      <tr><td>AC-03</td><td>2 compradores intentan reservar el último stock disponible de un producto al mismo tiempo.</td><td>Exactamente uno tiene éxito. El otro recibe el error de stock insuficiente. Nunca se vende más de lo disponible.</td></tr>
+      <tr><td>AC-04</td><td>10 reservas entran durante un live de 10 minutos.</td><td>El vendedor ve todas las reservas en tiempo real. El stock se actualiza correctamente en cada reserva.</td></tr>
+      <tr><td>AC-05</td><td>Vendedor finaliza el live.</td><td>Se redirige al panel post-live con todas las reservas listadas y los totales calculados.</td></tr>
+      <tr><td>AC-06</td><td>Vendedor convierte las reservas en pedidos, hace click en "Enviar por WhatsApp".</td><td>Se abre WhatsApp con el mensaje pre-armado incluyendo el total y los datos de pago configurados.</td></tr>
+      <tr><td>AC-07</td><td>Vendedor confirma el pago de un pedido.</td><td>El estado cambia a payment_confirmed. La reserva queda como converted.</td></tr>
+      <tr><td>AC-08</td><td>Una reserva llega a su tiempo de expiración sin convertirse a pedido.</td><td>El stock vuelve al disponible automáticamente (verificable en la BD).</td></tr>
+      <tr><td>AC-09</td><td>Un vendedor intenta acceder a los datos de otro vendedor via API.</td><td>Recibe 403 Forbidden o 404 Not Found. Los datos del otro tenant son completamente invisibles.</td></tr>
+      <tr><td>AC-10</td><td>El servidor de Railway se reinicia durante un live activo.</td><td>El live puede ser retomado. Las reservas previas están en la BD. El WebSocket reconecta automáticamente.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  <div>LiveShop Bolivia — PRD v1.0 · MVP</div>
+  <div>Django 5 · Angular · WebSockets · PostgreSQL · Cloudflare R2</div>
+</footer>
+
+</div>
+</body>
+</html>

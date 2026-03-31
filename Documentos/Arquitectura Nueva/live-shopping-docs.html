@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Shopping Platform — Documentación Técnica</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --accent3: #f59e0b;
+    --text: #e8e8f0;
+    --text-muted: #6b6b8a;
+    --border: #2a2a3e;
+    --success: #10b981;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0d0d1a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 60px 40px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -10%;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(0,229,255,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    right: 5%;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(124,58,237,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .header-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .header-tag::before {
+    content: '';
+    display: inline-block;
+    width: 24px; height: 1px;
+    background: var(--accent);
+  }
+
+  h1 {
+    font-family: 'Space Mono', monospace;
+    font-size: clamp(24px, 4vw, 42px);
+    font-weight: 700;
+    line-height: 1.15;
+    background: linear-gradient(135deg, #fff 0%, var(--accent) 60%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+  }
+
+  .header-meta {
+    color: var(--text-muted);
+    font-size: 14px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .header-meta span { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
+
+  /* ── NAV ── */
+  nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+  }
+  nav a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 16px 20px;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  nav a:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ── LAYOUT ── */
+  main { max-width: 1200px; margin: 0 auto; padding: 40px; }
+
+  /* ── SECTION ── */
+  .section {
+    margin-bottom: 72px;
+  }
+  .section-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-number {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    background: rgba(0,229,255,0.08);
+    border: 1px solid rgba(0,229,255,0.2);
+    padding: 4px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+    margin-top: 4px;
+  }
+  .section-title { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; }
+  .section-subtitle { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+
+  /* ── DIAGRAM CARD ── */
+  .diagram-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .diagram-header {
+    padding: 14px 20px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .diagram-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .diagram-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-family: 'Space Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .badge-arch { background: rgba(0,229,255,0.1); color: var(--accent); border: 1px solid rgba(0,229,255,0.2); }
+  .badge-db { background: rgba(245,158,11,0.1); color: var(--accent3); border: 1px solid rgba(245,158,11,0.2); }
+  .badge-flow { background: rgba(124,58,237,0.1); color: #a78bfa; border: 1px solid rgba(124,58,237,0.2); }
+  .badge-state { background: rgba(16,185,129,0.1); color: var(--success); border: 1px solid rgba(16,185,129,0.2); }
+
+  .diagram-body {
+    padding: 32px 24px;
+    overflow-x: auto;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+  .mermaid svg { max-width: 100%; height: auto; }
+
+  /* ── DESCRIPTION BOX ── */
+  .desc-box {
+    background: rgba(0,229,255,0.03);
+    border: 1px solid rgba(0,229,255,0.1);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .desc-box strong { color: var(--text); }
+
+  /* ── GRID ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* ── TABLE ── */
+  .legend-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 16px;
+  }
+  .legend-table th {
+    text-align: left;
+    padding: 10px 14px;
+    background: var(--surface2);
+    color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+  }
+  .legend-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(42,42,62,0.5);
+    vertical-align: top;
+  }
+  .legend-table tr:last-child td { border-bottom: none; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-family: 'Space Mono', monospace; font-size: 11px; }
+  .tag-blue { background: rgba(0,229,255,0.1); color: var(--accent); }
+  .tag-purple { background: rgba(124,58,237,0.15); color: #a78bfa; }
+  .tag-amber { background: rgba(245,158,11,0.1); color: var(--accent3); }
+  .tag-green { background: rgba(16,185,129,0.1); color: var(--success); }
+
+  /* ── FOOTER ── */
+  footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 32px 40px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-family: 'Space Mono', monospace;
+  }
+  footer span { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Documentación Técnica</div>
+  <h1>Live Shopping<br>Platform</h1>
+  <div class="header-meta">
+    <span><span class="dot"></span> Django + Angular</span>
+    <span><span class="dot" style="background:var(--accent2)"></span> WebSockets + Redis</span>
+    <span><span class="dot" style="background:var(--accent3)"></span> Bolivia SaaS v1.0</span>
+    <span><span class="dot" style="background:var(--success)"></span> 8 Diagramas</span>
+  </div>
+</header>
+
+<nav>
+  <a href="#arch">01 Arquitectura</a>
+  <a href="#deploy">02 Despliegue</a>
+  <a href="#erd">03 Base de Datos</a>
+  <a href="#components">04 Componentes</a>
+  <a href="#usecases">05 Casos de Uso</a>
+  <a href="#sequences">06 Secuencias</a>
+  <a href="#states">07 Estados</a>
+  <a href="#api">08 Flujo API</a>
+</nav>
+
+<main>
+
+  <!-- ══ 01 ARQUITECTURA GENERAL ══ -->
+  <section class="section" id="arch">
+    <div class="section-header">
+      <span class="section-number">01</span>
+      <div>
+        <div class="section-title">Arquitectura General del Sistema</div>
+        <div class="section-subtitle">Vista de alto nivel — todos los servicios y sus relaciones</div>
+      </div>
+    </div>
+
+    <div class="desc-box">
+      <strong>Descripción:</strong> El sistema está dividido en tres capas principales: el cliente (Angular SPA), la capa de servicios (Django REST + Django Channels) y la capa de datos/infra. El video de transmisión nunca pasa por el servidor propio — se embebe desde la plataforma del vendedor, reduciendo costos de infraestructura al mínimo.
+    </div>
+
+    <div class="diagram-card">
+      <div class="diagram-header">
+        <span class="diagram-title">System Architecture Overview</span>
+        <span class="diagram-badge badge-arch">Arquitectura</span>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph TB
+    subgraph CLIENT["🖥️  CLIENTE (Angular SPA)"]
+        direction LR
+        SELLER["Panel del Vendedor"]
+        VIEWER["Vista del Comprador"]
+    end
+
+    subgraph GATEWAY["🌐  CLOUDFLARE (CDN + Proxy)"]
+        CF["Edge Cache / SSL / DDoS"]
+    end
+
+    subgraph BACKEND["⚙️  BACKEND (Railway)"]
+        direction TB
+        DJANGO["Django REST API<br/>(HTTP/JSON)"]
+        CHANNELS["Django Channels<br/>(WebSocket)"]
+        CELERY["Celery Workers<br/>(Tareas async)"]
+    end
+
+    subgraph DATA["🗄️  DATOS"]
+        POSTGRES["PostgreSQL<br/>(Supabase)"]
+        REDIS["Redis<br/>(Upstash)"]
+        R2["Object Storage<br/>(Cloudflare R2)"]
+    end
+
+    subgraph EXTERNAL["🔌  SERVICIOS EXTERNOS"]
+        TIGO["Tigo Money API"]
+        BANCO["Banco Unión API"]
+        WHATSAPP["WhatsApp Business API"]
+        TIKTOK["TikTok / Facebook<br/>(iframe embed)"]
+        EMAIL["Resend<br/>(Email)"]
+    end
+
+    CLIENT -->|HTTPS| GATEWAY
+    GATEWAY --> DJANGO
+    GATEWAY --> CHANNELS
+    DJANGO --- POSTGRES
+    DJANGO --- REDIS
+    CHANNELS --- REDIS
+    CELERY --- POSTGRES
+    CELERY --- REDIS
+    DJANGO -->|Archivos| R2
+    CELERY --> TIGO
+    CELERY --> BANCO
+    CELERY --> WHATSAPP
+    CELERY --> EMAIL
+    VIEWER -.->|Stream embed| TIKTOK
+
+    style CLIENT fill:#1a1a26,stroke:#2a2a3e,color:#e8e8f0
+    style GATEWAY fill:#1a1a26,stroke:#2a2a3e,color:#e8e8f0
+    style BACKEND fill:#1a1a26,stroke:#2a2a3e,color:#e8e8f0
+    style DATA fill:#1a1a26,stroke:#2a2a3e,color:#e8e8f0
+    style EXTERNAL fill:#1a1a26,stroke:#2a2a3e,color:#e8e8f0
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 02 DESPLIEGUE ══ -->
+  <section class="section" id="deploy">
+    <div class="section-header">
+      <span class="section-number">02</span>
+      <div>
+        <div class="section-title">Diagrama de Despliegue</div>
+        <div class="section-subtitle">Infraestructura física y servicios cloud — stack seleccionado</div>
+      </div>
+    </div>
+
+    <div class="desc-box">
+      <strong>Stack de despliegue:</strong> Railway corre el proceso Django (ASGI via Daphne para HTTP + WS). Supabase provee PostgreSQL gestionado con backups automáticos. Upstash provee Redis serverless (pago por operación). Cloudflare R2 almacena imágenes sin costo de egress.
+    </div>
+
+    <div class="diagram-card">
+      <div class="diagram-header">
+        <span class="diagram-title">Deployment Diagram</span>
+        <span class="diagram-badge badge-arch">Infraestructura</span>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph LR
+    subgraph DEV["💻 Desarrollo Local"]
+        CODE["Código Django<br/>+ Angular"]
+        GITHUB["GitHub Repo"]
+    end
+
+    subgraph RAILWAY["🚂 Railway"]
+        direction TB
+        WEB["Web Service<br/>Daphne ASGI<br/>PORT 8000"]
+        WORKER["Worker Service<br/>Celery<br/>Beat + Worker"]
+        ENV["Variables de Entorno<br/>.env gestionado"]
+    end
+
+    subgraph SUPABASE["🐘 Supabase"]
+        PG["PostgreSQL 15<br/>Connection Pooling<br/>Automigrations"]
+        PGBKP["Backups<br/>Diarios"]
+    end
+
+    subgraph UPSTASH["⚡ Upstash"]
+        REDIS2["Redis Serverless<br/>Channel Layers<br/>Celery Broker"]
+    end
+
+    subgraph CF2["☁️ Cloudflare"]
+        R22["R2 Object Storage<br/>Imágenes productos"]
+        CDN["CDN Global<br/>Frontend estático<br/>Angular build"]
+    end
+
+    CODE -->|push| GITHUB
+    GITHUB -->|auto-deploy| RAILWAY
+    WEB --- SUPABASE
+    WEB --- UPSTASH
+    WORKER --- SUPABASE
+    WORKER --- UPSTASH
+    WEB --- CF2
+    CDN -.->|Serve SPA| WEB
+
+    style DEV fill:#1a1a26,stroke:#2a2a3e,color:#e8e8f0
+    style RAILWAY fill:#1a1a26,stroke:#00e5ff,color:#e8e8f0
+    style SUPABASE fill:#1a1a26,stroke:#f59e0b,color:#e8e8f0
+    style UPSTASH fill:#1a1a26,stroke:#7c3aed,color:#e8e8f0
+    style CF2 fill:#1a1a26,stroke:#10b981,color:#e8e8f0
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 03 ERD ══ -->
+  <section class="section" id="erd">
+    <div class="section-header">
+      <span class="section-number">03</span>
+      <div>
+        <div class="section-title">Modelo Entidad-Relación (ERD)</div>
+        <div class="section-subtitle">Estructura completa de la base de datos PostgreSQL</div>
+      </div>
+    </div>
+
+    <div class="desc-box">
+      <strong>Modelo multi-tenant:</strong> Cada <code>Tenant</code> es un vendedor. Todo el modelo de datos está aislado por tenant. <code>LiveSession</code> es el núcleo: agrupa productos, reservas y pedidos. El estado del pedido sigue una máquina de estados definida en el Diagrama 07.
+    </div>
+
+    <div class="diagram-card">
+      <div class="diagram-header">
+        <span class="diagram-title">Entity Relationship Diagram</span>
+        <span class="diagram-badge badge-db">Base de Datos</span>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+erDiagram
+    TENANT {
+        uuid id PK
+        string name
+        string slug
+        string plan
+        string whatsapp_number
+        string tigo_money_number
+        string banco_union_account
+        datetime created_at
+    }
+
+    USER {
+        uuid id PK
+        uuid tenant_id FK
+        string email
+        string password_hash
+        string role
+        datetime created_at
+    }
+
+    PRODUCT {
+        uuid id PK
+        uuid tenant_id FK
+        string name
+        text description
+        decimal price
+        integer stock
+        string image_url
+        boolean active
+    }
+
+    LIVE_SESSION {
+        uuid id PK
+        uuid tenant_id FK
+        string title
+        string platform
+        string stream_url
+        string status
+        datetime scheduled_at
+        datetime started_at
+        datetime ended_at
+        integer total_viewers
+        integer total_orders
+        decimal total_revenue
+    }
+
+    SESSION_PRODUCT {
+        uuid id PK
+        uuid session_id FK
+        uuid product_id FK
+        decimal promo_price
+        integer stock_reserved
+        boolean featured
+        integer order_position
+    }
+
+    CUSTOMER {
+        uuid id PK
+        uuid tenant_id FK
+        string name
+        string phone
+        string city
+        datetime created_at
+    }
+
+    RESERVATION {
+        uuid id PK
+        uuid session_id FK
+        uuid session_product_id FK
+        uuid customer_id FK
+        integer quantity
+        string status
+        datetime created_at
+        datetime expires_at
+    }
+
+    ORDER {
+        uuid id PK
+        uuid tenant_id FK
+        uuid session_id FK
+        uuid customer_id FK
+        string order_number
+        string status
+        decimal subtotal
+        decimal delivery_fee
+        decimal total
+        string delivery_address
+        string payment_method
+        string payment_reference
+        datetime created_at
+        datetime paid_at
+    }
+
+    ORDER_ITEM {
+        uuid id PK
+        uuid order_id FK
+        uuid product_id FK
+        integer quantity
+        decimal unit_price
+        decimal total_price
+    }
+
+    PAYMENT {
+        uuid id PK
+        uuid order_id FK
+        string provider
+        string external_id
+        decimal amount
+        string status
+        json metadata
+        datetime created_at
+    }
+
+    TENANT ||--o{ USER : "tiene"
+    TENANT ||--o{ PRODUCT : "posee"
+    TENANT ||--o{ LIVE_SESSION : "organiza"
+    TENANT ||--o{ CUSTOMER : "sirve"
+    LIVE_SESSION ||--o{ SESSION_PRODUCT : "incluye"
+    PRODUCT ||--o{ SESSION_PRODUCT : "aparece en"
+    LIVE_SESSION ||--o{ RESERVATION : "genera"
+    SESSION_PRODUCT ||--o{ RESERVATION : "tiene"
+    CUSTOMER ||--o{ RESERVATION : "hace"
+    LIVE_SESSION ||--o{ ORDER : "produce"
+    CUSTOMER ||--o{ ORDER : "realiza"
+    ORDER ||--o{ ORDER_ITEM : "contiene"
+    PRODUCT ||--o{ ORDER_ITEM : "es parte de"
+    ORDER ||--|| PAYMENT : "tiene"
+        </div>
+      </div>
+    </div>
+
+    <table class="legend-table">
+      <tr>
+        <th>Entidad</th>
+        <th>Descripción</th>
+        <th>Clave</th>
+      </tr>
+      <tr><td><span class="tag tag-blue">TENANT</span></td><td>Vendedor/negocio suscrito a la plataforma</td><td>Multi-tenancy root</td></tr>
+      <tr><td><span class="tag tag-purple">LIVE_SESSION</span></td><td>Una transmisión en vivo con catálogo activo</td><td>Entidad central del negocio</td></tr>
+      <tr><td><span class="tag tag-amber">RESERVATION</span></td><td>Reserva en tiempo real durante la transmisión</td><td>Expira si no se convierte en ORDER</td></tr>
+      <tr><td><span class="tag tag-green">ORDER</span></td><td>Pedido confirmado post-transmisión</td><td>Tiene máquina de estados propia</td></tr>
+    </table>
+  </section>
+
+  <!-- ══ 04 COMPONENTES DJANGO ══ -->
+  <section class="section" id="components">
+    <div class="section-header">
+      <span class="section-number">04</span>
+      <div>
+        <div class="section-title">Diagrama de Componentes</div>
+        <div class="section-subtitle">Módulos Django y su organización interna</div>
+      </div>
+    </div>
+
+    <div class="diagram-card">
+      <div class="diagram-header">
+        <span class="diagram-title">Django Application Components</span>
+        <span class="diagram-badge badge-arch">Componentes</span>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph TB
+    subgraph DJANGO_APP["🐍 Django Project — live_shopping/"]
+        direction TB
+
+        subgraph CORE["core/"]
+            SETTINGS["settings.py<br/>base / dev / prod"]
+            URLS["urls.py<br/>Router principal"]
+            ASGI["asgi.py<br/>Daphne ASGI config"]
+            CELERY_CONF["celery.py<br/>Task registry"]
+        end
+
+        subgraph APPS["Apps Django"]
+            direction LR
+
+            subgraph TENANTS_APP["tenants/"]
+                T_MODELS["models.py<br/>Tenant, User"]
+                T_VIEWS["views.py<br/>Auth, Register"]
+                T_SERIALIZERS["serializers.py"]
+                T_MIDDLEWARE["middleware.py<br/>TenantMiddleware"]
+            end
+
+            subgraph CATALOG_APP["catalog/"]
+                C_MODELS["models.py<br/>Product, Category"]
+                C_VIEWS["views.py<br/>CRUD productos"]
+                C_SIGNALS["signals.py<br/>invalidar cache"]
+            end
+
+            subgraph SESSIONS_APP["sessions/"]
+                S_MODELS["models.py<br/>LiveSession<br/>SessionProduct"]
+                S_VIEWS["views.py<br/>CRUD sesiones"]
+                S_CONSUMERS["consumers.py<br/>WebSocket Consumer"]
+                S_ROUTING["routing.py<br/>WS URL patterns"]
+            end
+
+            subgraph ORDERS_APP["orders/"]
+                O_MODELS["models.py<br/>Reservation<br/>Order, OrderItem"]
+                O_VIEWS["views.py<br/>Checkout, Detail"]
+                O_TASKS["tasks.py<br/>Celery async tasks"]
+                O_STATE["state_machine.py<br/>Order transitions"]
+            end
+
+            subgraph PAYMENTS_APP["payments/"]
+                P_MODELS["models.py<br/>Payment"]
+                P_VIEWS["views.py<br/>Webhook handlers"]
+                P_PROVIDERS["providers/<br/>tigo.py<br/>banco_union.py"]
+            end
+
+            subgraph NOTIFICATIONS_APP["notifications/"]
+                N_TASKS["tasks.py<br/>Email, WhatsApp"]
+                N_TEMPLATES["templates/<br/>email HTMLs"]
+            end
+        end
+
+        subgraph SHARED["shared/"]
+            MIXINS["mixins.py<br/>TenantMixin"]
+            PAGINATION["pagination.py"]
+            PERMISSIONS["permissions.py"]
+            UTILS["utils.py"]
+        end
+    end
+
+    URLS --> TENANTS_APP
+    URLS --> CATALOG_APP
+    URLS --> SESSIONS_APP
+    URLS --> ORDERS_APP
+    URLS --> PAYMENTS_APP
+    S_ROUTING --> S_CONSUMERS
+    S_CONSUMERS -->|Channel Layers| REDIS3[(Redis)]
+    O_TASKS -->|Broker| REDIS3
+    O_TASKS --> NOTIFICATIONS_APP
+    O_TASKS --> PAYMENTS_APP
+    T_MIDDLEWARE --> TENANTS_APP
+    SESSIONS_APP --> CATALOG_APP
+    ORDERS_APP --> SESSIONS_APP
+
+    style DJANGO_APP fill:#0d0d1a,stroke:#2a2a3e,color:#e8e8f0
+    style CORE fill:#1a1a26,stroke:#00e5ff,color:#e8e8f0
+    style APPS fill:#1a1a26,stroke:#2a2a3e,color:#e8e8f0
+    style SHARED fill:#1a1a26,stroke:#7c3aed,color:#e8e8f0
+    style TENANTS_APP fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style CATALOG_APP fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style SESSIONS_APP fill:#12121a,stroke:#00e5ff,color:#e8e8f0
+    style ORDERS_APP fill:#12121a,stroke:#f59e0b,color:#e8e8f0
+    style PAYMENTS_APP fill:#12121a,stroke:#10b981,color:#e8e8f0
+    style NOTIFICATIONS_APP fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 05 CASOS DE USO ══ -->
+  <section class="section" id="usecases">
+    <div class="section-header">
+      <span class="section-number">05</span>
+      <div>
+        <div class="section-title">Casos de Uso</div>
+        <div class="section-subtitle">Actores del sistema y sus interacciones principales</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="diagram-card">
+        <div class="diagram-header">
+          <span class="diagram-title">Vendedor</span>
+          <span class="diagram-badge badge-flow">Actor</span>
+        </div>
+        <div class="diagram-body">
+          <div class="mermaid">
+graph TD
+    SELLER((Vendedor))
+
+    SELLER --> UC1[Gestionar catálogo\nde productos]
+    SELLER --> UC2[Crear y programar\ntransmisión]
+    SELLER --> UC3[Iniciar / Pausar\ntransmisión en vivo]
+    SELLER --> UC4[Destacar producto\ndurante transmisión]
+    SELLER --> UC5[Ver reservas\nen tiempo real]
+    SELLER --> UC6[Gestionar pedidos\npost-transmisión]
+    SELLER --> UC7[Confirmar pagos\ny despachos]
+    SELLER --> UC8[Ver reportes\ny analytics]
+
+    style SELLER fill:#1a1a26,stroke:#00e5ff,color:#e8e8f0
+    style UC1 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style UC2 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style UC3 fill:#12121a,stroke:#00e5ff,color:#00e5ff
+    style UC4 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style UC5 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style UC6 fill:#12121a,stroke:#f59e0b,color:#f59e0b
+    style UC7 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style UC8 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+          </div>
+        </div>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-header">
+          <span class="diagram-title">Comprador</span>
+          <span class="diagram-badge badge-flow">Actor</span>
+        </div>
+        <div class="diagram-body">
+          <div class="mermaid">
+graph TD
+    BUYER((Comprador))
+
+    BUYER --> UC9[Ver transmisión\nen vivo]
+    BUYER --> UC10[Explorar catálogo\nen paralelo]
+    BUYER --> UC11[Reservar producto\ndurante transmisión]
+    BUYER --> UC12[Ver carrito\ny reservas activas]
+    BUYER --> UC13[Completar datos\nde entrega]
+    BUYER --> UC14[Pagar con\nTigo Money]
+    BUYER --> UC15[Pagar con\nBanco Unión]
+    BUYER --> UC16[Seguir estado\nde pedido]
+
+    style BUYER fill:#1a1a26,stroke:#7c3aed,color:#e8e8f0
+    style UC9 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style UC10 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style UC11 fill:#12121a,stroke:#7c3aed,color:#a78bfa
+    style UC12 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style UC13 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+    style UC14 fill:#12121a,stroke:#10b981,color:#10b981
+    style UC15 fill:#12121a,stroke:#10b981,color:#10b981
+    style UC16 fill:#12121a,stroke:#2a2a3e,color:#e8e8f0
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 06 SECUENCIAS ══ -->
+  <section class="section" id="sequences">
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <div>
+        <div class="section-title">Diagramas de Secuencia</div>
+        <div class="section-subtitle">Las 3 fases del negocio: Pre-transmisión, En vivo, Post-transmisión</div>
+      </div>
+    </div>
+
+    <!-- FASE 1 -->
+    <div class="desc-box"><strong>Fase 1 — Pre-transmisión:</strong> El vendedor configura la sesión con catálogo, stock y enlace de stream antes de ir en vivo.</div>
+    <div class="diagram-card">
+      <div class="diagram-header">
+        <span class="diagram-title">Fase 1: Pre-Transmisión</span>
+        <span class="diagram-badge badge-flow">Secuencia</span>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+sequenceDiagram
+    actor V as Vendedor
+    participant FE as Angular Frontend
+    participant API as Django REST API
+    participant DB as PostgreSQL
+    participant R2 as Cloudflare R2
+
+    V->>FE: Crea nueva transmisión
+    FE->>API: POST /api/sessions/
+    API->>DB: INSERT LiveSession (status=draft)
+    DB-->>API: session_id
+    API-->>FE: {session_id, share_link}
+
+    V->>FE: Agrega productos al catálogo
+    FE->>API: POST /api/catalog/products/
+    API->>R2: Upload imagen producto
+    R2-->>API: image_url
+    API->>DB: INSERT Product + SessionProduct
+    DB-->>API: product_id
+
+    V->>FE: Configura stock y precio promo
+    FE->>API: PATCH /api/sessions/{id}/products/
+    API->>DB: UPDATE SessionProduct
+    DB-->>API: OK
+
+    V->>FE: Obtiene enlace de transmisión
+    FE->>API: GET /api/sessions/{id}/share-link/
+    API-->>FE: {url: "app.dominio.com/live/maria-boutique/abc123"}
+    FE-->>V: Enlace listo para compartir
+        </div>
+      </div>
+    </div>
+
+    <!-- FASE 2 -->
+    <div class="desc-box" style="margin-top:20px"><strong>Fase 2 — En vivo:</strong> El comprador se conecta vía WebSocket y reserva en tiempo real. El servidor actualiza el stock y notifica a todos los conectados simultáneamente.</div>
+    <div class="diagram-card">
+      <div class="diagram-header">
+        <span class="diagram-title">Fase 2: Transmisión En Vivo (WebSocket)</span>
+        <span class="diagram-badge badge-flow">Secuencia</span>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+sequenceDiagram
+    actor C as Comprador
+    actor V as Vendedor
+    participant FE as Angular Frontend
+    participant WS as Django Channels (WS)
+    participant CACHE as Redis (Channel Layer)
+    participant DB as PostgreSQL
+
+    V->>FE: Inicia transmisión
+    FE->>WS: WS CONNECT /ws/session/{id}/vendor/
+    WS->>DB: UPDATE LiveSession status=live
+    WS->>CACHE: Publica evento session.started
+    CACHE-->>FE: {type: "session.started"}
+
+    C->>FE: Entra al enlace compartido
+    FE->>WS: WS CONNECT /ws/session/{id}/viewer/
+    WS-->>FE: {type: "session.state", products: [...], stock: {...}}
+
+    C->>FE: Hace clic en "Reservar"
+    FE->>WS: {action: "reserve", product_id: "xxx", qty: 1}
+    WS->>DB: BEGIN TRANSACTION
+    DB->>DB: SELECT stock FOR UPDATE
+    Note over DB: Stock disponible = 3
+    DB->>DB: INSERT Reservation
+    DB->>DB: UPDATE stock = 2
+    DB->>DB: COMMIT
+    WS->>CACHE: Publica stock.updated a toda la sala
+    CACHE-->>FE: {type: "stock.updated", product_id: "xxx", stock: 2}
+    Note over FE: Todos los compradores ven stock actualizado en tiempo real
+    WS-->>FE: {type: "reservation.confirmed", reservation_id: "yyy", expires_in: 600}
+    FE-->>C: "¡Reservado! Tienes 10 min para pagar"
+
+    V->>FE: Destaca producto en pantalla
+    FE->>WS: {action: "feature_product", product_id: "zzz"}
+    WS->>CACHE: Publica product.featured
+    CACHE-->>FE: {type: "product.featured", product: {...}}
+    Note over FE: Panel del comprador resalta el producto destacado
+        </div>
+      </div>
+    </div>
+
+    <!-- FASE 3 -->
+    <div class="desc-box" style="margin-top:20px"><strong>Fase 3 — Post-transmisión:</strong> El comprador completa el checkout, paga con Tigo Money y el pedido se procesa de forma asíncrona via Celery.</div>
+    <div class="diagram-card">
+      <div class="diagram-header">
+        <span class="diagram-title">Fase 3: Post-Transmisión y Pago</span>
+        <span class="diagram-badge badge-flow">Secuencia</span>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+sequenceDiagram
+    actor C as Comprador
+    participant FE as Angular Frontend
+    participant API as Django REST API
+    participant CELERY as Celery Worker
+    participant TIGO as Tigo Money API
+    participant DB as PostgreSQL
+    participant WA as WhatsApp API
+
+    C->>FE: Revisa reservas activas
+    FE->>API: GET /api/orders/my-cart/
+    API->>DB: SELECT Reservations WHERE customer AND expires > now
+    DB-->>API: [{product, qty, price, expires_in}]
+    API-->>FE: Lista reservas activas
+
+    C->>FE: Completa datos y confirma pedido
+    FE->>API: POST /api/orders/checkout/
+    API->>DB: INSERT Order (status=pending_payment)
+    API->>DB: INSERT OrderItems
+    API->>DB: UPDATE Reservations status=converted
+    DB-->>API: {order_id, order_number, total}
+
+    C->>FE: Selecciona Tigo Money
+    FE->>API: POST /api/payments/initiate/
+    API->>CELERY: queue: initiate_tigo_payment(order_id)
+    CELERY->>TIGO: POST /api/payment/request
+    TIGO-->>CELERY: {payment_id, ussd_code, expires}
+    CELERY->>DB: INSERT Payment (status=pending)
+    CELERY-->>API: {ussd_code: "*123*...#"}
+    API-->>FE: {payment_code, instructions}
+    FE-->>C: Muestra código USSD para pagar
+
+    TIGO->>API: Webhook POST /api/payments/webhook/tigo/
+    API->>CELERY: queue: process_payment_confirmation(payment_id)
+    CELERY->>DB: UPDATE Payment status=completed
+    CELERY->>DB: UPDATE Order status=paid
+    CELERY->>WA: Enviar confirmación WhatsApp al comprador
+    CELERY->>WA: Notificar al vendedor nuevo pedido pagado
+    WA-->>C: "✅ Tu pedido #BOL-2025-001 está confirmado"
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 07 ESTADOS ══ -->
+  <section class="section" id="states">
+    <div class="section-header">
+      <span class="section-number">07</span>
+      <div>
+        <div class="section-title">Máquinas de Estado</div>
+        <div class="section-subtitle">Ciclo de vida de Order, LiveSession y Reservation</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="diagram-card">
+        <div class="diagram-header">
+          <span class="diagram-title">Estados: Order</span>
+          <span class="diagram-badge badge-state">Estado</span>
+        </div>
+        <div class="diagram-body">
+          <div class="mermaid">
+stateDiagram-v2
+    [*] --> pending_payment : Checkout completado
+    pending_payment --> payment_processing : Pago iniciado
+    payment_processing --> paid : Webhook confirmación
+    payment_processing --> payment_failed : Timeout / Error
+    payment_failed --> pending_payment : Reintentar
+    paid --> preparing : Vendedor confirma
+    preparing --> shipped : Despacho registrado
+    shipped --> delivered : Entrega confirmada
+    delivered --> [*]
+    pending_payment --> cancelled : Expiró (30 min sin pago)
+    paid --> refunded : Devolución solicitada
+    refunded --> [*]
+    cancelled --> [*]
+          </div>
+        </div>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-header">
+          <span class="diagram-title">Estados: LiveSession</span>
+          <span class="diagram-badge badge-state">Estado</span>
+        </div>
+        <div class="diagram-body">
+          <div class="mermaid">
+stateDiagram-v2
+    [*] --> draft : Sesión creada
+    draft --> scheduled : Fecha/hora asignada
+    scheduled --> live : Vendedor inicia stream
+    draft --> live : Inicio inmediato
+    live --> paused : Pausa temporal
+    paused --> live : Reanuda
+    live --> ended : Finaliza transmisión
+    ended --> archived : Post-procesamiento completo
+    archived --> [*]
+    draft --> cancelled : Cancelada antes de iniciar
+    scheduled --> cancelled
+    cancelled --> [*]
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram-card" style="margin-top:0">
+      <div class="diagram-header">
+        <span class="diagram-title">Estados: Reservation</span>
+        <span class="diagram-badge badge-state">Estado</span>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> active : Reserva creada durante live
+    active --> converted : Checkout completado → crea Order
+    active --> expired : Timer de 10 min agotado → stock liberado
+    active --> cancelled : Comprador cancela manualmente
+    expired --> [*]
+    converted --> [*]
+    cancelled --> [*]
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 08 API FLOW ══ -->
+  <section class="section" id="api">
+    <div class="section-header">
+      <span class="section-number">08</span>
+      <div>
+        <div class="section-title">Flujo de la API REST</div>
+        <div class="section-subtitle">Endpoints principales y flujo de autenticación multi-tenant</div>
+      </div>
+    </div>
+
+    <div class="diagram-card">
+      <div class="diagram-header">
+        <span class="diagram-title">API REST Endpoints Flow</span>
+        <span class="diagram-badge badge-arch">API</span>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph LR
+    subgraph AUTH["🔐 Autenticación"]
+        direction TB
+        A1["POST /api/auth/register/\nRegistro vendedor"]
+        A2["POST /api/auth/login/\nJWT token"]
+        A3["POST /api/auth/refresh/\nRefresh token"]
+        A4["Middleware TenantMiddleware\nIdentifica tenant por JWT"]
+    end
+
+    subgraph CATALOG_EP["📦 Catálogo"]
+        direction TB
+        B1["GET/POST /api/products/"]
+        B2["PATCH/DELETE /api/products/{id}/"]
+        B3["POST /api/products/{id}/upload-image/"]
+    end
+
+    subgraph SESSION_EP["🎬 Sesiones Live"]
+        direction TB
+        C1["GET/POST /api/sessions/"]
+        C2["PATCH /api/sessions/{id}/"]
+        C3["POST /api/sessions/{id}/start/"]
+        C4["POST /api/sessions/{id}/end/"]
+        C5["GET /api/sessions/{id}/stats/"]
+    end
+
+    subgraph PUBLIC_EP["🌐 Vista Pública"]
+        direction TB
+        D1["GET /live/{tenant_slug}/{session_token}/\nPágina pública (sin auth)"]
+        D2["GET /api/public/sessions/{token}/\nDatos sesión para comprador"]
+    end
+
+    subgraph ORDER_EP["🛒 Pedidos"]
+        direction TB
+        E1["GET /api/orders/my-cart/"]
+        E2["POST /api/orders/checkout/"]
+        E3["GET /api/orders/{id}/"]
+        E4["GET /api/orders/\nLista vendedor"]
+        E5["PATCH /api/orders/{id}/status/"]
+    end
+
+    subgraph PAYMENT_EP["💳 Pagos"]
+        direction TB
+        F1["POST /api/payments/initiate/"]
+        F2["POST /api/payments/webhook/tigo/"]
+        F3["POST /api/payments/webhook/banco-union/"]
+    end
+
+    subgraph WS_EP["⚡ WebSocket"]
+        direction TB
+        G1["WS /ws/session/{id}/vendor/\n(autenticado)"]
+        G2["WS /ws/session/{token}/viewer/\n(público)"]
+    end
+
+    AUTH --> CATALOG_EP
+    AUTH --> SESSION_EP
+    AUTH --> ORDER_EP
+    AUTH --> PAYMENT_EP
+    SESSION_EP --> WS_EP
+    PUBLIC_EP --> WS_EP
+    ORDER_EP --> PAYMENT_EP
+
+    style AUTH fill:#1a1a26,stroke:#00e5ff,color:#e8e8f0
+    style CATALOG_EP fill:#1a1a26,stroke:#f59e0b,color:#e8e8f0
+    style SESSION_EP fill:#1a1a26,stroke:#7c3aed,color:#e8e8f0
+    style PUBLIC_EP fill:#1a1a26,stroke:#2a2a3e,color:#e8e8f0
+    style ORDER_EP fill:#1a1a26,stroke:#f59e0b,color:#e8e8f0
+    style PAYMENT_EP fill:#1a1a26,stroke:#10b981,color:#e8e8f0
+    style WS_EP fill:#1a1a26,stroke:#00e5ff,color:#e8e8f0
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<footer>
+  <strong>Live Shopping Platform</strong> — Documentación Técnica v1.0<br>
+  <span>Django + Angular · Railway + Supabase + Upstash · Bolivia 2025</span>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#1a1a26',
+      primaryTextColor: '#e8e8f0',
+      primaryBorderColor: '#2a2a3e',
+      lineColor: '#4a4a6a',
+      secondaryColor: '#12121a',
+      tertiaryColor: '#0a0a0f',
+      background: '#0a0a0f',
+      mainBkg: '#1a1a26',
+      nodeBorder: '#2a2a3e',
+      clusterBkg: '#12121a',
+      titleColor: '#00e5ff',
+      edgeLabelBackground: '#1a1a26',
+      attributeBackgroundColorEven: '#12121a',
+      attributeBackgroundColorOdd: '#1a1a26',
+      actorBorder: '#00e5ff',
+      actorBkg: '#1a1a26',
+      actorTextColor: '#e8e8f0',
+      signalColor: '#00e5ff',
+      signalTextColor: '#e8e8f0',
+      labelBoxBkgColor: '#1a1a26',
+      labelBoxBorderColor: '#2a2a3e',
+      labelTextColor: '#e8e8f0',
+      loopTextColor: '#e8e8f0',
+      noteBorderColor: '#f59e0b',
+      noteBkgColor: '#1a1a26',
+      noteTextColor: '#e8e8f0',
+      activationBorderColor: '#7c3aed',
+      activationBkgColor: '#1a1a26',
+      stateBkg: '#1a1a26',
+      stateBorder: '#2a2a3e',
+      fsmBkg: '#1a1a26',
+    },
+    er: {
+      diagramPadding: 20,
+      useMaxWidth: true,
+    },
+    sequence: {
+      diagramMarginX: 20,
+      diagramMarginY: 20,
+      actorMargin: 60,
+      useMaxWidth: true,
+    },
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true,
+    }
+  });
+</script>
+</body>
+</html>

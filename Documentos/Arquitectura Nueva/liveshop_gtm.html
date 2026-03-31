@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiveShop Bolivia — Plan Go-to-Market</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,700&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --cream:#faf7f2;--warm:#f2ece0;--warm2:#e8dece;--border:#d8cfc0;--border2:#bfb5a4;
+  --ink:#1c1814;--ink2:#4a3f33;--ink3:#8a7d6e;
+  --orange:#c84b0f;--ora-l:#fef3ec;--ora-b:#f9c8a8;
+  --green:#1a5c2e;--grn-l:#eef8f1;--grn-b:#a3d9b4;
+  --blue:#1a3a6b;--blu-l:#eef2fb;--blu-b:#a3b8e8;
+  --red:#9e1c1c;--red-l:#fdf0f0;--red-b:#f0a8a8;
+  --amber:#8a5c0a;--amb-l:#fdf8ec;--amb-b:#f0d8a0;
+}
+html{scroll-behavior:smooth}
+body{background:var(--cream);color:var(--ink);font-family:'Figtree',sans-serif;font-size:14.5px;line-height:1.7}
+.topbar{height:5px;background:repeating-linear-gradient(90deg,var(--orange) 0px,var(--orange) 60px,var(--ink) 60px,var(--ink) 120px,var(--green) 120px,var(--green) 180px,var(--cream) 180px,var(--cream) 200px)}
+.page{max-width:920px;margin:0 auto;padding:0 36px 120px}
+.cover{padding:72px 0 60px;border-bottom:2px solid var(--ink);margin-bottom:72px}
+.cover-stamp{display:inline-block;border:2.5px solid var(--orange);color:var(--orange);font-weight:700;font-size:10px;letter-spacing:3px;text-transform:uppercase;padding:4px 12px;border-radius:2px;margin-bottom:24px;transform:rotate(-1deg)}
+h1{font-family:'Fraunces',serif;font-size:clamp(42px,7vw,80px);font-weight:900;line-height:.95;letter-spacing:-2px;margin-bottom:8px}
+h1 em{font-style:italic;font-weight:400;color:var(--orange)}
+.cover-tagline{font-family:'Fraunces',serif;font-style:italic;font-size:18px;color:var(--ink2);margin-bottom:36px;max-width:500px;line-height:1.4}
+.cover-stats{display:flex;gap:0;flex-wrap:wrap;border:1.5px solid var(--border);border-radius:6px;overflow:hidden;background:white}
+.stat-box{flex:1;min-width:130px;padding:18px 22px;border-right:1.5px solid var(--border)}
+.stat-box:last-child{border-right:none}
+.stat-label{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);margin-bottom:6px}
+.stat-value{font-family:'Fraunces',serif;font-size:28px;font-weight:900;line-height:1;color:var(--orange)}
+.stat-sub{font-size:11px;color:var(--ink3);margin-top:4px}
+.pull{display:flex;align-items:flex-start;gap:20px;padding:28px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:28px 0}
+.pull-num{font-family:'Fraunces',serif;font-size:64px;font-weight:900;line-height:1;flex-shrink:0;color:var(--orange)}
+.pull-text{font-size:14px;color:var(--ink2);padding-top:8px}
+.pull-text strong{color:var(--ink);display:block;font-size:16px;margin-bottom:4px}
+.section{margin-bottom:80px}
+.section-tag{font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:var(--orange);font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.section-tag::before{content:'';width:20px;height:2px;background:var(--orange);display:inline-block;flex-shrink:0}
+h2{font-family:'Fraunces',serif;font-size:32px;font-weight:900;letter-spacing:-.5px;margin-bottom:8px;line-height:1.1;padding-bottom:20px;border-bottom:2px solid var(--ink)}
+h3{font-family:'Fraunces',serif;font-size:20px;font-weight:700;margin:28px 0 12px}
+h4{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);font-weight:700;margin:20px 0 8px}
+p{color:var(--ink2);margin-bottom:12px;font-size:14.5px}
+.persona-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:640px){.persona-grid{grid-template-columns:1fr}}
+.persona{background:white;border:1.5px solid var(--border);border-radius:8px;overflow:hidden}
+.persona-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px}
+.persona-avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.persona-name{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--ink)}
+.persona-sub{font-size:12px;color:var(--ink3)}
+.persona-body{padding:16px 20px}
+.persona-row{display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:13px;border-bottom:1px dotted var(--border)}
+.persona-row:last-child{border-bottom:none}
+.persona-icon{flex-shrink:0;color:var(--orange);width:16px}
+.persona-val{color:var(--ink2)}
+.channel-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:640px){.channel-grid{grid-template-columns:1fr}}
+@media(max-width:800px){.channel-grid{grid-template-columns:1fr 1fr}}
+.channel{background:white;border:1.5px solid var(--border);border-radius:8px;padding:18px}
+.channel-icon{font-size:24px;margin-bottom:10px}
+.channel-name{font-family:'Fraunces',serif;font-size:15px;font-weight:700;margin-bottom:6px}
+.channel-desc{font-size:12.5px;color:var(--ink2);margin-bottom:10px}
+.channel-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.5px;padding:3px 9px;border-radius:3px;text-transform:uppercase}
+.script{background:white;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px}
+.script-head{background:var(--ink);padding:10px 18px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:white;font-weight:700}
+.script-body{padding:18px}
+.script-line{display:flex;gap:12px;margin-bottom:16px}
+.script-line:last-child{margin-bottom:0}
+.script-who{font-size:10px;letter-spacing:1px;text-transform:uppercase;font-weight:700;min-width:80px;flex-shrink:0;padding-top:2px}
+.script-who.seller{color:var(--orange)}
+.script-who.buyer{color:var(--blue)}
+.script-msg{background:var(--cream);border-radius:6px;padding:10px 14px;font-size:13.5px;color:var(--ink2);flex:1;line-height:1.55;border:1px solid var(--border)}
+.script-tip{background:var(--amb-l);border:1px solid var(--amb-b);border-radius:6px;padding:10px 14px;font-size:12.5px;color:var(--amber);margin-top:14px}
+.script-tip strong{color:var(--amber)}
+.objection{background:white;border:1.5px solid var(--border);border-radius:8px;margin-bottom:14px;overflow:hidden}
+.obj-q{padding:12px 18px;background:var(--red-l);border-bottom:1px solid var(--red-b);font-size:14px;font-weight:600;color:var(--red);display:flex;gap:10px;align-items:flex-start}
+.obj-icon{flex-shrink:0}
+.obj-a{padding:14px 18px;font-size:13.5px;color:var(--ink2);line-height:1.6}
+.obj-a strong{color:var(--green)}
+.week-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:640px){.week-grid{grid-template-columns:1fr}}
+.week-card{background:white;border:1.5px solid var(--border);border-radius:8px;overflow:hidden}
+.week-head{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.week-num{font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:var(--orange);line-height:1;min-width:32px}
+.week-title{font-weight:700;font-size:13px}
+.week-sub{font-size:11px;color:var(--ink3)}
+.week-body{padding:12px 16px}
+.week-item{display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:13px;color:var(--ink2);border-bottom:1px dotted var(--border)}
+.week-item:last-child{border-bottom:none}
+.week-check{color:var(--green);flex-shrink:0;margin-top:2px}
+.week-meta{font-size:11px;color:var(--orange);font-weight:700;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.onboarding{position:relative;padding-left:32px}
+.onboarding::before{content:'';position:absolute;left:10px;top:10px;bottom:10px;width:2px;background:var(--border)}
+.ob-day{position:relative;margin-bottom:20px}
+.ob-dot{position:absolute;left:-26px;top:3px;width:14px;height:14px;border-radius:50%;border:2px solid;background:var(--cream);flex-shrink:0}
+.ob-label{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:4px}
+.ob-title{font-family:'Fraunces',serif;font-size:15px;font-weight:700;margin-bottom:4px}
+.ob-desc{font-size:13px;color:var(--ink2)}
+.kpi-table{width:100%;border-collapse:collapse;margin:16px 0}
+.kpi-table th{text-align:left;padding:8px 12px;background:var(--ink);color:white;font-size:10px;letter-spacing:1.5px;text-transform:uppercase}
+.kpi-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13.5px;vertical-align:top}
+.kpi-table tr:last-child td{border-bottom:none}
+.kpi-table tr:nth-child(even) td{background:var(--warm)}
+.kpi-table td:first-child{font-weight:700;color:var(--ink)}
+.kpi-num{font-family:'Fraunces',serif;font-weight:900;color:var(--orange);font-size:16px}
+.material-list{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:640px){.material-list{grid-template-columns:1fr}}
+.material{background:white;border:1.5px solid var(--border);border-radius:8px;padding:16px 18px;display:flex;gap:12px;align-items:flex-start}
+.mat-icon{font-size:22px;flex-shrink:0;margin-top:2px}
+.mat-name{font-weight:700;font-size:14px;margin-bottom:4px}
+.mat-desc{font-size:12.5px;color:var(--ink2)}
+.mat-status{font-size:10px;font-weight:700;letter-spacing:.5px;padding:2px 7px;border-radius:3px;margin-top:6px;display:inline-block;text-transform:uppercase}
+.callout{border-left:3px solid;padding:14px 18px;border-radius:0 6px 6px 0;margin:20px 0;font-size:13.5px}
+.callout.orange{border-color:var(--orange);background:var(--ora-l);color:var(--orange)}
+.callout.green{border-color:var(--green);background:var(--grn-l);color:var(--green)}
+.callout.blue{border-color:var(--blue);background:var(--blu-l);color:var(--blue)}
+.callout strong{color:inherit}
+.callout p{color:inherit;margin-bottom:4px;font-size:13.5px}
+.rule-list{list-style:none}
+.rule-item{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);font-size:13.5px}
+.rule-item:last-child{border-bottom:none}
+.rule-mark{color:var(--orange);flex-shrink:0;font-weight:700;margin-top:2px}
+.rule-text{color:var(--ink2)}
+.rule-text strong{color:var(--ink)}
+.big-quote{font-family:'Fraunces',serif;font-size:clamp(18px,3vw,26px);font-style:italic;color:var(--ink);line-height:1.4;padding:28px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:28px 0}
+.big-quote span{color:var(--orange)}
+hr{border:none;border-top:1px solid var(--border);margin:28px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:640px){.grid2{grid-template-columns:1fr}}
+footer{border-top:2px solid var(--ink);padding:28px 0 0;margin-top:80px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--ink3)}
+footer strong{color:var(--orange)}
+</style>
+</head>
+<body>
+<div class="topbar"></div>
+<div class="page">
+
+<div class="cover">
+  <div class="cover-stamp">Go-to-Market &middot; v1.0 &middot; Santa Cruz de la Sierra</div>
+  <h1>Los primeros<br><em>10 clientes</em></h1>
+  <p class="cover-tagline">Plan de adquisici&oacute;n para los primeros 10 vendedores pagantes de LiveShop Bolivia &mdash; con gui&oacute;n de venta, proceso de trial y plan semana a semana.</p>
+  <div class="cover-stats">
+    <div class="stat-box"><div class="stat-label">Meta semana 12</div><div class="stat-value">10</div><div class="stat-sub">Clientes pagantes</div></div>
+    <div class="stat-box"><div class="stat-label">MRR objetivo</div><div class="stat-value">Bs. 3K</div><div class="stat-sub">Al mes 3</div></div>
+    <div class="stat-box"><div class="stat-label">Precio</div><div class="stat-value">Bs. 300</div><div class="stat-sub">/mes &middot; plan &uacute;nico</div></div>
+    <div class="stat-box"><div class="stat-label">CAC objetivo</div><div class="stat-value">&lt; Bs. 75</div><div class="stat-sub">Costo adquisici&oacute;n</div></div>
+    <div class="stat-box"><div class="stat-label">Trial</div><div class="stat-value">14 d&iacute;as</div><div class="stat-sub">Gratis, sin tarjeta</div></div>
+  </div>
+</div>
+
+<section class="section">
+  <div class="section-tag">01 &mdash; Mercado</div>
+  <h2>A qui&eacute;n le vendemos primero</h2>
+  <p>No le vendemos a todo el mundo. Los primeros 10 clientes son un perfil muy espec&iacute;fico: vendedores bolivianos que <strong>ya hacen lives</strong>, ya tienen seguidores, y ya est&aacute;n sufriendo el problema que resolvemos. No necesitamos convencerlos de que el live shopping funciona &mdash; ya lo saben. Solo necesitamos mostrarles que LiveShop les va a organizar el caos.</p>
+  <div class="pull">
+    <div class="pull-num">3K+</div>
+    <div class="pull-text">
+      <strong>Vendedores activos en TikTok/Facebook/Instagram en Santa Cruz</strong>
+      Estimado conservador de vendedores que hacen al menos 1 live por semana en SCZ. La mayor&iacute;a vende ropa, calzado, cosm&eacute;ticos y accesorios. Todos tienen el mismo problema: pierden pedidos por caos post-live.
+    </div>
+  </div>
+  <h3>Perfiles ideales para los primeros 10 clientes</h3>
+  <div class="persona-grid">
+    <div class="persona">
+      <div class="persona-head">
+        <div class="persona-avatar" style="background:var(--ora-l)">&#128247;</div>
+        <div><div class="persona-name">La vendedora de ropa</div><div class="persona-sub">500&ndash;5,000 seguidores &middot; Facebook/TikTok</div></div>
+      </div>
+      <div class="persona-body">
+        <div class="persona-row"><span class="persona-icon">&#128205;</span><span class="persona-val">Plan 3 de Mayo, Equipetrol, El Trompillo</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128197;</span><span class="persona-val">2&ndash;4 lives por semana, generalmente 8&ndash;11 PM</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128545;</span><span class="persona-val">Pierde pedidos porque no puede anotar todo mientras habla</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128241;</span><span class="persona-val">Usa WhatsApp para confirmar pedidos &mdash; tarda horas</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128176;</span><span class="persona-val">Vende Bs. 2,000&ndash;15,000 por live. Bs. 300 es el 2&ndash;5% de un live</span></div>
+        <div class="persona-row"><span class="persona-icon">&#9989;</span><span class="persona-val">Paga si le demostr&aacute;s que no pierde m&aacute;s pedidos</span></div>
+      </div>
+    </div>
+    <div class="persona">
+      <div class="persona-head">
+        <div class="persona-avatar" style="background:var(--grn-l)">&#128161;</div>
+        <div><div class="persona-name">El vendedor de calzado</div><div class="persona-sub">1,000&ndash;10,000 seguidores &middot; TikTok</div></div>
+      </div>
+      <div class="persona-body">
+        <div class="persona-row"><span class="persona-icon">&#128205;</span><span class="persona-val">Mercado Los Pozos, online full-time</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128197;</span><span class="persona-val">3&ndash;5 lives por semana. Alta rotaci&oacute;n de stock</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128545;</span><span class="persona-val">Sobreventas frecuentes &mdash; talles se agotan sin que se entere</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128241;</span><span class="persona-val">Ya tiene ayudante para manejar el chat, busca automatizar</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128176;</span><span class="persona-val">Vende Bs. 3,000&ndash;20,000 por live. Muy sensible a stock</span></div>
+        <div class="persona-row"><span class="persona-icon">&#9989;</span><span class="persona-val">Paga si le mostr&aacute;s el control de tallas en tiempo real</span></div>
+      </div>
+    </div>
+    <div class="persona">
+      <div class="persona-head">
+        <div class="persona-avatar" style="background:var(--blu-l)">&#128132;</div>
+        <div><div class="persona-name">La vendedora de cosm&eacute;ticos</div><div class="persona-sub">2,000&ndash;20,000 seguidores &middot; Instagram/TikTok</div></div>
+      </div>
+      <div class="persona-body">
+        <div class="persona-row"><span class="persona-icon">&#128205;</span><span class="persona-val">Vende a toda Bolivia, basada en SCZ</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128197;</span><span class="persona-val">1&ndash;2 lives por semana, muy producidos</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128545;</span><span class="persona-val">Pierde clientes porque no puede responder a todos</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128241;</span><span class="persona-val">Ya paga por herramientas de marketing &mdash; entiende el SaaS</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128176;</span><span class="persona-val">Ticket de venta alto. Bs. 300 le parece razonable</span></div>
+        <div class="persona-row"><span class="persona-icon">&#9989;</span><span class="persona-val">Paga si el onboarding es f&aacute;cil y el soporte es local</span></div>
+      </div>
+    </div>
+    <div class="persona">
+      <div class="persona-head">
+        <div class="persona-avatar" style="background:#fef9ec">&#127857;</div>
+        <div><div class="persona-name">La vendedora de comida/snacks</div><div class="persona-sub">1,000&ndash;8,000 seguidores &middot; Facebook</div></div>
+      </div>
+      <div class="persona-body">
+        <div class="persona-row"><span class="persona-icon">&#128205;</span><span class="persona-val">SCZ ciudad, entrega a domicilio propia</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128197;</span><span class="persona-val">Lives semanales para pedidos del fin de semana</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128545;</span><span class="persona-val">Prepara de m&aacute;s o de menos por no saber cu&aacute;ntos reservaron</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128241;</span><span class="persona-val">Alta retenci&oacute;n &mdash; si funciona, no cancela</span></div>
+        <div class="persona-row"><span class="persona-icon">&#128176;</span><span class="persona-val">Ticket menor pero volumen alto por live</span></div>
+        <div class="persona-row"><span class="persona-icon">&#9989;</span><span class="persona-val">Paga si el panel le resuelve la log&iacute;stica del pedido</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="callout orange" style="margin-top:20px">
+    <strong>Regla de los primeros 10:</strong> Todos deben ser vendedores que ya hacen lives regularmente y ya tienen al menos 500 seguidores. No adquirir a alguien que nunca hizo un live &mdash; el problema que resolvemos no lo tiene todav&iacute;a.
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-tag">02 &mdash; Canales</div>
+  <h2>C&oacute;mo llegar a ellos</h2>
+  <p>Para los primeros 10 clientes no se necesita publicidad pagada. Se necesita contacto directo y demostraciones en persona. El objetivo es cerrar con velocidad y aprender r&aacute;pido &mdash; no construir un embudo de marketing todav&iacute;a.</p>
+  <div class="channel-grid">
+    <div class="channel">
+      <div class="channel-icon">&#128241;</div>
+      <div class="channel-name">Prospecci&oacute;n directa en TikTok/FB</div>
+      <div class="channel-desc">Buscar vendedores que hacen lives activamente. Mirar su &uacute;ltimo live, identificar el problema visible. Contactar con mensaje personalizado que mencione su live espec&iacute;fico.</div>
+      <span class="channel-badge" style="background:var(--ora-l);color:var(--orange)">&#9733; Canal #1</span>
+    </div>
+    <div class="channel">
+      <div class="channel-icon">&#128101;</div>
+      <div class="channel-name">Red personal y referidos</div>
+      <div class="channel-desc">Los primeros 2&ndash;3 clientes deben venir de conocidos. M&aacute;s f&aacute;ciles de cerrar, m&aacute;s tolerantes con los bugs del MVP, y son los mejores embajadores.</div>
+      <span class="channel-badge" style="background:var(--grn-l);color:var(--green)">Arranque</span>
+    </div>
+    <div class="channel">
+      <div class="channel-icon">&#127978;</div>
+      <div class="channel-name">Visita en el Mercado Los Pozos</div>
+      <div class="channel-desc">Locales con presencia f&iacute;sica Y digital. Hablar con vendedores en persona. Mostrar la demo en el tel&eacute;fono. El contacto cara a cara cierra m&aacute;s r&aacute;pido en Bolivia.</div>
+      <span class="channel-badge" style="background:var(--ora-l);color:var(--orange)">&#9733; Canal #2</span>
+    </div>
+    <div class="channel">
+      <div class="channel-icon">&#127919;</div>
+      <div class="channel-name">Grupos de Facebook de vendedores</div>
+      <div class="channel-desc">"Vendedores Online Bolivia", "Emprendedores SCZ". Publicar contenido de valor y contactar directamente a quienes comentan sobre problemas de organizaci&oacute;n.</div>
+      <span class="channel-badge" style="background:var(--blu-l);color:var(--blue)">Mes 2</span>
+    </div>
+    <div class="channel">
+      <div class="channel-icon">&#127909;</div>
+      <div class="channel-name">Video demo en TikTok propio</div>
+      <div class="channel-desc">Grabar un TikTok mostrando &ldquo;el antes y despu&eacute;s&rdquo; &mdash; el caos de manejar un live sin herramienta vs. con LiveShop. Publicar en cuenta de la plataforma.</div>
+      <span class="channel-badge" style="background:var(--blu-l);color:var(--blue)">Mes 2</span>
+    </div>
+    <div class="channel">
+      <div class="channel-icon">&#129309;</div>
+      <div class="channel-name">Asesor comercial externo</div>
+      <div class="channel-desc">1 asesor con red de vendedores en SCZ. Comisi&oacute;n 25% del primer pago (pago &uacute;nico). Ellos prospectan, vos cerr&aacute;s la demo t&eacute;cnica.</div>
+      <span class="channel-badge" style="background:var(--grn-l);color:var(--green)">Mes 1</span>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-tag">03 &mdash; Gui&oacute;n de venta</div>
+  <h2>Exactamente qu&eacute; decir</h2>
+  <div class="big-quote">"No vend&aacute;s software. Vend&aacute; el alivio de <span>no perder m&aacute;s pedidos</span> despu&eacute;s de un live."</div>
+
+  <h3>Mensaje de contacto inicial (DM de TikTok/IG)</h3>
+  <div class="script">
+    <div class="script-head">Mensaje inicial &mdash; primer contacto (despu&eacute;s de ver su live)</div>
+    <div class="script-body">
+      <div class="script-line">
+        <span class="script-who seller">Vos</span>
+        <div class="script-msg">Hola [Nombre], vi tu live de hoy de [producto] &mdash; se ve que vend&eacute;s bien. Tengo una pregunta: &iquest;cu&aacute;nto tiempo te lleva despu&eacute;s del live organizar todos los pedidos que llegaron? &#128517;</div>
+      </div>
+      <div class="script-tip"><strong>Por qu&eacute; funciona:</strong> Demostr&aacute;s que viste su live (no es spam masivo), hac&eacute;s una pregunta que duele, y no vend&eacute;s nada todav&iacute;a. La respuesta honesta siempre es "horas" o "es un caos".</div>
+    </div>
+  </div>
+
+  <h3>Conversaci&oacute;n de calificaci&oacute;n</h3>
+  <div class="script">
+    <div class="script-head">Conversaci&oacute;n despu&eacute;s del primer mensaje &mdash; calificar si es cliente</div>
+    <div class="script-body">
+      <div class="script-line">
+        <span class="script-who buyer">Ellos</span>
+        <div class="script-msg">Jaja s&iacute;, a veces me paso horas en WhatsApp despu&eacute;s del live confirmando todo &#128565;</div>
+      </div>
+      <div class="script-line">
+        <span class="script-who seller">Vos</span>
+        <div class="script-msg">Exacto. Y seguro alguna vez vendiste algo que ya no ten&iacute;as y tuviste que devolver el dinero o quedar mal con el cliente, &iquest;verdad?</div>
+      </div>
+      <div class="script-line">
+        <span class="script-who buyer">Ellos</span>
+        <div class="script-msg">Ugh, s&iacute;, me pas&oacute; con las tallas. La M se agot&oacute; y hab&iacute;a 4 personas que la hab&iacute;an pedido &#128546;</div>
+      </div>
+      <div class="script-line">
+        <span class="script-who seller">Vos</span>
+        <div class="script-msg">Ese problema lo resuelvo. Tengo una plataforma que controla el stock en tiempo real durante tu live &mdash; cuando se agota la M, autom&aacute;ticamente ya no deja reservar m&aacute;s. &iquest;Te interesar&iacute;a ver c&oacute;mo funciona? Te muestro en 15 minutos por videollamada o en persona si est&aacute;s en SCZ.</div>
+      </div>
+      <div class="script-tip"><strong>Clave:</strong> Pas&aacute;s del problema gen&eacute;rico ("organizar pedidos") al dolor espec&iacute;fico ("sobreventas de tallas"). Ahora hac&eacute;s la oferta concreta: demostraci&oacute;n, no cierre todav&iacute;a.</div>
+    </div>
+  </div>
+
+  <h3>Gui&oacute;n de la demostraci&oacute;n (20 minutos)</h3>
+  <div class="script">
+    <div class="script-head">Demo en persona o videollamada &mdash; estructura de 20 minutos</div>
+    <div class="script-body">
+      <div class="script-line">
+        <span class="script-who seller">Min 0&ndash;3</span>
+        <div class="script-msg"><strong>Contexto r&aacute;pido:</strong> "Esto lo constru&iacute; porque vi que miles de vendedores en Bolivia tienen el mismo problema que vos. No hay nada en el mercado boliviano que lo resuelva." No mencionar el precio todav&iacute;a.</div>
+      </div>
+      <div class="script-line">
+        <span class="script-who seller">Min 3&ndash;10</span>
+        <div class="script-msg"><strong>Demo del live en tiempo real:</strong> Abrir la plataforma, crear un live de prueba con 3 productos, mostrar c&oacute;mo se actualiza el stock cuando alguien reserva.<br><br>"Mir&aacute; &mdash; ella acaba de reservar 2 de las tallas M, y ya quedan 3 en vez de 5. Autom&aacute;tico. Sin que vos hagas nada."</div>
+      </div>
+      <div class="script-line">
+        <span class="script-who seller">Min 10&ndash;15</span>
+        <div class="script-msg"><strong>Mostrar el panel post-live:</strong> "Cuando termin&aacute;s el live, ya ten&eacute;s todos los pedidos organizados ac&aacute;: nombre, tel&eacute;fono, producto, talla, total. Un click y se abre WhatsApp con el mensaje armado para mandarle al cliente."</div>
+      </div>
+      <div class="script-line">
+        <span class="script-who seller">Min 15&ndash;20</span>
+        <div class="script-msg"><strong>Cierre:</strong> "&iquest;Cu&aacute;nto hac&eacute;s vos en un live t&iacute;pico?" [Escuchar]. "Si con esto salv&aacute;s aunque sea 3 pedidos que antes perd&iacute;as, ya recuper&aacute;s el mes. El precio es Bs. 300 al mes. Pero antes de que pagues, quiero que lo pruebes 14 d&iacute;as gratis con tu pr&oacute;ximo live real. Sin tarjeta, sin compromiso. &iquest;Cu&aacute;ndo es tu pr&oacute;ximo live?"</div>
+      </div>
+      <div class="script-tip"><strong>Nota importante:</strong> Siempre cerrar con una fecha concreta para el primer live en la plataforma. "&iquest;Cu&aacute;ndo es tu pr&oacute;ximo live?" no es opcional &mdash; es el cierre.</div>
+    </div>
+  </div>
+
+  <h3>Mensaje de seguimiento (si no cierran en la demo)</h3>
+  <div class="script">
+    <div class="script-head">Follow-up &mdash; 24 hs despu&eacute;s sin respuesta</div>
+    <div class="script-body">
+      <div class="script-line">
+        <span class="script-who seller">Vos</span>
+        <div class="script-msg">Hola [Nombre] &#128075; S&eacute; que est&aacute;s ocupada con tus lives. Solo quer&iacute;a recordarte que el trial de 14 d&iacute;as es totalmente gratis &mdash; lo pod&eacute;s probar en tu pr&oacute;ximo live sin arriesgar nada. Si funciona, genial. Si no, no perdiste nada. &iquest;Cu&aacute;ndo es tu pr&oacute;ximo live esta semana?</div>
+      </div>
+      <div class="script-tip"><strong>M&aacute;ximo 2 follow-ups.</strong> Si despu&eacute;s del segundo no hay respuesta, marcar como "fr&iacute;o" y pasar al siguiente. No insistir &mdash; da&ntilde;a la marca.</div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-tag">04 &mdash; Objeciones</div>
+  <h2>Las 6 objeciones m&aacute;s comunes</h2>
+
+  <div class="objection">
+    <div class="obj-q"><span class="obj-icon">&#128172;</span>"Bs. 300 al mes es mucho &mdash; yo no gano tanto"</div>
+    <div class="obj-a"><strong>Respuesta:</strong> "&iquest;Cu&aacute;nto hac&eacute;s en un live t&iacute;pico? Si hac&eacute;s Bs. 2,000 y perd&eacute;s el 10% por sobreventas o pedidos que se pierden, est&aacute;s dejando Bs. 200 por live. Si hac&eacute;s 4 lives al mes, son Bs. 800 que se te van. Los Bs. 300 los recuper&aacute;s con el primer live. Para que lo verifiques, los primeros 14 d&iacute;as son gratis &mdash; hac&eacute; un live y med&iacute; la diferencia."</div>
+  </div>
+  <div class="objection">
+    <div class="obj-q"><span class="obj-icon">&#128172;</span>"Yo ya me manejo con mis papelitos / WhatsApp"</div>
+    <div class="obj-a"><strong>Respuesta:</strong> "Genial, eso significa que ya ten&eacute;s clientes y ya hac&eacute;s ventas. La pregunta es cu&aacute;nto podr&iacute;as vender si no tuvieras que dividir tu atenci&oacute;n entre hablar en el live y anotar pedidos al mismo tiempo. La mayor&iacute;a de los vendedores que lo prueban dicen que duermen mejor despu&eacute;s del live porque ya no tienen miedo de haber perdido algo."</div>
+  </div>
+  <div class="objection">
+    <div class="obj-q"><span class="obj-icon">&#128172;</span>"&iquest;Y si lo pruebo y no me funciona?"</div>
+    <div class="obj-a"><strong>Respuesta:</strong> "Por eso empezamos con 14 d&iacute;as gratis &mdash; para que lo compruebes con tu propio live real antes de pagar. Si no ves diferencia, no hay ning&uacute;n compromiso. <strong>Pero te pido que hagas al menos 2 lives con la plataforma antes de decidir</strong> &mdash; con uno solo no alcanza para ver el impacto completo."</div>
+  </div>
+  <div class="objection">
+    <div class="obj-q"><span class="obj-icon">&#128172;</span>"&iquest;C&oacute;mo s&eacute; que es confiable? No te conozco"</div>
+    <div class="obj-a"><strong>Respuesta:</strong> "Totalmente v&aacute;lido. Soy [nombre], soy de Santa Cruz, y constru&iacute; esto porque vi el problema de primera mano en vendedores de ac&aacute;. No tengo una empresa grande detr&aacute;s &mdash; soy un desarrollador boliviano que quiere resolver esto para el mercado local. Por eso el soporte es directo conmigo por WhatsApp. &iquest;Quer&eacute;s hablar con [cliente beta] que ya lo est&aacute; usando? Te lo conecto."</div>
+  </div>
+  <div class="objection">
+    <div class="obj-q"><span class="obj-icon">&#128172;</span>"&iquest;Mis compradores tienen que instalar algo?"</div>
+    <div class="obj-a"><strong>Respuesta:</strong> "No &mdash; tus compradores no instalan nada. Solo abren un link que vos les mand&aacute;s durante el live. Es como cualquier otra p&aacute;gina web. Vos sos la &uacute;nica que usa la plataforma con tu cuenta."</div>
+  </div>
+  <div class="objection">
+    <div class="obj-q"><span class="obj-icon">&#128172;</span>"&iquest;Integra con TikTok Shop / Instagram Shopping?"</div>
+    <div class="obj-a"><strong>Respuesta:</strong> "Funciona en paralelo a esas plataformas &mdash; no las reemplaza. Vos segu&iacute;s haciendo tu live en TikTok o Facebook como siempre. Lo que hacemos es darte un panel organizado donde tus compradores reservan directamente, con control de stock en tiempo real. Es complementario, no sustituto."</div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-tag">05 &mdash; Trial</div>
+  <h2>Convertir el trial en cliente pagante</h2>
+  <div class="callout orange">
+    <strong>El 80% del churn ocurre en los primeros 14 d&iacute;as.</strong> Un vendedor que hace 2 lives con la plataforma durante el trial tiene 3&times; m&aacute;s probabilidades de convertir que uno que hizo solo 1. La misi&oacute;n del trial es activaci&oacute;n, no venta.
+  </div>
+  <h3>Proceso d&iacute;a a d&iacute;a</h3>
+  <div class="onboarding">
+    <div class="ob-day">
+      <div class="ob-dot" style="border-color:var(--orange)"></div>
+      <div class="ob-label" style="color:var(--orange)">D&iacute;a 1 &mdash; Bienvenida</div>
+      <div class="ob-title">Setup guiado (30 minutos)</div>
+      <div class="ob-desc">Onboarding en persona o videollamada. Cargar los primeros 5 productos con stock. Configurar sus datos de pago (QR y/o datos bancarios). Crear el primer live de prueba. No terminar hasta que el panel est&eacute; listo para el primer live real.</div>
+    </div>
+    <div class="ob-day">
+      <div class="ob-dot" style="border-color:var(--orange)"></div>
+      <div class="ob-label" style="color:var(--orange)">D&iacute;a 2&ndash;3 &mdash; Primer live real</div>
+      <div class="ob-title">Acompa&ntilde;ar el primer live</div>
+      <div class="ob-desc">Estar disponible por WhatsApp durante su primer live. Si es posible, verlo en vivo para ayudar si algo no funciona. Al terminar: preguntarle "&iquest;cu&aacute;ntos pedidos entraron?" y comparar con lo que hubiera anotado a mano. El contraste es el momento de venta m&aacute;s poderoso.</div>
+    </div>
+    <div class="ob-day">
+      <div class="ob-dot" style="border-color:var(--orange)"></div>
+      <div class="ob-label" style="color:var(--orange)">D&iacute;a 4&ndash;7 &mdash; Consolidaci&oacute;n</div>
+      <div class="ob-title">Check-in de mitad de semana</div>
+      <div class="ob-desc">Mensaje de WhatsApp: "&iquest;C&oacute;mo te fue con el live? &iquest;Alguna duda?" &mdash; no vender, solo apoyar. Si tuvo alg&uacute;n problema, resolverlo en menos de 2 horas. La velocidad de respuesta en esta semana define si se queda o cancela.</div>
+    </div>
+    <div class="ob-day">
+      <div class="ob-dot" style="border-color:var(--orange)"></div>
+      <div class="ob-label" style="color:var(--orange)">D&iacute;a 8&ndash;12 &mdash; Segundo live</div>
+      <div class="ob-title">Reforzar el h&aacute;bito</div>
+      <div class="ob-desc">Asegurarse de que haga al menos un segundo live con la plataforma antes del d&iacute;a 14. Mostrar las estad&iacute;sticas del primer live (pedidos, ingresos, tasa de conversi&oacute;n). Eso hace tangible el valor antes del cierre.</div>
+    </div>
+    <div class="ob-day">
+      <div class="ob-dot" style="border-color:var(--green)"></div>
+      <div class="ob-label" style="color:var(--green)">D&iacute;a 13 &mdash; Cierre</div>
+      <div class="ob-title">Conversaci&oacute;n de cierre del trial</div>
+      <div class="ob-desc">Mensaje: "Ma&ntilde;ana se termina tu trial de 14 d&iacute;as. En estos d&iacute;as hiciste X lives y organizaste Y pedidos. &iquest;Quer&eacute;s seguir? El plan es Bs. 300/mes &mdash; pod&eacute;s pagar mensual, o trimestral con descuento del 10%." Si dice que s&iacute;: enviar instrucciones de pago (Tigo Money o transferencia).</div>
+    </div>
+    <div class="ob-day">
+      <div class="ob-dot" style="border-color:var(--green)"></div>
+      <div class="ob-label" style="color:var(--green)">D&iacute;a 14 &mdash; Conversi&oacute;n</div>
+      <div class="ob-title">Confirmar pago o entender por qu&eacute; no</div>
+      <div class="ob-desc">Si pag&oacute;: confirmar activaci&oacute;n. Si no pag&oacute;: llamar directamente para entender la raz&oacute;n. Nunca dejar que el trial termine sin una conversaci&oacute;n. El silencio siempre es "no" en el mercado boliviano.</div>
+    </div>
+  </div>
+
+  <h3>M&eacute;tricas del trial</h3>
+  <table class="kpi-table">
+    <thead><tr><th>M&eacute;trica</th><th>Objetivo</th><th>Si est&aacute; por debajo...</th></tr></thead>
+    <tbody>
+      <tr><td>Lives durante el trial</td><td class="kpi-num">&ge; 2</td><td>Contactar activamente para acompa&ntilde;ar el segundo live</td></tr>
+      <tr><td>Pedidos organizados en la plataforma</td><td class="kpi-num">&ge; 10</td><td>El vendedor no est&aacute; usando la plataforma &mdash; investigar por qu&eacute;</td></tr>
+      <tr><td>Tasa de conversi&oacute;n trial &rarr; pago</td><td class="kpi-num">&ge; 60%</td><td>Revisar el proceso de onboarding d&iacute;a 1</td></tr>
+      <tr><td>Tiempo de respuesta soporte</td><td class="kpi-num">&lt; 2 hs</td><td>Es el factor #1 que diferencia al MVP</td></tr>
+      <tr><td>NPS al final del trial</td><td class="kpi-num">&ge; 30</td><td>Encuesta de 2 preguntas: &iquest;Lo recomendar&iacute;as? &iquest;Qu&eacute; mejorar&iacute;as?</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="section">
+  <div class="section-tag">06 &mdash; Cronograma</div>
+  <h2>Plan semana a semana &mdash; primeros 3 meses</h2>
+  <div class="callout blue">
+    <strong>Regla de los primeros 3 meses:</strong> El MVP tiene que estar listo antes de salir a vender. No se contacta a ning&uacute;n cliente potencial hasta tener el Flujo A completo funcionando en producci&oacute;n.
+  </div>
+
+  <h3>Mes 1 &mdash; Construir y conseguir los primeros 3</h3>
+  <div class="week-grid">
+    <div class="week-card">
+      <div class="week-head"><div class="week-num">1&ndash;2</div><div><div class="week-title">Fase 0 &mdash; Fundaci&oacute;n t&eacute;cnica</div><div class="week-sub">No contactar clientes todav&iacute;a</div></div></div>
+      <div class="week-body">
+        <div class="week-item"><span class="week-check">&#8594;</span>Deploy en Railway funcionando</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>CI/CD configurado</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Supabase + Upstash conectados</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Dominio liveshop.bo apuntando</div>
+        <div class="week-meta">&#127919; Criterio de salida: /api/health/ responde 200 OK</div>
+      </div>
+    </div>
+    <div class="week-card">
+      <div class="week-head"><div class="week-num">3&ndash;4</div><div><div class="week-title">MVP en progreso &mdash; Identificar los 3 primeros</div><div class="week-sub">Hacer lista, no contactar a&uacute;n</div></div></div>
+      <div class="week-body">
+        <div class="week-item"><span class="week-check">&#8594;</span>Hacer lista de 20 vendedores potenciales de SCZ</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Seguir sus lives, entender su producto</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Identificar los 3 m&aacute;s activos y con mayor problema visible</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Preparar mensaje de contacto personalizado</div>
+        <div class="week-meta">&#127919; Output: lista de 20 prospectos rankeados por dolor</div>
+      </div>
+    </div>
+    <div class="week-card">
+      <div class="week-head"><div class="week-num">5&ndash;6</div><div><div class="week-title">MVP listo &mdash; Primeros 3 contactos</div><div class="week-sub">Solo red personal</div></div></div>
+      <div class="week-body">
+        <div class="week-item"><span class="week-check">&#8594;</span>Contactar a los 3 primeros de la red personal</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Demo presencial o videollamada</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Onboarding del primer beta &mdash; acompa&ntilde;ar el primer live</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Registrar bugs y feedback en un doc</div>
+        <div class="week-meta">&#127919; Meta: 1 vendedor hace su primer live en la plataforma</div>
+      </div>
+    </div>
+    <div class="week-card">
+      <div class="week-head"><div class="week-num">7&ndash;8</div><div><div class="week-title">Beta + primeros cierres</div><div class="week-sub">Convertir trial a pago</div></div></div>
+      <div class="week-body">
+        <div class="week-item"><span class="week-check">&#8594;</span>3 betas completando su trial de 14 d&iacute;as</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Conversaci&oacute;n de cierre con cada uno</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Meta: 2 de 3 convierten a pago (Bs. 600 MRR)</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Pedir referidos a los que pagaron</div>
+        <div class="week-meta">&#127919; Meta mes 1: 2 clientes pagantes &middot; MRR Bs. 600</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Mes 2 &mdash; Escalar a 6 clientes</h3>
+  <div class="week-grid">
+    <div class="week-card">
+      <div class="week-head"><div class="week-num">9&ndash;10</div><div><div class="week-title">Prospecci&oacute;n directa en redes</div><div class="week-sub">Primera oleada de DMs</div></div></div>
+      <div class="week-body">
+        <div class="week-item"><span class="week-check">&#8594;</span>Contactar 10 prospectos de la lista v&iacute;a DM</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Usar los testimonios de los 2 primeros clientes</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Visitar Mercado Los Pozos &mdash; 5 contactos presenciales</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Activar asesor comercial externo</div>
+        <div class="week-meta">&#127919; Meta: 5 demos completadas</div>
+      </div>
+    </div>
+    <div class="week-card">
+      <div class="week-head"><div class="week-num">11&ndash;12</div><div><div class="week-title">Onboarding batch 2 + cierre</div><div class="week-sub">Escalar el proceso</div></div></div>
+      <div class="week-body">
+        <div class="week-item"><span class="week-check">&#8594;</span>Onboarding de los 4 nuevos trials</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Publicar primer TikTok de LiveShop Bolivia</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Publicar en 2 grupos de Facebook de vendedores</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Cerrar los trials del batch anterior</div>
+        <div class="week-meta">&#127919; Meta mes 2: 6 clientes pagantes &middot; MRR Bs. 1,800</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Mes 3 &mdash; Llegar a 10 y activar referidos</h3>
+  <div class="week-grid">
+    <div class="week-card">
+      <div class="week-head"><div class="week-num">13&ndash;14</div><div><div class="week-title">Programa de referidos activo</div><div class="week-sub">Crecer con los clientes actuales</div></div></div>
+      <div class="week-body">
+        <div class="week-item"><span class="week-check">&#8594;</span>Pedir referido a cada cliente satisfecho</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Ofrecer 1 mes gratis al que refiera un cliente que pague</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Contactar 15 nuevos prospectos v&iacute;a DM</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Caso de estudio con el vendedor m&aacute;s activo</div>
+        <div class="week-meta">&#127919; Meta: 2 clientes nuevos por referido</div>
+      </div>
+    </div>
+    <div class="week-card">
+      <div class="week-head"><div class="week-num">15&ndash;16</div><div><div class="week-title">Cerrar los 10 clientes</div><div class="week-sub">Primera meta cumplida</div></div></div>
+      <div class="week-body">
+        <div class="week-item"><span class="week-check">&#8594;</span>Onboarding y cierre de los &uacute;ltimos trials</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Encuesta NPS a los 10 clientes</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Documentar los 3 mejores casos de uso</div>
+        <div class="week-item"><span class="week-check">&#8594;</span>Planificar siguiente fase: La Paz</div>
+        <div class="week-meta">&#127919; Meta mes 3: 10 clientes &middot; MRR Bs. 3,000 &#9989;</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-tag">07 &mdash; M&eacute;tricas</div>
+  <h2>C&oacute;mo medir el &eacute;xito</h2>
+  <div class="grid2">
+    <div>
+      <h3>Embudo de adquisici&oacute;n</h3>
+      <table class="kpi-table">
+        <thead><tr><th>Etapa</th><th>Tasa objetivo</th></tr></thead>
+        <tbody>
+          <tr><td>Prospectos contactados &rarr; Responden</td><td class="kpi-num">30%</td></tr>
+          <tr><td>Respuesta &rarr; Demo agendada</td><td class="kpi-num">50%</td></tr>
+          <tr><td>Demo &rarr; Trial activado</td><td class="kpi-num">70%</td></tr>
+          <tr><td>Trial &rarr; Cliente pagante</td><td class="kpi-num">60%</td></tr>
+          <tr><td><strong>Contacto &rarr; Cliente</strong></td><td class="kpi-num">~6%</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:12px;margin-top:8px;color:var(--ink3)">Para 10 clientes necesit&aacute;s hablar con ~170 prospectos o mejorar las tasas intermedias.</p>
+    </div>
+    <div>
+      <h3>M&eacute;tricas de retenci&oacute;n</h3>
+      <table class="kpi-table">
+        <thead><tr><th>M&eacute;trica</th><th>Objetivo mes 3</th></tr></thead>
+        <tbody>
+          <tr><td>Churn mensual</td><td class="kpi-num">&le; 5%</td></tr>
+          <tr><td>Lives por cliente por mes</td><td class="kpi-num">&ge; 4</td></tr>
+          <tr><td>NPS</td><td class="kpi-num">&ge; 30</td></tr>
+          <tr><td>Clientes que refieren</td><td class="kpi-num">&ge; 2</td></tr>
+          <tr><td>LTV estimado (12 meses)</td><td class="kpi-num">Bs. 3,240</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <h3>Se&ntilde;ales de alerta temprana</h3>
+  <ul class="rule-list">
+    <li class="rule-item"><span class="rule-mark">&#9888;</span><span class="rule-text">Cliente no hace ning&uacute;n live en <strong>7 d&iacute;as</strong> &rarr; contactar proactivamente</span></li>
+    <li class="rule-item"><span class="rule-mark">&#9888;</span><span class="rule-text">Cliente hace un live pero <strong>menos de 5 pedidos</strong> en la plataforma &rarr; puede estar usando WhatsApp en paralelo</span></li>
+    <li class="rule-item"><span class="rule-mark">&#9888;</span><span class="rule-text">Cliente no respondi&oacute; el &uacute;ltimo mensaje de check-in en <strong>48 hs</strong> &rarr; llamar</span></li>
+    <li class="rule-item"><span class="rule-mark">&#9888;</span><span class="rule-text">NPS &lt; 20 en la encuesta post-trial &rarr; conversaci&oacute;n urgente de feedback</span></li>
+  </ul>
+</section>
+
+<section class="section">
+  <div class="section-tag">08 &mdash; Materiales</div>
+  <h2>Qu&eacute; crear antes de salir a vender</h2>
+  <div class="material-list">
+    <div class="material">
+      <div class="mat-icon">&#128241;</div>
+      <div><div class="mat-name">Demo en vivo funcional</div><div class="mat-desc">Una cuenta de demo con 5 productos cargados y un live de prueba activo para mostrar en cualquier momento desde el tel&eacute;fono. Actualizar el stock de demo cada semana.</div><span class="mat-status" style="background:var(--red-l);color:var(--red)">Cr&iacute;tico &mdash; antes de la semana 5</span></div>
+    </div>
+    <div class="material">
+      <div class="mat-icon">&#128172;</div>
+      <div><div class="mat-name">Gui&oacute;n de mensajes en Google Docs</div><div class="mat-desc">Los mensajes de primer contacto, calificaci&oacute;n, follow-up y cierre del trial. Adaptados por tipo de vendedor. Copiar y personalizar en 30 segundos.</div><span class="mat-status" style="background:var(--red-l);color:var(--red)">Cr&iacute;tico &mdash; antes de la semana 5</span></div>
+    </div>
+    <div class="material">
+      <div class="mat-icon">&#128202;</div>
+      <div><div class="mat-name">Calculadora de ROI simple</div><div class="mat-desc">"&iquest;Cu&aacute;nto hac&eacute;s por live?" &rarr; muestra cu&aacute;nto est&aacute;s perdiendo por sobreventas y cu&aacute;nto recuperar&iacute;as con LiveShop. Un Google Sheets para usar en la demo.</div><span class="mat-status" style="background:var(--ora-l);color:var(--orange)">Importante &mdash; semana 5</span></div>
+    </div>
+    <div class="material">
+      <div class="mat-icon">&#127909;</div>
+      <div><div class="mat-name">Video demo de 90 segundos</div><div class="mat-desc">Grabaci&oacute;n en pantalla del flujo completo: live activo &rarr; reserva en tiempo real &rarr; stock que baja &rarr; panel post-live ordenado. Para mandar por WhatsApp antes de la demo.</div><span class="mat-status" style="background:var(--ora-l);color:var(--orange)">Importante &mdash; semana 5</span></div>
+    </div>
+    <div class="material">
+      <div class="mat-icon">&#128203;</div>
+      <div><div class="mat-name">Hoja de seguimiento (CRM m&iacute;nimo)</div><div class="mat-desc">Google Sheets con columnas: nombre, tel&eacute;fono, plataforma, fecha contacto, estado (prospecto/demo/trial/cliente), notas. Sin esto, los leads se pierden.</div><span class="mat-status" style="background:var(--red-l);color:var(--red)">Cr&iacute;tico &mdash; antes de la semana 5</span></div>
+    </div>
+    <div class="material">
+      <div class="mat-icon">&#127758;</div>
+      <div><div class="mat-name">Perfil de Instagram/TikTok de LiveShop</div><div class="mat-desc">Bio clara: "Plataforma para vendedores bolivianos que hacen lives". 3&ndash;5 posts mostrando el producto. Necesita existir para dar credibilidad cuando los prospectos te buscan.</div><span class="mat-status" style="background:var(--grn-l);color:var(--green)">&Uacute;til &mdash; semana 6</span></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div>LiveShop Bolivia &mdash; <strong>Plan Go-to-Market v1.0</strong> &middot; Santa Cruz de la Sierra</div>
+  <div>Meta: 10 clientes &middot; Bs. 3,000 MRR &middot; 3 meses</div>
+</footer>
+
+</div>
+</body>
+</html>

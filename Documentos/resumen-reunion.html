@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resumen técnico — Sesión de cambios</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --card: #111827;
+        --card2: #1e293b;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --green: #22c55e;
+        --red: #ef4444;
+        --yellow: #f59e0b;
+        --blue: #38bdf8;
+        --border: #334155;
+        --code-bg: #020617;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        padding: 32px 16px;
+      }
+      .container { max-width: 1000px; margin: 0 auto; }
+
+      /* Header */
+      .header {
+        border-left: 4px solid var(--blue);
+        padding-left: 16px;
+        margin-bottom: 40px;
+      }
+      .header h1 { font-size: 28px; color: #fff; }
+      .header p { color: var(--muted); margin-top: 6px; }
+
+      /* Section */
+      .section { margin-bottom: 36px; }
+      .section-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 20px;
+        font-weight: bold;
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .num {
+        background: var(--blue);
+        color: #000;
+        border-radius: 50%;
+        width: 28px; height: 28px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 14px; font-weight: bold; flex-shrink: 0;
+      }
+      .num.red { background: var(--red); color: #fff; }
+      .num.green { background: var(--green); color: #000; }
+
+      /* Cards */
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 18px 20px;
+        margin-bottom: 12px;
+      }
+      .card h3 { font-size: 15px; margin-bottom: 8px; color: var(--blue); }
+      .card p, .card li { color: var(--muted); font-size: 14px; }
+      .card ul { padding-left: 20px; }
+      .card li { margin: 4px 0; }
+
+      /* Alert boxes */
+      .alert {
+        border-radius: 10px;
+        padding: 14px 18px;
+        margin-bottom: 12px;
+        font-size: 14px;
+        border-left: 4px solid;
+      }
+      .alert-red { background: #1f0a0a; border-color: var(--red); color: #fca5a5; }
+      .alert-yellow { background: #1c1500; border-color: var(--yellow); color: #fcd34d; }
+      .alert-green { background: #0a1f0e; border-color: var(--green); color: #86efac; }
+      .alert-blue { background: #0a1525; border-color: var(--blue); color: #7dd3fc; }
+      .alert strong { display: block; margin-bottom: 4px; font-size: 15px; }
+
+      /* Code */
+      code {
+        background: var(--card2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: monospace;
+        font-size: 13px;
+        color: #e2e8f0;
+      }
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px;
+        overflow-x: auto;
+        font-size: 13px;
+        color: #e2e8f0;
+        margin-top: 10px;
+        font-family: monospace;
+        line-height: 1.5;
+      }
+      .comment { color: #64748b; }
+      .keyword { color: #93c5fd; }
+      .string { color: #86efac; }
+
+      /* Flow diagram */
+      .flow {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-top: 10px;
+      }
+      .flow-step {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 13px;
+        color: var(--muted);
+        padding: 8px 12px;
+        background: var(--card2);
+        border-radius: 6px;
+      }
+      .flow-step .icon { flex-shrink: 0; font-size: 16px; }
+      .flow-arrow { text-align: center; color: var(--border); font-size: 18px; }
+
+      /* Before/after */
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 10px;
+      }
+      @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
+      .before { border-left: 3px solid var(--red); }
+      .after  { border-left: 3px solid var(--green); }
+      .label {
+        font-size: 11px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+      }
+      .label.red { color: var(--red); }
+      .label.green { color: var(--green); }
+
+      /* File table */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin-top: 10px;
+      }
+      th {
+        background: var(--card2);
+        color: var(--blue);
+        padding: 8px 12px;
+        text-align: left;
+        font-weight: bold;
+        border-bottom: 1px solid var(--border);
+      }
+      td {
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+        color: var(--muted);
+        vertical-align: top;
+      }
+      tr:last-child td { border-bottom: none; }
+      .badge {
+        display: inline-block;
+        border-radius: 4px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: bold;
+      }
+      .badge-new { background: #14532d; color: var(--green); }
+      .badge-mod { background: #1c1a00; color: var(--yellow); }
+      .badge-del { background: #2a0a0a; color: var(--red); }
+      .badge-rev { background: #0c1a2e; color: var(--blue); }
+
+      /* Summary footer */
+      .footer-summary {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        text-align: center;
+      }
+      @media (max-width: 600px) { .footer-summary { grid-template-columns: 1fr; } }
+      .stat-value { font-size: 32px; font-weight: bold; }
+      .stat-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+
+      <!-- Header -->
+      <div class="header">
+        <h1>Resumen técnico de cambios — App Zensy</h1>
+        <p>Sesión de trabajo · 26 de marzo 2026 · Frontend P2P Exchange</p>
+      </div>
+
+      <!-- PARTE 1: EL BUG -->
+      <div class="section">
+        <div class="section-title">
+          <div class="num red">1</div>
+          Problema detectado: error al abrir la app (HTTP 404)
+        </div>
+
+        <div class="alert alert-red">
+          <strong>¿Qué veía el usuario?</strong>
+          Al abrir la app aparecía el modal "Ha ocurrido un error / Algo salió mal. Por favor, inténtalo de nuevo." de forma persistente, cada vez que se cerraba volvía a aparecer.
+        </div>
+
+        <div class="card">
+          <h3>¿Qué decían los logs de Android?</h3>
+          <p style="margin-bottom:8px">Los logs estaban llenos de ruido de GPU que ocultaba el error real. Las líneas importantes eran:</p>
+          <pre><span class="comment">// Error real (oculto entre cientos de líneas de GPU):</span>
+grpc error handler: [object Object]
+grpcCallWithRetry: attempt 3 failed [object Object]
+grpcCallWithRetry: reached max retries (3), throwing [object Object]
+Http response at 400 or 500 level, <span style="color:#ef4444">http status code: 404</span></pre>
+          <p style="margin-top:10px">El <code>[object Object]</code> aparece porque los errores gRPC son objetos y Android WebView no los serializa automáticamente — se necesita <code>JSON.stringify</code> para verlos correctamente en logcat.</p>
+        </div>
+
+        <div class="card">
+          <h3>Diagnóstico: ¿qué llamada fallaba?</h3>
+          <div class="flow">
+            <div class="flow-step">
+              <span class="icon">📱</span>
+              <span>La app abre → el componente de balance se monta en la pantalla principal (Home)</span>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">
+              <span class="icon">🔗</span>
+              <span>El hook <code>useWalletBalance</code> llama al servicio gRPC: <code>walletClient.getBobBalance(accountId)</code></span>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">
+              <span class="icon">🌐</span>
+              <span>Se hace un <code>POST</code> al gateway Envoy en:<br><code>https://maelstrom.zen-dev.net/wallet.public.WalletServerPublic/getBobBalance</code></span>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">
+              <span class="icon" style="color:#ef4444">✗</span>
+              <span style="color:#fca5a5">El servidor responde <strong>HTTP 404</strong> — la ruta no existe en el proxy Envoy del entorno dev</span>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">
+              <span class="icon">🔁</span>
+              <span>El cliente gRPC reintenta automáticamente 3 veces (backoff exponencial: 200ms → 400ms → 800ms)</span>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">
+              <span class="icon" style="color:#ef4444">💥</span>
+              <span style="color:#fca5a5">Los 3 intentos fallan → se dispara el modal global de error en <code>errorHandler.ts</code></span>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">
+              <span class="icon">🔄</span>
+              <span>El usuario cierra el modal → <code>notifyModalClosed()</code> resetea el flag → al recargar el balance, el ciclo se repite</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="alert alert-yellow">
+          <strong>Causa raíz (problema de backend/infraestructura)</strong>
+          El método <code>getBobBalance</code> fue agregado recientemente al proto y al cliente frontend, pero el proxy Envoy en el entorno <code>maelstrom.zen-dev.net</code> no tiene configurada esa ruta. El equipo de backend/infra debe agregar el route <code>/wallet.public.WalletServerPublic/getBobBalance</code> en la configuración de Envoy.
+        </div>
+
+        <div class="alert alert-blue">
+          <strong>¿Qué hace getBobBalance?</strong>
+          Es la llamada que obtiene el saldo disponible en BOB (bolivianos) de la cuenta del usuario. Devuelve el balance en micros (ej: <code>1500000</code> = <code>1.50 BOB</code>) que se muestra en la pantalla principal. Hasta que el endpoint sea desplegado en el backend, el balance no podrá cargarse desde ese entorno.
+        </div>
+      </div>
+
+      <!-- PARTE 2: REFACTORING -->
+      <div class="section">
+        <div class="section-title">
+          <div class="num green">2</div>
+          Refactoring aplicado: flujo QR centralizado en contexto
+        </div>
+
+        <div class="alert alert-blue">
+          <strong>Objetivo del cambio</strong>
+          Al tocar el botón <strong>Retirar</strong> en Home, el usuario ahora pasa exactamente por el mismo flujo de entrada que el botón <strong>QR del footer</strong>: verificación KYC, modales de estado, apertura del scanner. Antes, Retirar iba directamente a <code>/withdraw</code> sin verificar KYC.
+        </div>
+
+        <div class="card">
+          <h3>¿Por qué era un problema el diseño anterior?</h3>
+          <p>La lógica de verificación KYC (chequeos de estado, modales) estaba duplicada y distribuida:</p>
+          <ul style="margin-top:8px">
+            <li>El botón QR del footer tenía sus propios estados (<code>useState</code>) y modales KYC</li>
+            <li>El botón Retirar de Home tenía un hook separado (<code>useQRPaymentTrigger</code>) con sus propios estados y modales</li>
+            <li>Resultado: dos instancias independientes → potencial de mostrar modales duplicados si se activaban desde distintos puntos</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Solución: contexto compartido <code>QrPaymentEntryContext</code></h3>
+          <p style="margin-bottom:10px">Se creó un Context Provider que centraliza todo el flujo de entrada QR. Hay una sola instancia de estados y modales para toda la app.</p>
+
+          <div class="grid2">
+            <div class="card before" style="margin:0">
+              <div class="label red">ANTES — Hook por componente</div>
+              <pre style="font-size:12px"><span class="comment">// QRButton usaba:</span>
+useQRPaymentTrigger()
+<span class="comment">// → sus propios useState KYC</span>
+<span class="comment">// → sus propios modales</span>
+
+<span class="comment">// Balance usaba:</span>
+useQRPaymentTrigger()
+<span class="comment">// → sus propios useState KYC</span>
+<span class="comment">// → sus propios modales</span>
+
+<span class="comment">// = 2 instancias separadas</span></pre>
+            </div>
+            <div class="card after" style="margin:0">
+              <div class="label green">AHORA — Contexto compartido</div>
+              <pre style="font-size:12px"><span class="comment">// Un solo Provider en app-content:</span>
+&lt;QrPaymentEntryProvider&gt;
+  <span class="comment">// → un solo useState KYC</span>
+  <span class="comment">// → un solo set de modales</span>
+&lt;/QrPaymentEntryProvider&gt;
+
+<span class="comment">// QRButton y Balance consumen:</span>
+useQrPaymentEntry()
+<span class="comment">// = 1 instancia compartida</span></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Flujo completo al tocar Retirar o QR (ahora idéntico)</h3>
+          <div class="flow">
+            <div class="flow-step">
+              <span class="icon">👆</span>
+              <span>Usuario toca <strong>Retirar</strong> (Home) o <strong>QR</strong> (footer) → llaman <code>startQrPaymentEntryFlow()</code></span>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">
+              <span class="icon">🔍</span>
+              <span>Se consulta el estado KYC del usuario vía <code>getIdentityRegistration(accountId)</code></span>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">
+              <span class="icon">🔀</span>
+              <span>Según el estado devuelto, se muestra el modal correspondiente:</span>
+            </div>
+            <div class="flow-step" style="flex-direction:column; gap:6px; padding-left:32px">
+              <div>• <code>REJECTED_UNDERAGE</code> → Modal: usuario menor de edad bloqueado</div>
+              <div>• <code>INACTIVE</code> → Modal: KYC rechazado</div>
+              <div>• <code>REQUIRES_ACTION</code> → Modal: KYC en revisión</div>
+              <div>• Otro estado no-ACTIVE → Modal: iniciar verificación MetaMap</div>
+              <div style="color:#86efac">• <code>ACTIVE</code> → abre el scanner QR ✓</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PARTE 3: ARCHIVOS MODIFICADOS -->
+      <div class="section">
+        <div class="section-title">
+          <div class="num">3</div>
+          Archivos modificados
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Archivo</th>
+              <th>Acción</th>
+              <th>Descripción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>context/QrPaymentEntryContext.tsx</code></td>
+              <td><span class="badge badge-new">NUEVO</span></td>
+              <td>Provider centralizado con lógica KYC, estados y modales. Expone <code>startQrPaymentEntryFlow()</code> e <code>isCheckingEntry</code></td>
+            </tr>
+            <tr>
+              <td><code>components/app-content/index.tsx</code></td>
+              <td><span class="badge badge-mod">MODIFICADO</span></td>
+              <td>Se envuelve el árbol autenticado con <code>&lt;QrPaymentEntryProvider&gt;</code> dentro de <code>SessionContext.Provider</code></td>
+            </tr>
+            <tr>
+              <td><code>components/footer-nav/qr-button/index.tsx</code></td>
+              <td><span class="badge badge-mod">MODIFICADO</span></td>
+              <td>Reemplazado <code>useQRPaymentTrigger()</code> por <code>useQrPaymentEntry()</code>. Eliminados modales locales y código comentado</td>
+            </tr>
+            <tr>
+              <td><code>components/balance/index.tsx</code></td>
+              <td><span class="badge badge-mod">MODIFICADO</span></td>
+              <td>Botón Retirar ahora llama <code>startQrPaymentEntryFlow()</code>. Eliminados <code>kycModals</code> y lógica de navegación a <code>/withdraw</code></td>
+            </tr>
+            <tr>
+              <td><code>hooks/useQRPaymentTrigger.tsx</code></td>
+              <td><span class="badge badge-del">ELIMINADO</span></td>
+              <td>Reemplazado por el contexto. Ya no se necesita</td>
+            </tr>
+            <tr>
+              <td><code>utils/errorHandler.ts</code></td>
+              <td><span class="badge badge-rev">SIN CAMBIO</span></td>
+              <td>Se evaluó un workaround para suprimir el modal 404, pero se descartó a favor de la solución de contexto. El archivo quedó sin modificaciones</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- PARTE 4: PENDIENTES -->
+      <div class="section">
+        <div class="section-title">
+          <div class="num red">4</div>
+          Pendiente — Acción requerida del equipo de Backend/Infra
+        </div>
+
+        <div class="alert alert-red">
+          <strong>El error 404 NO está resuelto — requiere acción en el backend</strong>
+          El endpoint <code>getBobBalance</code> no está configurado en el proxy Envoy del entorno dev. Hasta que se corrija, el saldo en la pantalla principal no cargará correctamente en ese entorno.
+        </div>
+
+        <div class="card">
+          <h3>Acción requerida</h3>
+          <p>Agregar la ruta en la configuración de Envoy en <code>maelstrom.zen-dev.net</code>:</p>
+          <pre>Servicio: wallet.public.WalletServerPublic
+Método:   getBobBalance
+Ruta:     /wallet.public.WalletServerPublic/getBobBalance</pre>
+          <p style="margin-top:10px">Una vez desplegado en el backend, el balance cargará automáticamente sin ningún cambio adicional en el frontend.</p>
+        </div>
+      </div>
+
+      <!-- Footer stats -->
+      <div class="footer-summary">
+        <div>
+          <div class="stat-value" style="color: var(--green)">5</div>
+          <div class="stat-label">archivos modificados</div>
+        </div>
+        <div>
+          <div class="stat-value" style="color: var(--blue)">1</div>
+          <div class="stat-label">contexto nuevo creado</div>
+        </div>
+        <div>
+          <div class="stat-value" style="color: var(--yellow)">1</div>
+          <div class="stat-label">pendiente en backend</div>
+        </div>
+      </div>
+
+    </div>
+  </body>
+</html>

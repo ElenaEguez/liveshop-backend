@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiveShop Bolivia — Diagramas Técnicos</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #0F172A; color: #E2E8F0; }
+  
+  .header {
+    background: linear-gradient(135deg, #1A56DB 0%, #0E4DA4 100%);
+    padding: 40px;
+    text-align: center;
+    border-bottom: 4px solid #60A5FA;
+  }
+  .header h1 { font-size: 2.4rem; font-weight: 800; color: white; margin-bottom: 8px; }
+  .header p { font-size: 1.1rem; color: #BFDBFE; }
+  
+  .nav {
+    background: #1E293B;
+    padding: 16px 40px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #334155;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .nav a {
+    color: #93C5FD; text-decoration: none; font-size: 0.85rem; font-weight: 600;
+    padding: 6px 14px; border-radius: 20px; background: #1A56DB22;
+    border: 1px solid #1A56DB44; transition: all 0.2s;
+  }
+  .nav a:hover { background: #1A56DB; color: white; }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 40px; }
+  
+  .section {
+    margin-bottom: 60px;
+    background: #1E293B;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid #334155;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .section-header {
+    background: linear-gradient(135deg, #1A56DB 0%, #0E4DA4 100%);
+    padding: 20px 32px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .section-header .num {
+    width: 40px; height: 40px; background: rgba(255,255,255,0.2);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; font-weight: 800; color: white; flex-shrink: 0;
+  }
+  .section-header h2 { font-size: 1.4rem; font-weight: 700; color: white; }
+  .section-header p { font-size: 0.9rem; color: #BFDBFE; margin-top: 4px; }
+  .section-body { padding: 32px; }
+  
+  .diagram-wrap {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    overflow-x: auto;
+  }
+  .diagram-wrap .mermaid { display: flex; justify-content: center; }
+  
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+  
+  .label { font-size: 0.8rem; font-weight: 700; color: #64748B; text-transform: uppercase;
+    letter-spacing: 0.1em; margin-bottom: 12px; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #94A3B8;
+  }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+  .sprint-board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 8px;
+  }
+  @media (max-width: 1000px) { .sprint-board { grid-template-columns: repeat(2, 1fr); } }
+  
+  .sprint-col { background: #0F172A; border-radius: 10px; padding: 16px; }
+  .sprint-col-header {
+    font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid;
+  }
+  .sprint-card {
+    background: #1E293B; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+    border-left: 3px solid; font-size: 0.82rem;
+  }
+  .sprint-card .story-id { font-size: 0.7rem; color: #64748B; font-weight: 600; margin-bottom: 2px; }
+  .sprint-card .story-title { color: #E2E8F0; font-weight: 600; margin-bottom: 4px; }
+  .sprint-card .points { font-size: 0.7rem; color: #94A3B8; }
+
+  .col-todo { border-color: #64748B; }
+  .col-todo .sprint-col-header { color: #94A3B8; border-color: #475569; }
+  .col-inprogress { border-color: #D97706; }
+  .col-inprogress .sprint-col-header { color: #FCD34D; border-color: #D97706; }
+  .col-review { border-color: #7C3AED; }
+  .col-review .sprint-col-header { color: #C4B5FD; border-color: #7C3AED; }
+  .col-done { border-color: #16A34A; }
+  .col-done .sprint-col-header { color: #86EFAC; border-color: #16A34A; }
+
+  .card-alta { border-color: #EF4444; }
+  .card-media { border-color: #F59E0B; }
+  .card-baja { border-color: #10B981; }
+  
+  .badge {
+    display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem;
+    font-weight: 700; text-transform: uppercase;
+  }
+  .badge-alta { background: #FEF2F2; color: #DC2626; }
+  .badge-media { background: #FFFBEB; color: #D97706; }
+
+  .er-table {
+    background: #0F172A; border-radius: 10px; overflow: hidden;
+    border: 1px solid #334155; margin-bottom: 16px;
+  }
+  .er-table-header {
+    background: #1A56DB; padding: 10px 16px;
+    font-weight: 700; font-size: 0.9rem; color: white;
+  }
+  .er-table-row { padding: 8px 16px; border-bottom: 1px solid #1E293B; font-size: 0.82rem; display: flex; gap: 12px; align-items: center; }
+  .er-table-row:last-child { border-bottom: none; }
+  .field-name { color: #60A5FA; font-family: 'Courier New', monospace; min-width: 180px; }
+  .field-type { color: #86EFAC; font-family: 'Courier New', monospace; min-width: 130px; }
+  .field-note { color: #94A3B8; font-size: 0.78rem; }
+  .pk { color: #FCD34D; font-weight: 700; }
+  .fk { color: #F9A8D4; }
+
+  .arch-layer {
+    border: 1px solid #334155; border-radius: 12px; padding: 16px;
+    margin-bottom: 12px; background: #0F172A;
+  }
+  .arch-layer-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.1em; color: #64748B; margin-bottom: 12px; }
+  .arch-components { display: flex; flex-wrap: wrap; gap: 8px; }
+  .arch-chip {
+    padding: 8px 14px; border-radius: 8px; font-size: 0.82rem; font-weight: 600;
+    border: 1px solid;
+  }
+
+  .flow-steps { display: flex; flex-direction: column; gap: 0; }
+  .flow-step {
+    display: flex; align-items: flex-start; gap: 16px; padding: 16px 0;
+    border-bottom: 1px solid #1E293B; position: relative;
+  }
+  .flow-step:last-child { border-bottom: none; }
+  .step-num {
+    width: 36px; height: 36px; background: #1A56DB; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 0.9rem; color: white; flex-shrink: 0;
+  }
+  .step-content h4 { font-size: 0.9rem; font-weight: 700; color: #E2E8F0; margin-bottom: 4px; }
+  .step-content p { font-size: 0.82rem; color: #94A3B8; line-height: 1.5; }
+  .step-tech { font-size: 0.7rem; color: #60A5FA; font-family: 'Courier New', monospace; margin-top: 4px; }
+
+  .roadmap-row {
+    display: flex; gap: 0; margin-top: 8px;
+  }
+  .roadmap-sprint {
+    flex: 1; padding: 12px; border-right: 1px solid #334155; 
+  }
+  .roadmap-sprint:last-child { border-right: none; }
+  .rs-num { font-size: 0.7rem; color: #64748B; font-weight: 700; text-transform: uppercase; }
+  .rs-title { font-size: 0.78rem; font-weight: 600; color: #E2E8F0; margin: 4px 0; }
+  .rs-date { font-size: 0.68rem; color: #64748B; }
+  .rs-epics { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .rs-epic { font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 600; }
+  .ep-auth { background: #1A56DB22; color: #60A5FA; border: 1px solid #1A56DB44; }
+  .ep-prod { background: #10B98122; color: #6EE7B7; border: 1px solid #10B98144; }
+  .ep-live { background: #7C3AED22; color: #C4B5FD; border: 1px solid #7C3AED44; }
+  .ep-order { background: #F59E0B22; color: #FCD34D; border: 1px solid #F59E0B44; }
+  .ep-ai { background: #EC489922; color: #F9A8D4; border: 1px solid #EC489944; }
+  .ep-pay { background: #EF444422; color: #FCA5A5; border: 1px solid #EF444444; }
+  .ep-analytics { background: #06B6D422; color: #67E8F9; border: 1px solid #06B6D444; }
+  .ep-notif { background: #84CC1622; color: #BEF264; border: 1px solid #84CC1644; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🛒 LiveShop Bolivia</h1>
+  <p>Diagramas Técnicos — Documentación Scrum v1.0 | Febrero 2026</p>
+</div>
+
+<nav class="nav">
+  <a href="#arquitectura">🏗️ Arquitectura</a>
+  <a href="#er">🗄️ Modelo de Datos</a>
+  <a href="#flujo-live">🎬 Flujo del Live</a>
+  <a href="#flujo-pedido">📦 Flujo de Pedido</a>
+  <a href="#flujo-ia">🤖 Flujo IA</a>
+  <a href="#sprint1">🏃 Sprint 1 Board</a>
+  <a href="#roadmap">🗺️ Roadmap</a>
+  <a href="#websocket">⚡ WebSocket</a>
+</nav>
+
+<div class="container">
+
+  <!-- 1. ARQUITECTURA GENERAL -->
+  <div class="section" id="arquitectura">
+    <div class="section-header">
+      <div class="num">1</div>
+      <div>
+        <h2>Arquitectura General del Sistema</h2>
+        <p>Stack completo desde el frontend hasta la infraestructura</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="diagram-wrap">
+        <div class="mermaid">
+graph TB
+    subgraph CLIENT["🌐 Clientes"]
+        FE["Angular SPA<br/>(Dashboard Vendedor)"]
+        MB["Mobile Browser<br/>(Compradores)"]
+    end
+
+    subgraph API_LAYER["⚡ API Layer — Django (Railway)"]
+        DRF["Django REST Framework<br/>API v1 — /api/v1/"]
+        WS["Django Channels<br/>WebSocket — ws://"]
+        AUTH["JWT Auth<br/>+ Facebook OAuth"]
+    end
+
+    subgraph SERVICES["🔧 Servicios"]
+        CELERY["Celery Workers<br/>Tareas Asíncronas"]
+        AI["AI Service<br/>Gemini + Groq"]
+    end
+
+    subgraph DATA["🗄️ Datos"]
+        PG["PostgreSQL<br/>Base de Datos"]
+        REDIS["Redis<br/>Cache + Channel Layer"]
+        CLOUD["Cloudinary<br/>Imágenes"]
+    end
+
+    subgraph EXTERNAL["🔌 APIs Externas"]
+        TIGO["Tigo Money API<br/>Pagos Bolivia"]
+        BANCO["Banco Unión<br/>QR Pagos"]
+        TWILIO["Twilio / Meta<br/>WhatsApp"]
+        GEMINI["Google Gemini API<br/>NLP Gratuito"]
+        GROQ["Groq API<br/>LLaMA3 Rápido"]
+    end
+
+    FE -->|HTTPS REST| DRF
+    FE -->|WSS| WS
+    MB -->|HTTPS| DRF
+    MB -->|WSS| WS
+
+    DRF --> AUTH
+    DRF --> PG
+    DRF --> REDIS
+    DRF --> CLOUD
+    DRF --> CELERY
+
+    WS --> REDIS
+    WS --> PG
+
+    CELERY --> AI
+    CELERY --> TWILIO
+    CELERY --> PG
+
+    AI --> GEMINI
+    AI --> GROQ
+
+    DRF --> TIGO
+    DRF --> BANCO
+
+    style CLIENT fill:#1E3A5F,stroke:#60A5FA,color:#E2E8F0
+    style API_LAYER fill:#1A2E1A,stroke:#86EFAC,color:#E2E8F0
+    style SERVICES fill:#2D1B4E,stroke:#C4B5FD,color:#E2E8F0
+    style DATA fill:#1E293B,stroke:#FCD34D,color:#E2E8F0
+    style EXTERNAL fill:#3B1A1A,stroke:#FCA5A5,color:#E2E8F0
+        </div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#60A5FA"></div> Capa Cliente (Angular + Mobile)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#86EFAC"></div> Capa API (Django + Channels)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#C4B5FD"></div> Servicios (Celery + AI)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#FCD34D"></div> Datos (PostgreSQL + Redis)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#FCA5A5"></div> APIs Externas (Pagos + Notif.)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. MODELO DE DATOS / ER -->
+  <div class="section" id="er">
+    <div class="section-header">
+      <div class="num">2</div>
+      <div>
+        <h2>Modelo de Datos — Entidades Principales</h2>
+        <p>Diagrama Entidad-Relación del sistema</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="diagram-wrap">
+        <div class="mermaid">
+erDiagram
+    USER {
+        uuid id PK
+        string email
+        string name
+        string password_hash
+        datetime created_at
+    }
+    STORE {
+        uuid id PK
+        uuid user_id FK
+        string name
+        string slug
+        string logo_url
+        string whatsapp
+        string description
+    }
+    PRODUCT {
+        uuid id PK
+        uuid store_id FK
+        string name
+        text description
+        decimal price_bs
+        integer stock
+        string status
+        string sku
+    }
+    PRODUCT_VARIANT {
+        uuid id PK
+        uuid product_id FK
+        string attribute
+        string value
+        integer stock
+        decimal price_bs
+    }
+    LIVE_STREAM {
+        uuid id PK
+        uuid store_id FK
+        string title
+        string platform
+        datetime scheduled_at
+        string status
+        string share_token
+    }
+    STREAM_PRODUCT {
+        uuid id PK
+        uuid stream_id FK
+        uuid product_id FK
+        boolean is_active
+        integer display_order
+    }
+    ORDER {
+        uuid id PK
+        uuid stream_id FK
+        uuid store_id FK
+        string buyer_name
+        string buyer_phone
+        decimal total_bs
+        string status
+        string order_number
+        datetime created_at
+    }
+    ORDER_ITEM {
+        uuid id PK
+        uuid order_id FK
+        uuid product_id FK
+        uuid variant_id FK
+        integer quantity
+        decimal unit_price_bs
+    }
+    PAYMENT {
+        uuid id PK
+        uuid order_id FK
+        string method
+        decimal amount_bs
+        string status
+        string external_tx_id
+        datetime paid_at
+    }
+    CHAT_MESSAGE {
+        uuid id PK
+        uuid stream_id FK
+        string buyer_identifier
+        text content
+        boolean parsed_as_order
+        float ai_confidence
+    }
+
+    USER ||--o{ STORE : "tiene"
+    STORE ||--o{ PRODUCT : "tiene"
+    STORE ||--o{ LIVE_STREAM : "crea"
+    PRODUCT ||--o{ PRODUCT_VARIANT : "tiene"
+    LIVE_STREAM ||--o{ STREAM_PRODUCT : "incluye"
+    LIVE_STREAM ||--o{ ORDER : "genera"
+    LIVE_STREAM ||--o{ CHAT_MESSAGE : "contiene"
+    ORDER ||--o{ ORDER_ITEM : "contiene"
+    ORDER ||--o| PAYMENT : "tiene"
+    PRODUCT ||--o{ ORDER_ITEM : "referenciado en"
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. FLUJO DEL LIVE -->
+  <div class="section" id="flujo-live">
+    <div class="section-header">
+      <div class="num">3</div>
+      <div>
+        <h2>Flujo Completo de una Transmisión en Vivo</h2>
+        <p>Ciclo de vida: Pre-live → En Vivo → Post-live</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TD
+    A([🛒 Vendedor inicia sesión]) --> B[Crea transmisión\n título, productos, plataforma]
+    B --> C[Sistema genera link único\n liveshop.bo/live/abc123]
+    C --> D{Vendedor comparte\n link en TikTok/FB/IG}
+    D --> E([👥 Compradores acceden al link])
+    
+    E --> F[Vista pública del live\n producto activo + precio]
+    F --> G{Comprador\n hace pedido}
+    
+    G -->|Formulario web| H[Pedido directo\n nombre + talla + cantidad]
+    G -->|Escribe en chat| I[Mensaje de texto\n 'quiero 2 rojo talla M']
+    
+    H --> J[Order creada\n estado: Pendiente]
+    I --> K[🤖 IA Gemini/Groq\n parsea mensaje]
+    K --> L{Confianza\n ≥ 85%?}
+    L -->|Sí| J
+    L -->|No| M[Solicita confirmación\n al comprador]
+    M --> J
+    
+    J --> N[WebSocket broadcast\n Nuevo pedido en panel del vendedor]
+    N --> O[Vendedor ve pedido\n en tiempo real]
+    
+    O --> P{Vendedor\n finaliza live}
+    P --> Q[Estado: Finalizada\n Celery task disparada]
+    Q --> R[Resumen automático\n total pedidos + monto]
+    Q --> S[WhatsApp enviado\n a cada comprador]
+    Q --> T[CSV de pedidos\n disponible para exportar]
+    
+    style A fill:#1A56DB,color:white
+    style E fill:#16A34A,color:white
+    style K fill:#7C3AED,color:white
+    style J fill:#0E4DA4,color:white
+    style Q fill:#D97706,color:white
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. FLUJO DE PEDIDO IA -->
+  <div class="section" id="flujo-pedido">
+    <div class="section-header">
+      <div class="num">4</div>
+      <div>
+        <h2>Flujo Detallado — Pedido en Tiempo Real (WebSocket)</h2>
+        <p>Secuencia de comunicación entre todos los actores</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="diagram-wrap">
+        <div class="mermaid">
+sequenceDiagram
+    actor Comprador
+    participant Browser as Browser del Comprador
+    participant WS as Django Channels (WebSocket)
+    participant DB as PostgreSQL
+    participant AI as AI Service (Gemini/Groq)
+    participant Panel as Panel del Vendedor
+    participant Celery as Celery + WhatsApp
+
+    Comprador->>Browser: Escribe "quiero 2 rojo talla M"
+    Browser->>WS: WebSocket message {type: "order_intent", text: "quiero 2 rojo talla M", stream_id: "abc"}
+    
+    WS->>AI: parse_order_intent(text, stream_context)
+    AI-->>WS: {product: "camiseta", color: "rojo", size: "M", qty: 2, confidence: 0.94}
+    
+    WS->>DB: Crear Order + OrderItems
+    DB-->>WS: order_id: "ORD-2847"
+    
+    WS-->>Browser: {type: "order_confirmed", order_number: "ORD-2847", total: "Bs. 80"}
+    Browser-->>Comprador: ✅ Pedido confirmado: ORD-2847
+
+    WS->>Panel: broadcast {type: "new_order", order: {...}, count: 15}
+    Panel-->>Vendedor: 🔔 Nuevo pedido en panel (tiempo real)
+
+    Note over Comprador,Celery: Post-live (asíncrono)
+    Celery->>Comprador: WhatsApp: "Tu pedido ORD-2847 está confirmado..."
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. FLUJO IA -->
+  <div class="section" id="flujo-ia">
+    <div class="section-header">
+      <div class="num">5</div>
+      <div>
+        <h2>Flujo del Módulo de IA — Parsing de Pedidos</h2>
+        <p>Lógica de decisión: Gemini → Groq → Fallback manual</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TD
+    A[Mensaje del chat\n 'uno pa mi la del azul talla 38'] --> B[Preprocesado\n limpieza + normalización]
+    B --> C{¿Contiene\n intención de compra?}
+    
+    C -->|No| Z[Ignorar mensaje\n o responder con chatbot]
+    C -->|Sí| D[Construir prompt\n con contexto del live\n productos activos + variaciones]
+    
+    D --> E[Llamada a Gemini API\n gemini-1.5-flash free tier]
+    E --> F{¿Respuesta\n exitosa?}
+    
+    F -->|Error / timeout| G[Fallback: Groq API\n llama3-8b-8192]
+    F -->|OK| H[JSON parseado\n {product, color, size, qty}]
+    G --> H
+    
+    H --> I{Confianza\n del modelo ≥ 85%?}
+    
+    I -->|≥ 85%| J[✅ Crear Order automáticamente\n en PostgreSQL]
+    I -->|65-84%| K[Confirmar con comprador:\n '¿Quieres 1 camiseta azul talla 38?']
+    I -->|< 65%| L[Respuesta genérica:\n 'Para pedir, usa el botón Pedir Ahora']
+    
+    K --> M{¿Comprador\n confirma?}
+    M -->|Sí| J
+    M -->|No| N[Pedido cancelado\n Log para mejorar modelo]
+    
+    J --> O[WebSocket broadcast\n al panel del vendedor]
+    J --> P[WhatsApp confirmación\n vía Celery task]
+    
+    style E fill:#4285F4,color:white
+    style G fill:#16A34A,color:white
+    style J fill:#0E4DA4,color:white
+    style K fill:#D97706,color:white
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. SPRINT 1 BOARD -->
+  <div class="section" id="sprint1">
+    <div class="section-header">
+      <div class="num">6</div>
+      <div>
+        <h2>Sprint 1 — Kanban Board</h2>
+        <p>03/03/2026 → 14/03/2026 — Sprint Goal: Auth + Onboarding + Catálogo</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="sprint-board">
+        <div class="sprint-col">
+          <div class="sprint-col-header col-todo">📋 To Do</div>
+          <div class="sprint-card card-alta">
+            <div class="story-id">US-001</div>
+            <div class="story-title">Registro de Vendedor</div>
+            <div class="points">8 pts · Backend · <span class="badge badge-alta">Alta</span></div>
+          </div>
+          <div class="sprint-card card-alta">
+            <div class="story-id">US-003</div>
+            <div class="story-title">Perfil de Tienda</div>
+            <div class="points">5 pts · Full Stack · <span class="badge badge-alta">Alta</span></div>
+          </div>
+          <div class="sprint-card card-alta">
+            <div class="story-id">US-005</div>
+            <div class="story-title">Crear Producto</div>
+            <div class="points">8 pts · Full Stack · <span class="badge badge-alta">Alta</span></div>
+          </div>
+          <div class="sprint-card card-media">
+            <div class="story-id">SETUP-02</div>
+            <div class="story-title">Angular + Tailwind + Routing</div>
+            <div class="points">2 pts · Frontend · <span class="badge badge-media">Media</span></div>
+          </div>
+        </div>
+        <div class="sprint-col">
+          <div class="sprint-col-header col-inprogress">⚡ In Progress</div>
+          <div class="sprint-card card-alta">
+            <div class="story-id">SETUP-01</div>
+            <div class="story-title">Django + Channels + Redis Setup</div>
+            <div class="points">3 pts · DevOps · <span class="badge badge-alta">Alta</span></div>
+          </div>
+          <div class="sprint-card card-alta">
+            <div class="story-id">US-002</div>
+            <div class="story-title">Login y Sesión Segura</div>
+            <div class="points">5 pts · Backend · <span class="badge badge-alta">Alta</span></div>
+          </div>
+        </div>
+        <div class="sprint-col">
+          <div class="sprint-col-header col-review">🔍 In Review</div>
+          <div style="text-align:center;padding:20px;color:#64748B;font-size:0.8rem;">
+            Sin tarjetas en revisión
+          </div>
+        </div>
+        <div class="sprint-col">
+          <div class="sprint-col-header col-done">✅ Done</div>
+          <div class="sprint-card card-media">
+            <div class="story-id">US-004</div>
+            <div class="story-title">Recuperar Contraseña</div>
+            <div class="points">3 pts · Backend · <span class="badge badge-media">Media</span></div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px;display:flex;gap:20px;flex-wrap:wrap">
+        <div style="background:#0F172A;border-radius:8px;padding:12px 20px;font-size:0.82rem;">
+          <div style="color:#64748B;font-size:0.7rem;text-transform:uppercase;margin-bottom:4px">Puntos Completados</div>
+          <div style="color:#86EFAC;font-size:1.4rem;font-weight:800">3 / 34 pts</div>
+        </div>
+        <div style="background:#0F172A;border-radius:8px;padding:12px 20px;font-size:0.82rem;">
+          <div style="color:#64748B;font-size:0.7rem;text-transform:uppercase;margin-bottom:4px">Historias Completadas</div>
+          <div style="color:#FCD34D;font-size:1.4rem;font-weight:800">1 / 7</div>
+        </div>
+        <div style="background:#0F172A;border-radius:8px;padding:12px 20px;font-size:0.82rem;">
+          <div style="color:#64748B;font-size:0.7rem;text-transform:uppercase;margin-bottom:4px">Días Restantes</div>
+          <div style="color:#60A5FA;font-size:1.4rem;font-weight:800">10</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. ROADMAP -->
+  <div class="section" id="roadmap">
+    <div class="section-header">
+      <div class="num">7</div>
+      <div>
+        <h2>Roadmap de Sprints — 7 Sprints hasta Beta</h2>
+        <p>Marzo → Junio 2026 | Meta: Lanzamiento beta con vendedores pagantes en SCZ</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div style="background:#0F172A;border-radius:12px;overflow:hidden;">
+        <div class="roadmap-row">
+          <div class="roadmap-sprint" style="background:#1A56DB22;border-right:1px solid #334155">
+            <div class="rs-num">Sprint 1</div>
+            <div class="rs-title">Auth & Catálogo</div>
+            <div class="rs-date">03/03 → 14/03</div>
+            <div class="rs-epics">
+              <span class="rs-epic ep-auth">EP-01</span>
+              <span class="rs-epic ep-prod">EP-02</span>
+            </div>
+          </div>
+          <div class="roadmap-sprint" style="border-right:1px solid #334155">
+            <div class="rs-num">Sprint 2</div>
+            <div class="rs-title">Crear Transmisiones</div>
+            <div class="rs-date">17/03 → 28/03</div>
+            <div class="rs-epics">
+              <span class="rs-epic ep-prod">EP-02</span>
+              <span class="rs-epic ep-live">EP-03</span>
+            </div>
+          </div>
+          <div class="roadmap-sprint" style="border-right:1px solid #334155">
+            <div class="rs-num">Sprint 3</div>
+            <div class="rs-title">Live en Tiempo Real</div>
+            <div class="rs-date">31/03 → 11/04</div>
+            <div class="rs-epics">
+              <span class="rs-epic ep-live">EP-03</span>
+              <span class="rs-epic ep-order">EP-04</span>
+            </div>
+          </div>
+          <div class="roadmap-sprint" style="border-right:1px solid #334155">
+            <div class="rs-num">Sprint 4</div>
+            <div class="rs-title">IA Parsing & Chatbot</div>
+            <div class="rs-date">14/04 → 25/04</div>
+            <div class="rs-epics">
+              <span class="rs-epic ep-order">EP-04</span>
+              <span class="rs-epic ep-ai">EP-05</span>
+            </div>
+          </div>
+          <div class="roadmap-sprint" style="border-right:1px solid #334155">
+            <div class="rs-num">Sprint 5</div>
+            <div class="rs-title">Pagos Tigo + WhatsApp</div>
+            <div class="rs-date">28/04 → 09/05</div>
+            <div class="rs-epics">
+              <span class="rs-epic ep-pay">EP-06</span>
+              <span class="rs-epic ep-notif">EP-08</span>
+            </div>
+          </div>
+          <div class="roadmap-sprint" style="border-right:1px solid #334155">
+            <div class="rs-num">Sprint 6</div>
+            <div class="rs-title">QR Banco Unión + Analytics</div>
+            <div class="rs-date">12/05 → 23/05</div>
+            <div class="rs-epics">
+              <span class="rs-epic ep-pay">EP-06</span>
+              <span class="rs-epic ep-analytics">EP-07</span>
+            </div>
+          </div>
+          <div class="roadmap-sprint">
+            <div class="rs-num">Sprint 7</div>
+            <div class="rs-title">🚀 Beta Público SCZ</div>
+            <div class="rs-date">26/05 → 06/06</div>
+            <div class="rs-epics">
+              <span class="rs-epic ep-analytics">EP-07</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:8px">
+        <span class="rs-epic ep-auth" style="font-size:0.75rem;padding:4px 10px">EP-01: Auth</span>
+        <span class="rs-epic ep-prod" style="font-size:0.75rem;padding:4px 10px">EP-02: Productos</span>
+        <span class="rs-epic ep-live" style="font-size:0.75rem;padding:4px 10px">EP-03: Live Core</span>
+        <span class="rs-epic ep-order" style="font-size:0.75rem;padding:4px 10px">EP-04: Pedidos</span>
+        <span class="rs-epic ep-ai" style="font-size:0.75rem;padding:4px 10px">EP-05: IA</span>
+        <span class="rs-epic ep-pay" style="font-size:0.75rem;padding:4px 10px">EP-06: Pagos</span>
+        <span class="rs-epic ep-analytics" style="font-size:0.75rem;padding:4px 10px">EP-07: Analytics</span>
+        <span class="rs-epic ep-notif" style="font-size:0.75rem;padding:4px 10px">EP-08: Notificaciones</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. WEBSOCKET STATES -->
+  <div class="section" id="websocket">
+    <div class="section-header">
+      <div class="num">8</div>
+      <div>
+        <h2>Estados del WebSocket — Ciclo de Vida del Live</h2>
+        <p>Diagrama de estados de la transmisión en tiempo real</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="diagram-wrap">
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> Programada: Vendedor crea transmisión
+    
+    Programada --> EnVivo: Vendedor presiona "Iniciar Live"
+    Programada --> Cancelada: Vendedor cancela
+    
+    EnVivo --> EnVivo: Compradores envían mensajes\nIA parsea pedidos\nWebSocket broadcast
+    EnVivo --> Pausada: Vendedor pausa temporalmente
+    Pausada --> EnVivo: Vendedor reanuda
+    
+    EnVivo --> Finalizada: Vendedor presiona "Finalizar"
+    Pausada --> Finalizada: Vendedor finaliza
+    
+    Finalizada --> [*]: Celery procesa resumen\nWhatsApp enviados\nCSV disponible
+    Cancelada --> [*]
+    
+    note right of EnVivo
+        Eventos WebSocket activos:
+        - new_order
+        - order_count_update
+        - product_stock_update
+        - chat_message
+        - viewer_count
+    end note
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="text-align:center;padding:40px;color:#475569;font-size:0.85rem;border-top:1px solid #1E293B;">
+  LiveShop Bolivia © 2026 — Diagramas Técnicos v1.0 | Generado con Mermaid.js
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    themeVariables: {
+      primaryColor: '#1A56DB',
+      primaryTextColor: '#1A202C',
+      primaryBorderColor: '#0E4DA4',
+      lineColor: '#475569',
+      secondaryColor: '#E8F0FE',
+      tertiaryColor: '#F8FAFC',
+      background: '#ffffff',
+      mainBkg: '#EFF6FF',
+      nodeBorder: '#1A56DB',
+      clusterBkg: '#F0F7FF',
+      titleColor: '#1A202C',
+      edgeLabelBackground: '#ffffff',
+      fontSize: '14px'
+    },
+    flowchart: { curve: 'basis', useMaxWidth: true },
+    sequence: { useMaxWidth: true }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+Poder selecionar mas de un producto en el carrito de compras 
+Estado enviado poner recibido
+Colocar enlace a whatsapp para comunicacion directa con el cliente 
+Colocar administrador para dar permisos Hasta 3 usuarios por cuenta
+El vendedor puede tener un asistente manejando el panel mientras él transmite, o un encargado de confirmar pagos en paralelo.
+Revisar inventario
+Filtrar dashboard ventas mes y filtrar mes año, semana 
+Hasta 3 usuarios por cuenta
+El vendedor puede tener un asistente manejando el panel mientras él transmite, o un encargado de confirmar pagos en paralelo.
+
+Pagos recibidos por confirmar cambiar en el dashboard
+
+Ventas en productos en dashboard 
+Dashboar explicar el total de ventas en ingresos 
+Filtrado de categorias por productos en el dashboard 
+No refrescar en pedidos paa ver las ventas 
+Paginado por fecha debajo 
+Colocar costo de compra en inventario y cambiar reservado por vendido 
+
+
+sacar menos el monto y costo por unidad como costo variable
+
+
+Revisar que no agregue mas del stock en carrito de compras 
+Al quitar pagos del rol que se cree debe dejar de verse en el miebro que tiene ese rol 
+Filtro por dia en el dashboard 
+colocar variantes en el dasboard por filtrado o la mejor manera de ver tambien el nombre de los productos 
+En el inventario tambien filtrar por variantes creadas por producto colocar un icono para que dentro puedas ver los productos de la categoria por varianntes y ahi usar los filtros 
+En elegir variante Elegí la variante poder elegir colores de una talla una vez que se elige la talla puedes elegir el color 
+cuando cambias el nombre de la tienda cambia deberia cambiar el slug 
+
+Pagina web crear una ventana de promociones tambien en el inventario
+
+Ingresar  Cupón de Descuento cuando paga
+
+Sucursal en inventario y por ende almacen 
+En el dashboard muestra tambien los gastos operativos
+Poner moneda en tienda 
+Metodos de pago qr efectivo por que tambien se vendera en tienda fisica 
+Agenda de proveedores 
