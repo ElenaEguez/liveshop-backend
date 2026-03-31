@@ -156,16 +156,17 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
-
+STATIC_ROOT = '/var/www/liveshop/staticfiles/'
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = '/var/www/liveshop/media/'
 
 # CORS settings - frontend runs on Angular dev server
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     'http://localhost:4200',
+    'http://76.13.160.126',
+    'http://srv1544228.hstgr.cloud',
 ])
 CORS_ALLOW_CREDENTIALS = True
-
 # Channels configuration
 ASGI_APPLICATION = 'config.asgi.application'
 
