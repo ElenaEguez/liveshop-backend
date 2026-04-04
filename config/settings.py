@@ -163,8 +163,35 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # CORS settings - frontend runs on Angular dev server
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     'http://localhost:4200',
+    'http://localhost:5500',
+    'http://76.13.160.126',
+    'http://76.13.160.126:8080',
+    'http://srv1544228.hstgr.cloud',
+    'http://srv1544228.hstgr.cloud:8080',
 ])
+
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
 
 # Channels configuration
 ASGI_APPLICATION = 'config.asgi.application'
