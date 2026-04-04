@@ -288,7 +288,7 @@ class VendorCartOrderConfirmView(APIView):
         vendor = get_vendor_for_user(request.user)
         order = get_object_or_404(CartOrder, pk=pk, vendor=vendor)
 
-        if order.status != 'pending':
+        if order.status not in ('pending', 'pending_confirmation'):
             return Response(
                 {'error': 'Solo se pueden confirmar pedidos pendientes.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -332,6 +332,19 @@ class VendorCartOrderCancelView(APIView):
         order.save(update_fields=['status'])
 
         return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
+
+
+class VendorCartOrderPendingCountView(APIView):
+    """GET /api/website-builder/orders/pending-count/ — pedidos pendientes del vendedor."""
+    permission_classes = [IsAuthenticated, IsVendorOrTeamMember]
+
+    def get(self, request):
+        vendor = get_vendor_for_user(request.user)
+        count = CartOrder.objects.filter(
+            vendor=vendor,
+            status__in=['pending', 'pending_confirmation']
+        ).count()
+        return Response({'count': count})
 
 
 class VendorCartOrderMarkDeliveredView(APIView):

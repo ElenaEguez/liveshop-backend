@@ -12,6 +12,7 @@ from .views import (
     VendorCartOrderConfirmView,
     VendorCartOrderCancelView,
     VendorCartOrderMarkDeliveredView,
+    VendorCartOrderPendingCountView,
 )
 
 urlpatterns = [
@@ -22,6 +23,7 @@ urlpatterns = [
     path('public/<slug:vendor_slug>/categories/', PublicCategoriesView.as_view(), name='public-categories'),
     # ── Pedidos de ecommerce para el vendedor ───────────────────────────────
     path('orders/', VendorCartOrderListView.as_view(), name='vendor-cartorder-list'),
+    path('orders/pending-count/', VendorCartOrderPendingCountView.as_view(), name='vendor-cartorder-pending-count'),
     path('orders/<int:pk>/', VendorCartOrderDetailView.as_view(), name='vendor-cartorder-detail'),
     path('orders/<int:pk>/confirm/', VendorCartOrderConfirmView.as_view(), name='vendor-cartorder-confirm'),
     path('orders/<int:pk>/cancel/', VendorCartOrderCancelView.as_view(), name='vendor-cartorder-cancel'),

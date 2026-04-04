@@ -186,6 +186,5 @@ class CartOrderDetailSerializer(serializers.ModelSerializer):
 
     def get_payment_receipt_url(self, obj):
         if obj.payment_receipt:
-            request = self.context.get('request')
-            return request.build_absolute_uri(obj.payment_receipt.url) if request else obj.payment_receipt.url
+            return obj.payment_receipt.url  # URL relativa /media/... evita mixed-content HTTPS
         return None
