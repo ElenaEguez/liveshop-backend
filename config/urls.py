@@ -23,6 +23,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     # ── Public ecommerce endpoints (no auth required) ──────────────────────
     path('api/', include('website_builder.urls')),
+    path('api/website-builder/', include('website_builder.urls')),
     path('api/v1/', include([
         # ── existing apps ─────────────────────────────────────────────────
         path('', include('users.urls')),

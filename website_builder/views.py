@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, RetrieveAPIView
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import MultiPartParser, JSONParser
@@ -13,6 +13,7 @@ from django.db.models import Q
 
 from vendors.models import Vendor
 from products.models import Product, ProductVariant, Category
+from vendors.permissions import IsVendorOrTeamMember, get_vendor_for_user
 from .models import CartOrder, CartOrderItem
 from .serializers import (
     PublicStoreSerializer,
@@ -255,3 +256,24 @@ class PublicReceiptUploadView(APIView):
         order.save(update_fields=['payment_receipt', 'status'])
 
         return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
+
+
+class VendorCartOrderListView(ListAPIView):
+    """GET /api/website-builder/orders/ — lista de pedidos de la tienda."""
+    permission_classes = [IsAuthenticated, IsVendorOrTeamMember]
+    serializer_class = CartOrderDetailSerializer
+    pagination_class = PublicPagination
+
+    def get_queryset(self):
+        vendor = get_vendor_for_user(self.request.user)
+        return CartOrder.objects.filter(vendor=vendor).prefetch_related('items__product').order_by('-created_at')
+
+
+class VendorCartOrderDetailView(RetrieveAPIView):
+    """GET /api/website-builder/orders/{pk}/ — detalle de pedido de la tienda."""
+    permission_classes = [IsAuthenticated, IsVendorOrTeamMember]
+    serializer_class = CartOrderDetailSerializer
+
+    def get_object(self):
+        vendor = get_vendor_for_user(self.request.user)
+        return get_object_or_404(CartOrder.objects.prefetch_related('items__product'), pk=self.kwargs['pk'], vendor=vendor)
