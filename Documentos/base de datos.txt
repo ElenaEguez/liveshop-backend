@@ -1,0 +1,4 @@
+CREATE USER liveshop_user WITH PASSWORD 'TU_PASSWORD_SEGURA_AQUI';
+CREATE DATABASE liveshop_db OWNER liveshop_user;
+GRANT ALL PRIVILEGES ON DATABASE liveshop_db TO liveshop_user;
+\q

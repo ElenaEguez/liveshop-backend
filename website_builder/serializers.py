@@ -161,6 +161,7 @@ class CartOrderItemDetailSerializer(serializers.ModelSerializer):
 class CartOrderDetailSerializer(serializers.ModelSerializer):
     items = CartOrderItemDetailSerializer(many=True, read_only=True)
     qr_image = serializers.SerializerMethodField()
+    payment_receipt_url = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
     delivery_method_display = serializers.CharField(source='get_delivery_method_display', read_only=True)
@@ -172,7 +173,7 @@ class CartOrderDetailSerializer(serializers.ModelSerializer):
             'customer_address', 'delivery_method', 'delivery_method_display',
             'status', 'status_display', 'total_amount',
             'payment_method', 'payment_method_display',
-            'payment_receipt', 'notes', 'created_at',
+            'payment_receipt', 'payment_receipt_url', 'notes', 'created_at',
             'items', 'qr_image',
         ]
 
@@ -181,4 +182,10 @@ class CartOrderDetailSerializer(serializers.ModelSerializer):
             request = self.context.get('request')
             url = obj.vendor.payment_qr_image.url
             return request.build_absolute_uri(url) if request else url
+        return None
+
+    def get_payment_receipt_url(self, obj):
+        if obj.payment_receipt:
+            request = self.context.get('request')
+            return request.build_absolute_uri(obj.payment_receipt.url) if request else obj.payment_receipt.url
         return None

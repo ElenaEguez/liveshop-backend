@@ -9,6 +9,9 @@ from .views import (
     PublicReceiptUploadView,
     VendorCartOrderListView,
     VendorCartOrderDetailView,
+    VendorCartOrderConfirmView,
+    VendorCartOrderCancelView,
+    VendorCartOrderMarkDeliveredView,
 )
 
 urlpatterns = [
@@ -20,6 +23,9 @@ urlpatterns = [
     # ── Pedidos de ecommerce para el vendedor ───────────────────────────────
     path('orders/', VendorCartOrderListView.as_view(), name='vendor-cartorder-list'),
     path('orders/<int:pk>/', VendorCartOrderDetailView.as_view(), name='vendor-cartorder-detail'),
+    path('orders/<int:pk>/confirm/', VendorCartOrderConfirmView.as_view(), name='vendor-cartorder-confirm'),
+    path('orders/<int:pk>/cancel/', VendorCartOrderCancelView.as_view(), name='vendor-cartorder-cancel'),
+    path('orders/<int:pk>/mark-delivered/', VendorCartOrderMarkDeliveredView.as_view(), name='vendor-cartorder-mark-delivered'),
     # ── Flujo de compra ────────────────────────────────────────────────────
     path('public/<slug:vendor_slug>/checkout/', PublicCheckoutView.as_view(), name='public-checkout'),
     path('public/<slug:vendor_slug>/order/<int:pk>/', PublicOrderStatusView.as_view(), name='public-order-status'),

@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import MultiPartParser, JSONParser
 from rest_framework import status
+from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Q
@@ -277,3 +278,63 @@ class VendorCartOrderDetailView(RetrieveAPIView):
     def get_object(self):
         vendor = get_vendor_for_user(self.request.user)
         return get_object_or_404(CartOrder.objects.prefetch_related('items__product'), pk=self.kwargs['pk'], vendor=vendor)
+
+
+class VendorCartOrderConfirmView(APIView):
+    """POST /api/website-builder/orders/{pk}/confirm/ — confirmar pedido."""
+    permission_classes = [IsAuthenticated, IsVendorOrTeamMember]
+
+    def post(self, request, pk):
+        vendor = get_vendor_for_user(request.user)
+        order = get_object_or_404(CartOrder, pk=pk, vendor=vendor)
+
+        if order.status != 'pending':
+            return Response(
+                {'error': 'Solo se pueden confirmar pedidos pendientes.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order.status = 'confirmed'
+        order.save(update_fields=['status'])
+
+        return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
+
+
+class VendorCartOrderCancelView(APIView):
+    """POST /api/website-builder/orders/{pk}/cancel/ — cancelar pedido."""
+    permission_classes = [IsAuthenticated, IsVendorOrTeamMember]
+
+    def post(self, request, pk):
+        vendor = get_vendor_for_user(request.user)
+        order = get_object_or_404(CartOrder, pk=pk, vendor=vendor)
+
+        if order.status in ('delivered', 'cancelled'):
+            return Response(
+                {'error': 'No se puede cancelar un pedido entregado o ya cancelado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order.status = 'cancelled'
+        order.save(update_fields=['status'])
+
+        return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
+
+
+class VendorCartOrderMarkDeliveredView(APIView):
+    """POST /api/website-builder/orders/{pk}/mark-delivered/ — marcar como entregado."""
+    permission_classes = [IsAuthenticated, IsVendorOrTeamMember]
+
+    def post(self, request, pk):
+        vendor = get_vendor_for_user(request.user)
+        order = get_object_or_404(CartOrder, pk=pk, vendor=vendor)
+
+        if order.status != 'confirmed':
+            return Response(
+                {'error': 'Solo se pueden marcar como entregados pedidos confirmados.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order.status = 'delivered'
+        order.save(update_fields=['status'])
+
+        return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
