@@ -314,6 +314,20 @@ class VendorCartOrderCancelView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Restaurar stock de cada ítem al cancelar
+        for item in order.items.select_related('product').all():
+            if item.variant_id:
+                try:
+                    variant = ProductVariant.objects.get(pk=item.variant_id)
+                    variant.stock_extra += item.quantity
+                    variant.save(update_fields=['stock_extra'])
+                except ProductVariant.DoesNotExist:
+                    item.product.stock += item.quantity
+                    item.product.save(update_fields=['stock'])
+            else:
+                item.product.stock += item.quantity
+                item.product.save(update_fields=['stock'])
+
         order.status = 'cancelled'
         order.save(update_fields=['status'])
 

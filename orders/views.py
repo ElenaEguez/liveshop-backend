@@ -490,6 +490,20 @@ class OrdersDashboardView(APIView):
         pos_total_orders = pos_totals['total_orders'] or 0
         pos_total_revenue = pos_totals['total_revenue'] or Decimal('0')
 
+        # ── Ventas web (CartOrder) ──────────────────────────────────────────
+        from website_builder.models import CartOrder
+        web_qs = CartOrder.objects.filter(
+            vendor=vendor,
+            status__in=['confirmed', 'delivered'],
+            **pos_date_filter
+        )
+        web_totals = web_qs.aggregate(
+            total_orders=Count('id'),
+            total_revenue=Sum('total_amount'),
+        )
+        web_total_orders = web_totals['total_orders'] or 0
+        web_total_revenue = web_totals['total_revenue'] or Decimal('0')
+
         # ── Flujo de caja (MovimientoCaja) ──────────────────────────────────
         from vendors.models import MovimientoCaja, TurnoCaja
         # Reuse same period bounds already computed for pos_date_filter
@@ -527,6 +541,8 @@ class OrdersDashboardView(APIView):
             'total_revenue': str(total_revenue),
             'pos_total_orders': pos_total_orders,
             'pos_total_revenue': str(pos_total_revenue),
+            'web_total_orders': web_total_orders,
+            'web_total_revenue': str(web_total_revenue),
             'pending_payment_confirmation': pending_payment_confirmation,
             'sales_by_product': sales_by_product,
             'sales_by_period': sales_by_period,
