@@ -109,3 +109,29 @@ class KardexMovimientoSerializer(serializers.ModelSerializer):
             'notas', 'created_at',
         )
         read_only_fields = ('id', 'created_at', 'product_name', 'almacen_nombre', 'usuario_email', 'usuario_nombre')
+
+
+class POSScanProductSerializer(serializers.ModelSerializer):
+    """Serializer para el endpoint de escaneo POS."""
+    nombre = serializers.CharField(source='name')
+    precio_venta = serializers.DecimalField(source='price', max_digits=10, decimal_places=2)
+    unidad_venta = serializers.JSONField(source='sell_by')
+    imagen = serializers.SerializerMethodField()
+    categoria = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'nombre', 'barcode', 'internal_code', 'precio_venta',
+            'stock', 'unidad_venta', 'imagen', 'categoria'
+        ]
+
+    def get_imagen(self, obj):
+        img = obj.images.first()
+        if img:
+            request = self.context.get('request')
+            return request.build_absolute_uri(img.image.url) if request else img.image.url
+        return None
+
+    def get_categoria(self, obj):
+        return obj.category.name if obj.category else None

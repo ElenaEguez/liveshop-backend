@@ -435,6 +435,55 @@ class ProductoPOSSearchView(APIView):
         return Response(ser.data)
 
 
+class POSScanView(APIView):
+    """
+    GET /api/v1/pos/scan/?code={valor}
+    Busca producto por código de barras con prioridad exacta.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        vendor = _vendor_or_403(request.user)
+        code = request.query_params.get('code', '').strip()
+        if not code:
+            return Response({'error': 'Parámetro code requerido.'}, status=400)
+
+        from products.models import Product
+        from products.serializers import POSScanProductSerializer
+
+        # Filtrar por vendor y activos
+        base_qs = Product.objects.filter(vendor=vendor, is_active=True).select_related('category').prefetch_related('images')
+
+        # 1. Buscar match exacto en orden de prioridad
+        exact_match = None
+        if base_qs.filter(barcode=code).exists():
+            exact_match = base_qs.filter(barcode=code).first()
+        elif base_qs.filter(internal_code=code).exists():
+            exact_match = base_qs.filter(internal_code=code).first()
+        elif base_qs.filter(sku=code).exists():
+            exact_match = base_qs.filter(sku=code).first()
+
+        if exact_match:
+            ser = POSScanProductSerializer(exact_match, context={'request': request})
+            return Response({
+                'match': 'exact',
+                'product': ser.data
+            })
+
+        # 2. Si no hay match exacto, buscar parcial
+        partial_qs = base_qs.filter(
+            Q(name__icontains=code) |
+            Q(barcode__icontains=code) |
+            Q(internal_code__icontains=code)
+        )[:10]
+
+        ser = POSScanProductSerializer(partial_qs, many=True, context={'request': request})
+        return Response({
+            'match': 'partial',
+            'products': ser.data
+        })
+
+
 # ─── TurnoCaja ────────────────────────────────────────────────────────────────
 
 class TurnoCajaViewSet(viewsets.GenericViewSet):
