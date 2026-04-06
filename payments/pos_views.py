@@ -471,11 +471,14 @@ class POSScanView(APIView):
             })
 
         # 2. Si no hay match exacto, buscar parcial
-        partial_qs = base_qs.filter(
+        partial_qs = list(base_qs.filter(
             Q(name__icontains=code) |
             Q(barcode__icontains=code) |
             Q(internal_code__icontains=code)
-        )[:10]
+        )[:10])
+
+        if not partial_qs:
+            return Response({'match': 'none'})
 
         ser = POSScanProductSerializer(partial_qs, many=True, context={'request': request})
         return Response({

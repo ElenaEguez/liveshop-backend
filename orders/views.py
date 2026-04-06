@@ -40,7 +40,7 @@ class StandardPagination(PageNumberPagination):
 
 # ─── Constants ──────────────────────────────────────────────────────────────
 
-CONFIRMED_STATUSES = ['confirmed', 'paid', 'shipped', 'recibido']
+CONFIRMED_STATUSES = ['confirmed', 'paid', 'shipped', 'recibido', 'delivered']
 
 MONTH_NAMES_ES = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -265,7 +265,48 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         self._check_write_permission()
-        return super().partial_update(request, *args, **kwargs)
+        instance = self.get_object()
+        old_status = instance.status
+
+        response = super().partial_update(request, *args, **kwargs)
+        new_status = response.data.get('status', old_status)
+
+        if old_status == new_status:
+            return response
+
+        from products.models import Inventory
+        from vendors.models import KardexMovimiento
+
+        inv = Inventory.objects.filter(
+            product=instance.product, is_active=True
+        ).first()
+
+        if inv and new_status == 'delivered' and old_status != 'delivered':
+            # Confirmar entrega: descontar stock real y liberar reserva
+            from django.db.models import F
+            stock_anterior = inv.quantity
+            inv.quantity = max(0, inv.quantity - instance.quantity)
+            inv.reserved_quantity = max(0, inv.reserved_quantity - instance.quantity)
+            inv.save(update_fields=['quantity', 'reserved_quantity'])
+            KardexMovimiento.objects.create(
+                inventory=inv,
+                almacen=inv.almacen,
+                tipo='salida',
+                motivo='venta',
+                cantidad=-instance.quantity,
+                stock_anterior=stock_anterior,
+                stock_actual=inv.quantity,
+                documento_ref=f'LIVE-{instance.pk}',
+                usuario=request.user,
+                notas=f'Venta Live pedido #{instance.pk}',
+            )
+
+        elif inv and new_status == 'cancelled' and old_status not in ('cancelled', 'delivered'):
+            # Cancelación: liberar reserva
+            inv.reserved_quantity = max(0, inv.reserved_quantity - instance.quantity)
+            inv.save(update_fields=['reserved_quantity'])
+
+        return response
 
     def destroy(self, request, *args, **kwargs):
         self._check_write_permission()
