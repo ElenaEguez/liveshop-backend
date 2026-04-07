@@ -449,10 +449,12 @@ class POSScanView(APIView):
             return Response({'error': 'Parámetro code requerido.'}, status=400)
 
         from products.models import Product
-        from products.serializers import POSScanProductSerializer
+        from products.serializers import ProductPOSSerializer
 
-        # Filtrar por vendor y activos
-        base_qs = Product.objects.filter(vendor=vendor, is_active=True).select_related('category').prefetch_related('images')
+        # Filtrar por vendor y activos — prefetch inventories y variantes para stock_disponible
+        base_qs = Product.objects.filter(vendor=vendor, is_active=True).select_related('category').prefetch_related(
+            'images', 'inventories', 'variant_objects'
+        )
 
         # 1. Buscar match exacto en orden de prioridad
         exact_match = None
@@ -464,7 +466,7 @@ class POSScanView(APIView):
             exact_match = base_qs.filter(sku=code).first()
 
         if exact_match:
-            ser = POSScanProductSerializer(exact_match, context={'request': request})
+            ser = ProductPOSSerializer(exact_match, context={'request': request})
             return Response({
                 'match': 'exact',
                 'product': ser.data
@@ -480,7 +482,7 @@ class POSScanView(APIView):
         if not partial_qs:
             return Response({'match': 'none'})
 
-        ser = POSScanProductSerializer(partial_qs, many=True, context={'request': request})
+        ser = ProductPOSSerializer(partial_qs, many=True, context={'request': request})
         return Response({
             'match': 'partial',
             'products': ser.data
