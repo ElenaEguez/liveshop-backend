@@ -160,6 +160,12 @@ STATIC_ROOT = '/var/www/liveshop/staticfiles/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = '/var/www/liveshop/media/'
 
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
+    'https://innovatecsystelen.com',
+    'http://76.13.160.126',
+    'http://srv1544228.hstgr.cloud',
+])
+
 # CORS settings - frontend runs on Angular dev server
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     'http://localhost:4200',
