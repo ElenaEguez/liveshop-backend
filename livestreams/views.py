@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
+from django.http import HttpResponseRedirect, HttpResponse
 from django.utils import timezone
 from .models import LiveSession
 from .serializers import LiveSessionSerializer
@@ -87,7 +88,34 @@ class LiveSessionViewSet(viewsets.ModelViewSet):
         raise PermissionDenied("Tu rol no permite modificar sesiones en vivo.")
 
     def get_queryset(self):
-        return LiveSession.objects.filter(vendor=self._get_vendor())
+        qs = LiveSession.objects.filter(vendor=self._get_vendor())
+        params = self.request.query_params
+
+        # Filter by exact date (scheduled_at__date)
+        fecha = params.get('fecha')
+        if fecha:
+            qs = qs.filter(scheduled_at__date=fecha)
+
+        # Filter by date range
+        fecha_inicio = params.get('fecha_inicio')
+        if fecha_inicio:
+            qs = qs.filter(scheduled_at__date__gte=fecha_inicio)
+
+        fecha_fin = params.get('fecha_fin')
+        if fecha_fin:
+            qs = qs.filter(scheduled_at__date__lte=fecha_fin)
+
+        # Filter by slot
+        slot = params.get('slot')
+        if slot:
+            qs = qs.filter(slot=slot)
+
+        # Filter by status
+        estado = params.get('estado')
+        if estado:
+            qs = qs.filter(status=estado)
+
+        return qs
 
     def perform_create(self, serializer):
         self._check_write_permission()
@@ -132,3 +160,29 @@ class LiveSessionViewSet(viewsets.ModelViewSet):
         session.save()
         serializer = self.get_serializer(session)
         return Response(serializer.data)
+
+
+def live_activo_redirect(request, vendor_slug, slot=1):
+    """
+    Redirect to the active live session for a vendor+slot.
+    URL: /tienda/<vendor_slug>/live-ahora/  or  /tienda/<vendor_slug>/live-ahora/<slot>/
+    """
+    from vendors.models import Vendor
+    try:
+        vendor = Vendor.objects.get(slug=vendor_slug)
+    except Vendor.DoesNotExist:
+        return HttpResponse(
+            "<h2>Tienda no encontrada</h2><p>El enlace no corresponde a ninguna tienda registrada.</p>",
+            status=404, content_type='text/html'
+        )
+
+    session = LiveSession.objects.filter(vendor=vendor, slot=slot, status='live').first()
+    if session:
+        return HttpResponseRedirect(f'/public/live/{session.slug}')
+
+    return HttpResponse(
+        f"<h2>Sin live activo</h2>"
+        f"<p>La tienda <strong>{vendor.nombre_tienda}</strong> no tiene un live en vivo en este momento (canal {slot}).</p>"
+        f"<p>Por favor intenta más tarde.</p>",
+        status=200, content_type='text/html'
+    )

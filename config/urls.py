@@ -18,9 +18,13 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from livestreams.views import live_activo_redirect
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # ── Permanent public links (vendor-facing, outside /api/) ─────────────
+    path('tienda/<slug:vendor_slug>/live-ahora/', live_activo_redirect, {'slot': 1}, name='live_activo_slot_default'),
+    path('tienda/<slug:vendor_slug>/live-ahora/<int:slot>/', live_activo_redirect, name='live_activo_redirect'),
     # ── Public ecommerce endpoints (no auth required) ──────────────────────
     path('api/', include('website_builder.urls')),
     path('api/website-builder/', include('website_builder.urls')),
