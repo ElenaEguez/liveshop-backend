@@ -55,8 +55,16 @@ class PublicLiveSessionDetailView(APIView):
             'status': session.status,
             'platform': session.platform,
             'vendor_name': session.vendor.nombre_tienda,
-            'payment_qr_image': request.build_absolute_uri(session.payment_qr_image.url) if session.payment_qr_image else None,
-            'payment_instructions': session.payment_instructions,
+            'payment_qr_image': (
+                request.build_absolute_uri(session.payment_qr_image.url)
+                if session.payment_qr_image
+                else (
+                    request.build_absolute_uri(session.vendor.payment_qr_image.url)
+                    if session.vendor.payment_qr_image
+                    else None
+                )
+            ),
+            'payment_instructions': session.payment_instructions or session.vendor.payment_instructions or '',
             'allow_multiple_cart': session.allow_multiple_cart,
             'products': products_data,
         })
