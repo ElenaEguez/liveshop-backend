@@ -119,7 +119,15 @@ class LiveSessionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         self._check_write_permission()
-        serializer.save(vendor=self._get_vendor())
+        vendor = self._get_vendor()
+        slot = self.request.data.get('slot', 1)
+
+        # Auto-close any active 'live' session on the same channel before creating a new one
+        LiveSession.objects.filter(
+            vendor=vendor, slot=slot, status='live'
+        ).update(status='ended', ended_at=timezone.now())
+
+        serializer.save(vendor=vendor)
 
     def update(self, request, *args, **kwargs):
         self._check_write_permission()

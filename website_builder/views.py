@@ -266,8 +266,23 @@ class VendorCartOrderListView(ListAPIView):
     pagination_class = PublicPagination
 
     def get_queryset(self):
+        from django.db.models import Q
         vendor = get_vendor_for_user(self.request.user)
-        return CartOrder.objects.filter(vendor=vendor).prefetch_related('items__product').order_by('-created_at')
+        qs = CartOrder.objects.filter(vendor=vendor).prefetch_related('items__product').order_by('-created_at')
+
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(
+                Q(customer_name__icontains=search) |
+                Q(customer_phone__icontains=search) |
+                Q(id__icontains=search)
+            )
+
+        return qs
 
 
 class VendorCartOrderDetailView(RetrieveAPIView):

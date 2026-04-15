@@ -4,6 +4,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.db.models import Q
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from .serializers import CategorySerializer, ProductSerializer, InventorySerializer, ProductVariantSerializer
 
@@ -17,9 +18,42 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
+    ordering = ['-created_at']
 
     def get_queryset(self):
-        return Product.objects.filter(vendor=self.request.user.vendor_profile)
+        qs = Product.objects.filter(vendor=self.request.user.vendor_profile)
+
+        # Manual search to support both ?search= and ?q=
+        search = self.request.query_params.get('search') or self.request.query_params.get('q')
+        if search:
+            qs = qs.filter(
+                Q(name__icontains=search) |
+                Q(description__icontains=search) |
+                Q(internal_code__icontains=search) |
+                Q(barcode__icontains=search)
+            )
+
+        # Category filter
+        category = self.request.query_params.get('category')
+        if category:
+            qs = qs.filter(category_id=category)
+
+        # Active status filter
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() in ('true', '1', 'yes'))
+
+        # Filter by variant talla
+        talla = self.request.query_params.get('talla')
+        if talla:
+            qs = qs.filter(variant_objects__talla__iexact=talla, variant_objects__is_active=True).distinct()
+
+        # Filter by variant color
+        color = self.request.query_params.get('color')
+        if color:
+            qs = qs.filter(variant_objects__color__icontains=color, variant_objects__is_active=True).distinct()
+
+        return qs
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -119,17 +153,53 @@ class ProductViewSet(viewsets.ModelViewSet):
         )
         return Response({'colores': list(colores)})
 
+    @action(detail=False, methods=['get'], url_path='variant-options')
+    def variant_options(self, request):
+        """Return all distinct tallas and colors across vendor's products."""
+        vendor = request.user.vendor_profile
+        qs = ProductVariant.objects.filter(
+            product__vendor=vendor, is_active=True
+        )
+        tallas = list(
+            qs.exclude(talla='').values_list('talla', flat=True).distinct().order_by('talla')
+        )
+        colors = list(
+            qs.exclude(color='').values_list('color', flat=True).distinct().order_by('color')
+        )
+        return Response({'tallas': tallas, 'colors': colors})
+
 
 class InventoryViewSet(viewsets.ModelViewSet):
     serializer_class = InventorySerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        from django.db.models import Q
         qs = Inventory.objects.filter(product__vendor=self.request.user.vendor_profile)
         almacen_id = self.request.query_params.get('almacen_id')
         category_id = self.request.query_params.get('category')
+        search = self.request.query_params.get('search', '').strip()
+        talla = self.request.query_params.get('talla', '').strip()
+        color = self.request.query_params.get('color', '').strip()
+
         if almacen_id:
             qs = qs.filter(almacen_id=almacen_id)
         if category_id:
             qs = qs.filter(product__category_id=category_id)
+        if search:
+            qs = qs.filter(
+                Q(product__name__icontains=search) |
+                Q(product__internal_code__icontains=search) |
+                Q(product__barcode__icontains=search)
+            )
+        if talla:
+            qs = qs.filter(
+                product__variant_objects__talla__iexact=talla,
+                product__variant_objects__is_active=True
+            ).distinct()
+        if color:
+            qs = qs.filter(
+                product__variant_objects__color__icontains=color,
+                product__variant_objects__is_active=True
+            ).distinct()
         return qs
