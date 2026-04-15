@@ -329,6 +329,8 @@ class OrdersDashboardView(APIView):
         year = int(request.query_params.get('year', now.year))
         month = int(request.query_params.get('month', now.month))
         category_id = request.query_params.get('category_id')
+        # Canal: 'todos' | 'live' | 'tienda' | 'web'
+        canal = request.query_params.get('canal', 'todos')
 
         # ── Date filter ─────────────────────────────────────────────────────
         import datetime
@@ -480,30 +482,35 @@ class OrdersDashboardView(APIView):
             item['variantes'] = variant_by_product.get(row['product__id'], [])
             sales_by_product.append(item)
 
-        # ── Sales by period (for charts) ────────────────────────────────────
-        period_rows = qs.annotate(
-            period=trunc_fn('created_at')
-        ).values('period').annotate(
-            revenue=Sum(revenue_expr),
-            orders=Count('id'),
-        ).order_by('period')
-
-        sales_by_period = []
-        for i, row in enumerate(period_rows, 1):
+        # ── Sales by period (chart) — respeta filtro de canal ───────────────
+        def _label_for_row(i, row_period, period):
             if period == 'day':
-                label = row['period'].strftime('%H:00')
+                return row_period.strftime('%H:00')
             elif period == 'month':
-                label = f"Semana {i}"
+                return f"Semana {i}"
             elif period == 'week':
-                label = DAY_NAMES_ES[row['period'].weekday()]
-            else:  # year
-                label = MONTH_ABBR_ES[row['period'].month - 1]
+                return DAY_NAMES_ES[row_period.weekday()]
+            else:
+                return MONTH_ABBR_ES[row_period.month - 1]
 
-            sales_by_period.append({
-                'label': label,
-                'revenue': str(row['revenue'] or Decimal('0')),
-                'orders': row['orders'],
-            })
+        if canal in ('todos', 'live'):
+            period_rows = qs.annotate(
+                period=trunc_fn('created_at')
+            ).values('period').annotate(
+                revenue=Sum(revenue_expr),
+                orders=Count('id'),
+            ).order_by('period')
+            sales_by_period = [
+                {
+                    'label': _label_for_row(i, r['period'], period),
+                    'revenue': str(r['revenue'] or Decimal('0')),
+                    'orders': r['orders'],
+                }
+                for i, r in enumerate(period_rows, 1)
+            ]
+        else:
+            # Se construirá después de calcular pos/web qs
+            sales_by_period = []
 
         # ── POS (ventas físicas) ─────────────────────────────────────────────
         from payments.models import VentaPOS
@@ -544,6 +551,102 @@ class OrdersDashboardView(APIView):
         )
         web_total_orders = web_totals['total_orders'] or 0
         web_total_revenue = web_totals['total_revenue'] or Decimal('0')
+
+        # ── Canal: chart y tabla para tienda/web ───────────────────────────
+        if canal == 'tienda':
+            pos_period_rows = pos_qs.annotate(
+                period=trunc_fn('created_at')
+            ).values('period').annotate(
+                revenue=Sum('total'),
+                orders=Count('id'),
+            ).order_by('period')
+            sales_by_period = [
+                {
+                    'label': _label_for_row(i, r['period'], period),
+                    'revenue': str(r['revenue'] or Decimal('0')),
+                    'orders': r['orders'],
+                }
+                for i, r in enumerate(pos_period_rows, 1)
+            ]
+            # Tabla por producto (desde VentaPOSItem)
+            from payments.models import VentaPOSItem
+            pos_item_qs = VentaPOSItem.objects.filter(
+                venta__in=pos_qs
+            ).select_related('product', 'product__category')
+            if category_id:
+                pos_item_qs = pos_item_qs.filter(product__category_id=category_id)
+            pos_prod_rows = pos_item_qs.values(
+                'product__id', 'product__name', 'product__category__name'
+            ).annotate(
+                units_sold=Sum('cantidad'),
+                revenue=Sum('subtotal'),
+                cost=Sum(
+                    ExpressionWrapper(
+                        F('costo_unitario') * F('cantidad'),
+                        output_field=DecimalField(max_digits=12, decimal_places=2)
+                    )
+                ),
+            ).order_by('-revenue')
+            sales_by_product = []
+            for row in pos_prod_rows:
+                item = {
+                    'product_id': row['product__id'],
+                    'product_name': row['product__name'] or '—',
+                    'category': row['product__category__name'] or '',
+                    'units_sold': row['units_sold'],
+                    'revenue': str(row['revenue'] or Decimal('0')),
+                    'variantes': [],
+                }
+                if row['cost'] is not None:
+                    item['cost'] = str(row['cost'])
+                    item['margin'] = str((row['revenue'] or Decimal('0')) - row['cost'])
+                sales_by_product.append(item)
+
+        elif canal == 'web':
+            web_period_rows = web_qs.annotate(
+                period=trunc_fn('created_at')
+            ).values('period').annotate(
+                revenue=Sum('total_amount'),
+                orders=Count('id'),
+            ).order_by('period')
+            sales_by_period = [
+                {
+                    'label': _label_for_row(i, r['period'], period),
+                    'revenue': str(r['revenue'] or Decimal('0')),
+                    'orders': r['orders'],
+                }
+                for i, r in enumerate(web_period_rows, 1)
+            ]
+            # Tabla web — CartOrderItem
+            try:
+                from website_builder.models import CartOrderItem
+                web_item_qs = CartOrderItem.objects.filter(order__in=web_qs)
+                if category_id:
+                    web_item_qs = web_item_qs.filter(product__category_id=category_id)
+                web_prod_rows = web_item_qs.values(
+                    'product__id', 'product__name', 'product__category__name'
+                ).annotate(
+                    units_sold=Sum('quantity'),
+                    revenue=Sum(
+                        ExpressionWrapper(
+                            F('price') * F('quantity'),
+                            output_field=DecimalField(max_digits=12, decimal_places=2)
+                        )
+                    ),
+                ).order_by('-revenue')
+                sales_by_product = [
+                    {
+                        'product_id': r['product__id'],
+                        'product_name': r['product__name'] or '—',
+                        'category': r['product__category__name'] or '',
+                        'units_sold': r['units_sold'],
+                        'revenue': str(r['revenue'] or Decimal('0')),
+                        'variantes': [],
+                    }
+                    for r in web_prod_rows
+                ]
+            except Exception:
+                sales_by_product = []
 
         # ── Flujo de caja (MovimientoCaja) ──────────────────────────────────
         from vendors.models import MovimientoCaja, TurnoCaja
@@ -600,5 +703,6 @@ class OrdersDashboardView(APIView):
         response_data['gastos_por_categoria'] = gastos_por_categoria
         response_data['total_ingresos_caja'] = str(total_ingresos_caja)
         response_data['total_retiros_caja'] = str(total_retiros_caja)
+        response_data['canal'] = canal
 
         return Response(response_data)

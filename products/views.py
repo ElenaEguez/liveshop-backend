@@ -48,9 +48,23 @@ class ProductViewSet(viewsets.ModelViewSet):
         except (InvalidOperation, ValueError):
             return None
 
+    def _parse_decimal_field(self, request, field_name):
+        raw = request.data.get(field_name, None)
+        if raw is None or raw == '' or raw == 'null':
+            return None
+        try:
+            return Decimal(str(raw))
+        except (InvalidOperation, ValueError):
+            return None
+
     def perform_create(self, serializer):
         variants = self._parse_variants(self.request)
-        product = serializer.save(vendor=self.request.user.vendor_profile, variants=variants)
+        shipping_cost = self._parse_decimal_field(self.request, 'shipping_cost')
+        product = serializer.save(
+            vendor=self.request.user.vendor_profile,
+            variants=variants,
+            shipping_cost=shipping_cost,
+        )
         self._save_images(product, self.request)
         purchase_cost = self._parse_purchase_cost(self.request)
         Inventory.objects.get_or_create(
@@ -60,7 +74,8 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         variants = self._parse_variants(self.request)
-        product = serializer.save(variants=variants)
+        shipping_cost = self._parse_decimal_field(self.request, 'shipping_cost')
+        product = serializer.save(variants=variants, shipping_cost=shipping_cost)
         self._save_images(product, self.request)
         if 'purchase_cost' in self.request.data:
             purchase_cost = self._parse_purchase_cost(self.request)

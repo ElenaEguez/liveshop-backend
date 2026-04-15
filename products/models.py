@@ -29,6 +29,10 @@ class Product(models.Model):
         max_digits=10, decimal_places=2,
         null=True, blank=True, verbose_name="Costo de compra"
     )
+    shipping_cost = models.DecimalField(
+        max_digits=10, decimal_places=2,
+        null=True, blank=True, verbose_name="Costo de flete/importación"
+    )
     profit_margin_percent = models.DecimalField(
         max_digits=5, decimal_places=2,
         null=True, blank=True, verbose_name="% de ganancia"
@@ -88,12 +92,13 @@ class Inventory(models.Model):
         null=True, blank=True, related_name='inventarios'
     )
     is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = 'Inventario'
         verbose_name_plural = 'Inventarios'
-        ordering = ['-updated_at']
+        ordering = ['created_at']
 
     def __str__(self):
         return f'Inventario de {self.product.name}'

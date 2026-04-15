@@ -1,0 +1,10 @@
+yarn format para que funcione las librerias
+
+
+PROD: https://auth.cfx.to/en/login?return_to_path=%2Fsettings%2Fwebhooks  
+
+produccion 
+
+DEV: https://app.dev.cfx.to/settings/webhooks
+
+dev 

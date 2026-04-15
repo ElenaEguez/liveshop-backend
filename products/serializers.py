@@ -19,7 +19,7 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'price', 'stock', 'category',
             'is_active', 'variants', 'images', 'vendor', 'purchase_cost',
-            'profit_margin_percent', 'barcode', 'internal_code', 'sell_by',
+            'shipping_cost', 'profit_margin_percent', 'barcode', 'internal_code', 'sell_by',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['vendor', 'images', 'variants', 'purchase_cost', 'created_at', 'updated_at']
@@ -71,7 +71,7 @@ class ProductPOSSerializer(serializers.ModelSerializer):
         model = Product
         fields = (
             'id', 'name', 'barcode', 'internal_code', 'price',
-            'purchase_cost', 'stock_disponible', 'variantes', 'imagen_thumbnail',
+            'purchase_cost', 'stock_disponible', 'sell_by', 'variantes', 'imagen_thumbnail',
         )
 
     def get_stock_disponible(self, obj):

@@ -28,6 +28,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
         fields = ('id', 'user', 'user_id', 'nombre_tienda', 'slug', 'logo', 'descripcion',
                   'whatsapp', 'tiktok_url', 'facebook_url', 'instagram_url',
                   'payment_qr_image', 'payment_instructions', 'accepted_payment_methods',
+                  'inventory_method',
                   'is_verified', 'created_at', 'updated_at')
         read_only_fields = ('id', 'user', 'user_id', 'created_at', 'updated_at', 'is_verified')
 
@@ -133,14 +134,25 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
 
 
 class TicketConfigSerializer(serializers.ModelSerializer):
+    logo_url = serializers.SerializerMethodField()
+
     class Meta:
         model = TicketConfig
         fields = (
-            'id', 'mostrar_logo', 'nombre_empresa', 'ruc_nit',
+            'id', 'mostrar_logo', 'logo_url', 'nombre_empresa', 'ruc_nit',
             'direccion', 'telefono', 'texto_pie', 'mostrar_qr',
             'moneda', 'ancho_ticket',
         )
-        read_only_fields = ('id',)
+        read_only_fields = ('id', 'logo_url')
+
+    def get_logo_url(self, obj):
+        request = self.context.get('request')
+        logo = obj.vendor.logo
+        if not logo:
+            return None
+        if request:
+            return request.build_absolute_uri(logo.url)
+        return logo.url
 
 
 class ComprobanteSerializer(serializers.ModelSerializer):

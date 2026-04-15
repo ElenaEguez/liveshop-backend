@@ -109,27 +109,35 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             # ── Sucursal ─────────────────────────────────────────────────────
             sucursal = get_object_or_404(Sucursal, id=data['sucursal_id'], vendor=vendor)
 
-            # ── 1. Validar stock (lock rows) ──────────────────────────────────
+            # Método de inventario configurado por el vendor (PEPS/UEPS/promedio)
+            inv_method = vendor.inventory_method  # 'peps', 'ueps', 'promedio'
+
+            # ── 1. Validar stock total (lock rows) ────────────────────────────
             items_data = data['items']
-            inventories: dict[int, Inventory] = {}
+            # inventories_by_product: pid → lista de lotes en orden de consumo
+            inventories_by_product: dict[int, list[Inventory]] = {}
             for item in items_data:
                 pid = item['product_id']
-                inv = Inventory.objects.select_for_update().filter(
-                    product_id=pid, product__vendor=vendor, is_active=True,
-                ).first()
-                if not inv:
-                    raise ValidationError(
-                        {'items': f'Sin inventario activo para product_id={pid}.'}
-                    )
-                avail = inv.quantity - inv.reserved_quantity
-                if avail < item['cantidad']:
+                # Ordenar lotes según método de inventario
+                order = 'created_at' if inv_method == 'peps' else '-created_at'
+                lotes = list(
+                    Inventory.objects.select_for_update().filter(
+                        product_id=pid, product__vendor=vendor,
+                        is_active=True, quantity__gt=0,
+                    ).order_by(order)
+                )
+                total_avail = sum(
+                    max(0, l.quantity - l.reserved_quantity) for l in lotes
+                )
+                if not lotes or total_avail < item['cantidad']:
+                    nombre = lotes[0].product.name if lotes else f'product_id={pid}'
                     raise ValidationError({
                         'items': (
-                            f"Stock insuficiente para '{inv.product.name}': "
-                            f"disponible {avail}, solicitado {item['cantidad']}."
+                            f"Stock insuficiente para '{nombre}': "
+                            f"disponible {total_avail}, solicitado {item['cantidad']}."
                         )
                     })
-                inventories[pid] = inv
+                inventories_by_product[pid] = lotes
 
             # ── 2. Validar cupón ──────────────────────────────────────────────
             cupon = None
@@ -219,10 +227,10 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                 notas=data.get('notas', ''),
             )
 
-            # ── 9. Items + descuento de stock + kardex ────────────────────────
+            # ── 9. Items + descuento de stock por lote (PEPS/UEPS) + kardex ────
             for item in items_data:
                 pid = item['product_id']
-                inv = inventories[pid]
+                lotes = inventories_by_product[pid]
 
                 variant = None
                 if item.get('variant_id'):
@@ -231,34 +239,58 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                         id=item['variant_id'], product_id=pid,
                     )
 
-                cantidad = item['cantidad']
+                cantidad_pendiente = item['cantidad']
                 precio = item['precio_unitario']
-                stock_anterior = inv.quantity
 
-                inv.quantity -= cantidad
-                inv.save(update_fields=['quantity'])
+                # Costos ponderados para calcular costo_unitario del item
+                costo_total_lotes = Decimal('0')
+                cantidad_costeada = 0
+
+                for lote in lotes:
+                    if cantidad_pendiente <= 0:
+                        break
+                    disponible = lote.quantity - lote.reserved_quantity
+                    if disponible <= 0:
+                        continue
+
+                    consumir = min(cantidad_pendiente, disponible)
+                    stock_anterior = lote.quantity
+                    lote.quantity -= consumir
+                    lote.save(update_fields=['quantity'])
+
+                    costo_lote = lote.purchase_cost or Decimal('0')
+                    costo_total_lotes += costo_lote * consumir
+                    cantidad_costeada += consumir
+
+                    KardexMovimiento.objects.create(
+                        inventory=lote,
+                        almacen=lote.almacen,
+                        tipo='salida',
+                        motivo='venta',
+                        cantidad=-consumir,
+                        stock_anterior=stock_anterior,
+                        stock_actual=lote.quantity,
+                        costo_promedio=costo_lote,
+                        documento_ref=numero_ticket,
+                        usuario=request.user,
+                        notas=f'Venta POS {numero_ticket} [{inv_method.upper()}]',
+                    )
+                    cantidad_pendiente -= consumir
+
+                # Costo unitario ponderado del item completo
+                costo_unitario = (
+                    (costo_total_lotes / item['cantidad']).quantize(Decimal('0.0001'))
+                    if item['cantidad'] > 0 else Decimal('0')
+                )
 
                 VentaPOSItem.objects.create(
                     venta=venta,
                     product_id=pid,
                     variant=variant,
-                    cantidad=cantidad,
+                    cantidad=item['cantidad'],
                     precio_unitario=precio,
-                    costo_unitario=inv.purchase_cost,
-                    subtotal=precio * cantidad,
-                )
-
-                KardexMovimiento.objects.create(
-                    inventory=inv,
-                    almacen=inv.almacen,
-                    tipo='salida',
-                    motivo='venta',
-                    cantidad=-cantidad,
-                    stock_anterior=stock_anterior,
-                    stock_actual=inv.quantity,
-                    documento_ref=numero_ticket,
-                    usuario=request.user,
-                    notas=f'Venta POS {numero_ticket}',
+                    costo_unitario=costo_unitario,
+                    subtotal=precio * item['cantidad'],
                 )
 
             # ── 10. Actualizar usos del cupón ─────────────────────────────────

@@ -9,7 +9,13 @@ User = get_user_model()
 
 class Vendor(models.Model):
     """Vendor profile model linked to User"""
-    
+
+    INVENTORY_METHOD_CHOICES = [
+        ('peps', 'PEPS (Primeros en entrar, primeros en salir)'),
+        ('ueps', 'UEPS (Últimos en entrar, primeros en salir)'),
+        ('promedio', 'Costo Promedio'),
+    ]
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='vendor_profile')
     nombre_tienda = models.CharField(max_length=200)
     slug = models.SlugField(unique=True, blank=True)
@@ -24,6 +30,12 @@ class Vendor(models.Model):
     payment_instructions = models.TextField(blank=True, null=True)
     accepted_payment_methods = models.CharField(max_length=200, blank=True, null=True)
     moneda = models.CharField(max_length=5, default='Bs.', verbose_name="Moneda de la tienda")
+    inventory_method = models.CharField(
+        max_length=10,
+        choices=INVENTORY_METHOD_CHOICES,
+        default='peps',
+        verbose_name="Método de valoración de inventario",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
