@@ -67,6 +67,7 @@ class PublicLiveSessionDetailView(APIView):
             ),
             'payment_instructions': session.payment_instructions or session.vendor.payment_instructions or '',
             'allow_multiple_cart': session.allow_multiple_cart,
+            'vendor_slug': session.vendor.slug,
             'products': products_data,
         })
 

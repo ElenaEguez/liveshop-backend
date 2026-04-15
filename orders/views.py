@@ -627,12 +627,7 @@ class OrdersDashboardView(APIView):
                     'product__id', 'product__name', 'product__category__name'
                 ).annotate(
                     units_sold=Sum('quantity'),
-                    revenue=Sum(
-                        ExpressionWrapper(
-                            F('price') * F('quantity'),
-                            output_field=DecimalField(max_digits=12, decimal_places=2)
-                        )
-                    ),
+                    revenue=Sum('subtotal'),
                 ).order_by('-revenue')
                 sales_by_product = [
                     {

@@ -157,15 +157,35 @@ class ProductViewSet(viewsets.ModelViewSet):
     def variant_options(self, request):
         """Return all distinct tallas and colors across vendor's products."""
         vendor = request.user.vendor_profile
-        qs = ProductVariant.objects.filter(
+
+        # From ProductVariant model objects
+        pv_qs = ProductVariant.objects.filter(
             product__vendor=vendor, is_active=True
         )
-        tallas = list(
-            qs.exclude(talla='').values_list('talla', flat=True).distinct().order_by('talla')
+        tallas_set = set(
+            pv_qs.exclude(talla='').values_list('talla', flat=True)
         )
-        colors = list(
-            qs.exclude(color='').values_list('color', flat=True).distinct().order_by('color')
+        colors_set = set(
+            pv_qs.exclude(color='').values_list('color', flat=True)
         )
+
+        # Also extract from legacy JSONField `variants` on Product
+        products_with_json = Product.objects.filter(vendor=vendor, is_active=True).exclude(variants=[])
+        for product in products_with_json:
+            if not isinstance(product.variants, list):
+                continue
+            for v in product.variants:
+                if not isinstance(v, dict):
+                    continue
+                size = v.get('size') or v.get('talla') or ''
+                color = v.get('color') or ''
+                if size:
+                    tallas_set.add(str(size).strip())
+                if color:
+                    colors_set.add(str(color).strip())
+
+        tallas = sorted(t for t in tallas_set if t)
+        colors = sorted(c for c in colors_set if c)
         return Response({'tallas': tallas, 'colors': colors})
 
 
