@@ -11,16 +11,21 @@ class PublicVariantSerializer(serializers.ModelSerializer):
     size = serializers.CharField(source='talla')
     stock = serializers.SerializerMethodField()
     price = serializers.SerializerMethodField()
+    disponible = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductVariant
-        fields = ['id', 'size', 'color', 'stock', 'price']
+        fields = ['id', 'size', 'color', 'stock', 'price', 'disponible']
 
     def get_stock(self, obj):
         return obj.stock_extra if obj.stock_extra > 0 else obj.product.stock
 
     def get_price(self, obj):
         return str(obj.product.price)
+
+    def get_disponible(self, obj):
+        stock = obj.stock_extra if obj.stock_extra > 0 else obj.product.stock
+        return stock > 0
 
 
 class PublicProductImageSerializer(serializers.ModelSerializer):

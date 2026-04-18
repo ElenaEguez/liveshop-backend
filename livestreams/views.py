@@ -16,7 +16,7 @@ class PublicLiveSessionDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, slug):
-        from products.models import Product, Inventory, ProductImage
+        from products.models import Product, Inventory, ProductImage, ProductVariant
         from orders.models import Reservation
         from django.db.models import Sum
 
@@ -71,16 +71,36 @@ class PublicLiveSessionDetailView(APIView):
         for img in ProductImage.objects.filter(product_id__in=ids_finales):
             images_map.setdefault(img.product_id, []).append(img)
 
+        # Pre-fetch variantes estructuradas (con stock por variante)
+        variants_map: dict = {}
+        for v in ProductVariant.objects.filter(
+            product_id__in=ids_finales, is_active=True
+        ).order_by('id'):
+            variants_map.setdefault(v.product_id, []).append(v)
+
         products_data = []
         for producto, available in productos_finales:
             imgs = images_map.get(producto.id, [])
+            product_variants = variants_map.get(producto.id, [])
+            variants_data = [
+                {
+                    'id': v.id,
+                    'size': v.talla,
+                    'color': v.color,
+                    # stock_extra > 0 → stock propio de la variante
+                    # stock_extra == 0 → comparte el stock del producto
+                    'stock': v.stock_extra if v.stock_extra > 0 else available,
+                    'disponible': v.stock_extra > 0 or available > 0,
+                }
+                for v in product_variants
+            ]
             products_data.append({
                 'id': producto.id,
                 'name': producto.name,
                 'description': producto.description,
                 'price': producto.price,
                 'stock': producto.stock,
-                'variants': producto.variants,
+                'variants': variants_data,
                 'available_quantity': available,
                 'images': [request.build_absolute_uri(img.image.url) for img in imgs],
             })
