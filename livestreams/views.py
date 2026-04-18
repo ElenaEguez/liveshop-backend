@@ -22,14 +22,17 @@ class PublicLiveSessionDetailView(APIView):
 
         session = get_object_or_404(LiveSession, slug=slug)
 
-        products = Product.objects.filter(
+        # Todos los productos activos del vendor, ordenados por created_at ASC
+        # (más antiguo primero = PEPS)
+        all_products = list(Product.objects.filter(
             vendor=session.vendor,
             is_active=True
-        ).values('id', 'name', 'description', 'price', 'stock', 'variants').distinct()
+        ).order_by('created_at'))
 
-        # Pre-fetch active reserved quantities across ALL sessions for each product
+        product_ids = [p.id for p in all_products]
+
+        # Pre-fetch reservas activas (una sola query)
         active_statuses = ['pending', 'confirmed', 'paid']
-        product_ids = [p['id'] for p in products]
         reserved_map = dict(
             Reservation.objects.filter(
                 product_id__in=product_ids,
@@ -37,17 +40,50 @@ class PublicLiveSessionDetailView(APIView):
             ).values('product_id').annotate(total=Sum('quantity')).values_list('product_id', 'total')
         )
 
+        # Pre-fetch primera entrada de inventario activa por producto (una sola query)
+        inventory_map: dict = {}
+        for inv in Inventory.objects.filter(
+            product_id__in=product_ids, is_active=True
+        ).order_by('created_at'):
+            if inv.product_id not in inventory_map:
+                inventory_map[inv.product_id] = inv
+
+        # Deduplicación PEPS: por cada nombre, conservar solo el más antiguo
+        # que tenga stock disponible > 0
+        vistos: set = set()
+        productos_finales = []
+
+        for producto in all_products:
+            inv = inventory_map.get(producto.id)
+            base_stock = inv.quantity if inv else producto.stock
+            reserved = reserved_map.get(producto.id, 0)
+            available = max(0, base_stock - reserved)
+
+            if available > 0:
+                clave = producto.name.strip().lower()
+                if clave not in vistos:
+                    vistos.add(clave)
+                    productos_finales.append((producto, available))
+
+        # Pre-fetch imágenes solo para los productos seleccionados (una sola query)
+        ids_finales = [p.id for p, _ in productos_finales]
+        images_map: dict = {}
+        for img in ProductImage.objects.filter(product_id__in=ids_finales):
+            images_map.setdefault(img.product_id, []).append(img)
+
         products_data = []
-        for p in products:
-            inv = Inventory.objects.filter(
-                product_id=p['id'], is_active=True
-            ).first()
-            base_stock = inv.quantity if inv else p['stock']
-            reserved = reserved_map.get(p['id'], 0)
-            p['available_quantity'] = max(0, base_stock - reserved)
-            images = ProductImage.objects.filter(product_id=p['id'])
-            p['images'] = [request.build_absolute_uri(img.image.url) for img in images]
-            products_data.append(p)
+        for producto, available in productos_finales:
+            imgs = images_map.get(producto.id, [])
+            products_data.append({
+                'id': producto.id,
+                'name': producto.name,
+                'description': producto.description,
+                'price': producto.price,
+                'stock': producto.stock,
+                'variants': producto.variants,
+                'available_quantity': available,
+                'images': [request.build_absolute_uri(img.image.url) for img in imgs],
+            })
 
         return Response({
             'id': session.id,
