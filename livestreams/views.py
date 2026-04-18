@@ -25,7 +25,7 @@ class PublicLiveSessionDetailView(APIView):
         products = Product.objects.filter(
             vendor=session.vendor,
             is_active=True
-        ).values('id', 'name', 'description', 'price', 'stock', 'variants')
+        ).values('id', 'name', 'description', 'price', 'stock', 'variants').distinct()
 
         # Pre-fetch active reserved quantities across ALL sessions for each product
         active_statuses = ['pending', 'confirmed', 'paid']
