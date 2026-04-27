@@ -139,6 +139,17 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                     })
                 inventories_by_product[pid] = lotes
 
+                # Si el producto tiene variantes activas, variant_id es obligatorio
+                if not item.get('variant_id'):
+                    tiene_variantes = ProductVariant.objects.filter(
+                        product_id=pid, is_active=True
+                    ).exists()
+                    if tiene_variantes:
+                        nombre = lotes[0].product.name if lotes else f'product_id={pid}'
+                        raise ValidationError({
+                            'items': f"El producto '{nombre}' tiene variantes. Debe seleccionar una variante."
+                        })
+
             # ── 2. Validar cupón ──────────────────────────────────────────────
             cupon = None
             descuento_cupon = Decimal('0')
@@ -161,7 +172,12 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             subtotal = sum(
                 item['precio_unitario'] * item['cantidad'] for item in items_data
             )
-            descuento_manual = data.get('descuento', Decimal('0'))
+            discount_pct = data.get('discount_percentage')
+            if discount_pct and discount_pct > 0:
+                descuento_manual = (subtotal * discount_pct / 100).quantize(Decimal('0.01'))
+                data['discount_type'] = 'PERCENT'
+            else:
+                descuento_manual = data.get('descuento', Decimal('0'))
             base = max(subtotal - descuento_manual, Decimal('0'))
 
             if cupon:
@@ -215,6 +231,10 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                 metodo_pago=metodo_pago,
                 subtotal=subtotal,
                 descuento=descuento_manual + descuento_cupon,
+                discount_percentage=data.get('discount_percentage'),
+                discount_type=data.get('discount_type'),
+                canal_venta=data.get('canal_venta', 'TIENDA'),
+                direccion_envio=data.get('direccion_envio'),
                 total=total,
                 monto_recibido=monto_recibido,
                 vuelto=vuelto,
@@ -238,6 +258,10 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                         ProductVariant,
                         id=item['variant_id'], product_id=pid,
                     )
+                    # Descontar stock propio de la variante si lo tiene registrado
+                    if variant.stock_extra > 0:
+                        variant.stock_extra = max(0, variant.stock_extra - item['cantidad'])
+                        variant.save(update_fields=['stock_extra'])
 
                 cantidad_pendiente = item['cantidad']
                 precio = item['precio_unitario']
@@ -273,6 +297,7 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                         costo_promedio=costo_lote,
                         documento_ref=numero_ticket,
                         usuario=request.user,
+                        variant=variant,
                         notas=f'Venta POS {numero_ticket} [{inv_method.upper()}]',
                     )
                     cantidad_pendiente -= consumir
@@ -310,7 +335,7 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                 {'error': 'La venta ya está anulada.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if venta.created_at.date() != timezone.now().date():
+        if timezone.localtime(venta.created_at).date() != timezone.localdate():
             return Response(
                 {'error': 'Solo se pueden anular ventas del día actual.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -706,6 +731,41 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         )
         return Response(MovimientoCajaSerializer(mov).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=['patch'], url_path='editar-fondo')
+    def editar_fondo(self, request, pk=None):
+        """PATCH /api/v1/pos/turnos/{pk}/editar-fondo/ — edita el monto de apertura de un turno abierto."""
+        from decimal import InvalidOperation
+        turno = self.get_object()
+
+        if turno.status != 'abierto':
+            return Response(
+                {'error': 'Solo se puede editar el fondo de un turno abierto.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        nuevo_fondo = request.data.get('fondo_inicial')
+        if nuevo_fondo is None:
+            return Response(
+                {'error': 'Debe proporcionar fondo_inicial.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            fondo = Decimal(str(nuevo_fondo))
+            if fondo < 0:
+                return Response(
+                    {'error': 'El fondo inicial no puede ser negativo.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            turno.monto_apertura = fondo
+            turno.save(update_fields=['monto_apertura'])
+            return Response({'fondo_inicial': str(turno.monto_apertura)})
+        except InvalidOperation:
+            return Response(
+                {'error': 'Valor inválido para fondo inicial.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     @action(detail=False, methods=['get'])
     def list_turnos(self, request):
         """GET /api/v1/pos/turnos/list_turnos/?periodo=today|week|month|year"""
@@ -713,7 +773,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         qs = self.get_queryset()
 
         periodo = request.query_params.get('periodo', 'today')
-        today = timezone.now().date()
+        today = timezone.localdate()
         if periodo == 'today':
             qs = qs.filter(fecha_apertura__date=today)
         elif periodo == 'week':
@@ -738,7 +798,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         ).select_related('caja__sucursal', 'usuario').order_by('-fecha_apertura')
 
         periodo = request.query_params.get('periodo', 'month')
-        today = timezone.now().date()
+        today = timezone.localdate()
         if periodo == 'today':
             qs = qs.filter(fecha_apertura__date=today)
         elif periodo == 'week':
@@ -747,6 +807,21 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             qs = qs.filter(fecha_apertura__date__gte=today - timedelta(days=30))
         elif periodo == 'year':
             qs = qs.filter(fecha_apertura__year=today.year)
+
+        # Filtro de semana del mes (solo aplica cuando periodo=month)
+        semana_param = request.query_params.get('semana')
+        if semana_param and periodo == 'month':
+            try:
+                semana = int(semana_param)
+                if 1 <= semana <= 5:
+                    dia_inicio = (semana - 1) * 7 + 1
+                    dia_fin = min(semana * 7, 31)
+                    qs = qs.filter(
+                        fecha_apertura__day__gte=dia_inicio,
+                        fecha_apertura__day__lte=dia_fin,
+                    )
+            except (ValueError, TypeError):
+                pass
 
         page_size = min(int(request.query_params.get('page_size', 20)), 100)
         page_num  = max(int(request.query_params.get('page', 1)), 1)
@@ -784,7 +859,7 @@ class GastoViewSet(viewsets.ModelViewSet):
         ).order_by('-fecha', '-created_at')
 
         p = self.request.query_params
-        today = timezone.now().date()
+        today = timezone.localdate()
 
         periodo = p.get('periodo')
         if periodo == 'today':
@@ -977,8 +1052,7 @@ class MovimientosCajaView(APIView):
         page      = max(int(request.query_params.get('page', 1)), 1)
         page_size = min(int(request.query_params.get('page_size', 10)), 10000)
 
-        now = timezone.now()
-        today = now.date()
+        today = timezone.localdate()
 
         if period == 'today':
             date_filter = {'date': today}

@@ -7,9 +7,11 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
-from django.db.models import Sum
+from django.db.models import Count, DecimalField, F, Q, Sum
+from django.db.models.functions import Coalesce
 
 import datetime
+from decimal import Decimal
 from .models import Vendor, TeamMember, CustomRole, Promocion
 from .serializers import VendorSerializer, VendorProfileSerializer, TeamMemberSerializer, CustomRoleSerializer
 from .permissions import IsVendorOwner
@@ -178,48 +180,163 @@ class VendorDashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
+        from django.utils import timezone
+        from payments.models import Payment, VentaPOS, VentaPOSItem, GastoOperativo
+        from orders.models import Reservation
+
         try:
             vendor = request.user.vendor_profile
         except Vendor.DoesNotExist:
             return Response({'error': 'Sin perfil de vendedor'}, status=404)
 
-        # Productos activos
+        now = timezone.now()
+        today = timezone.localdate()
+
+        # ── Período filtrable ─────────────────────────────────────────────────
+        periodo = request.query_params.get('periodo', 'month')
+        if periodo == 'today':
+            fecha_inicio = today
+            fecha_fin = today
+        elif periodo == 'week':
+            fecha_inicio = today - datetime.timedelta(days=7)
+            fecha_fin = today
+        elif periodo == 'year':
+            fecha_inicio = datetime.date(today.year, 1, 1)
+            fecha_fin = today
+        else:  # month (default)
+            fecha_inicio = datetime.date(today.year, today.month, 1)
+            fecha_fin = today
+
+        # ── Productos activos ─────────────────────────────────────────────────
         total_active_products = vendor.products.filter(is_active=True).count()
 
-        # Ventas del mes (pagos confirmados este mes)
-        from django.utils import timezone
-        from payments.models import Payment
-        from orders.models import Reservation
-        now = timezone.now()
+        # ── Ventas POS del período ────────────────────────────────────────────
+        ventas_qs = VentaPOS.objects.filter(
+            vendor=vendor,
+            status='completada',
+            created_at__date__gte=fecha_inicio,
+            created_at__date__lte=fecha_fin,
+        )
 
-        monthly_agg = Payment.objects.filter(
-            reservation__product__vendor=vendor,
-            status='confirmed',
-            confirmed_at__year=now.year,
-            confirmed_at__month=now.month
-        ).aggregate(total=Sum('amount'))
-        monthly_sales = float(monthly_agg['total'] or 0)
+        ingreso_agg = ventas_qs.aggregate(
+            total=Coalesce(Sum('total'), Decimal('0'))
+        )
+        ingreso_total = ingreso_agg['total']
+        monthly_sales = float(ingreso_total)
 
-        # Pedidos pendientes (reservas sin pago confirmado)
+        # ── Ventas por método de pago ─────────────────────────────────────────
+        ventas_por_metodo_qs = (
+            ventas_qs
+            .values('metodo_pago__nombre')
+            .annotate(
+                total=Coalesce(Sum('total'), Decimal('0')),
+                cantidad=Count('id'),
+            )
+            .order_by('metodo_pago__nombre')
+        )
+        ventas_por_metodo_pago = {}
+        for item in ventas_por_metodo_qs:
+            nombre = item['metodo_pago__nombre'] or 'Sin método'
+            ventas_por_metodo_pago[nombre] = {
+                'total': float(item['total']),
+                'cantidad': item['cantidad'],
+            }
+
+        # ── Costo total de lo vendido (suma cantidad × costo_unitario) ────────
+        costo_agg = VentaPOSItem.objects.filter(
+            venta__in=ventas_qs,
+        ).aggregate(
+            total=Coalesce(
+                Sum(F('cantidad') * F('costo_unitario'), output_field=DecimalField()),
+                Decimal('0'),
+            )
+        )
+        costo_total = costo_agg['total']
+
+        # ── Utilidades ────────────────────────────────────────────────────────
+        utilidad_bruta = float(ingreso_total) - float(costo_total)
+
+        gastos_agg = GastoOperativo.objects.filter(
+            vendor=vendor,
+            status='activo',
+            fecha__gte=fecha_inicio,
+            fecha__lte=fecha_fin,
+        ).aggregate(
+            total=Coalesce(Sum('monto'), Decimal('0'))
+        )
+        gastos_total = gastos_agg['total']
+        utilidad_neta = utilidad_bruta - float(gastos_total)
+
+        # ── Pedidos pendientes (canal live) ───────────────────────────────────
         pending_orders = Reservation.objects.filter(
             product__vendor=vendor,
-            status='pending'
+            status='pending',
         ).count()
 
-        # Próximo live
+        # ── Próximo live ──────────────────────────────────────────────────────
         next_live = None
         upcoming = vendor.live_sessions.filter(
             status='scheduled',
-            scheduled_at__gte=now
+            scheduled_at__gte=now,
         ).order_by('scheduled_at').first()
         if upcoming:
             next_live = upcoming.scheduled_at.isoformat()
 
+        # ── Ventas por producto ───────────────────────────────────────────────
+        ventas_por_producto_qs = (
+            VentaPOSItem.objects
+            .filter(
+                venta__vendor=vendor,
+                venta__status='completada',
+                venta__created_at__date__gte=fecha_inicio,
+                venta__created_at__date__lte=fecha_fin,
+            )
+            .values('product__id', 'product__name', 'product__category__name')
+            .annotate(
+                unidades=Coalesce(Sum('cantidad'), 0),
+                ingresos=Coalesce(
+                    Sum(F('cantidad') * F('precio_unitario'), output_field=DecimalField()),
+                    Decimal('0'),
+                ),
+            )
+            .filter(unidades__gt=0)
+            .order_by('-ingresos')
+        )
+        ventas_por_producto = [
+            {
+                'id': p['product__id'],
+                'nombre': p['product__name'],
+                'categoria': p['product__category__name'] or '',
+                'unidades_vendidas': p['unidades'],
+                'ingresos': float(p['ingresos']),
+            }
+            for p in ventas_por_producto_qs
+        ]
+
+        # ── Ventas POS del mes (legacy — mantiene compatibilidad) ─────────────
+        monthly_agg = Payment.objects.filter(
+            reservation__product__vendor=vendor,
+            status='confirmed',
+            confirmed_at__year=now.year,
+            confirmed_at__month=now.month,
+        ).aggregate(total=Sum('amount'))
+        monthly_sales_live = float(monthly_agg['total'] or 0)
+
         return Response({
             'total_active_products': total_active_products,
             'monthly_sales': monthly_sales,
+            'monthly_sales_live': monthly_sales_live,
             'pending_orders': pending_orders,
             'next_live': next_live,
+            'periodo': periodo,
+            'fecha_inicio': fecha_inicio.isoformat(),
+            'fecha_fin': fecha_fin.isoformat(),
+            'ventas_por_metodo_pago': ventas_por_metodo_pago,
+            'utilidad_bruta': round(utilidad_bruta, 2),
+            'utilidad_neta': round(utilidad_neta, 2),
+            'costo_total_vendido': round(float(costo_total), 2),
+            'gastos_operativos': round(float(gastos_total), 2),
+            'ventas_por_producto': ventas_por_producto,
         })
 
 

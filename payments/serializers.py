@@ -89,7 +89,9 @@ class VentaPOSSerializer(serializers.ModelSerializer):
             'id', 'numero_ticket', 'vendor', 'sucursal', 'sucursal_nombre',
             'caja', 'turno', 'cliente_nombre', 'cliente_telefono',
             'metodo_pago', 'metodo_pago_nombre', 'subtotal', 'descuento',
+            'discount_percentage', 'discount_type',
             'total', 'monto_recibido', 'vuelto', 'cupon', 'status',
+            'canal_venta', 'direccion_envio',
             'usuario', 'es_credito', 'plazo_dias', 'fecha_vencimiento_credito',
             'notas', 'created_at', 'items', 'monto_pagado', 'saldo_pendiente',
         )
@@ -126,6 +128,10 @@ class VentaPOSCreateSerializer(serializers.Serializer):
     items = VentaPOSItemInputSerializer(many=True)
     descuento = serializers.DecimalField(
         max_digits=10, decimal_places=2, required=False, default=0)
+    discount_percentage = serializers.DecimalField(
+        max_digits=5, decimal_places=2, required=False, allow_null=True, default=None)
+    discount_type = serializers.ChoiceField(
+        choices=['PERCENT', 'FIXED'], required=False, allow_null=True, default=None)
     cupon_codigo = serializers.CharField(
         required=False, allow_blank=True, allow_null=True, default=None)
     monto_recibido = serializers.DecimalField(
@@ -133,6 +139,11 @@ class VentaPOSCreateSerializer(serializers.Serializer):
     es_credito = serializers.BooleanField(required=False, default=False)
     plazo_dias = serializers.IntegerField(required=False, allow_null=True)
     notas = serializers.CharField(required=False, allow_blank=True, default='')
+    canal_venta = serializers.ChoiceField(
+        choices=['TIENDA', 'LIVE', 'WEB', 'DOMICILIO', 'INTERPROVINCIAL', 'NACIONAL'],
+        required=False, default='TIENDA')
+    direccion_envio = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=None)
 
 
 class GastoOperativoSerializer(serializers.ModelSerializer):

@@ -4,7 +4,8 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.db.models import Q
+from django.db.models import IntegerField, OuterRef, Q, Subquery, Sum
+from django.db.models.functions import Coalesce
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from .serializers import CategorySerializer, ProductSerializer, InventorySerializer, ProductVariantSerializer
 
@@ -194,7 +195,8 @@ class InventoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        from django.db.models import Q
+        from payments.models import VentaPOSItem
+
         qs = Inventory.objects.filter(product__vendor=self.request.user.vendor_profile)
         almacen_id = self.request.query_params.get('almacen_id')
         category_id = self.request.query_params.get('category')
@@ -222,4 +224,15 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 product__variant_objects__color__icontains=color,
                 product__variant_objects__is_active=True
             ).distinct()
+
+        # Anotación de unidades vendidas por producto (solo ventas completadas)
+        vendido_sq = (
+            VentaPOSItem.objects
+            .filter(product_id=OuterRef('product_id'), venta__status='completada')
+            .values('product_id')
+            .annotate(total=Sum('cantidad'))
+            .values('total')[:1]
+        )
+        qs = qs.annotate(vendido=Coalesce(Subquery(vendido_sq, output_field=IntegerField()), 0))
+
         return qs

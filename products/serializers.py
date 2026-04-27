@@ -49,6 +49,7 @@ class InventorySerializer(serializers.ModelSerializer):
     is_low_stock = serializers.ReadOnlyField()
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_price = serializers.DecimalField(source='product.price', read_only=True, max_digits=10, decimal_places=2)
+    vendido = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Inventory
@@ -93,6 +94,7 @@ class KardexMovimientoSerializer(serializers.ModelSerializer):
     almacen_nombre = serializers.CharField(source='almacen.nombre', read_only=True, allow_null=True)
     usuario_email = serializers.EmailField(source='usuario.email', read_only=True, allow_null=True)
     usuario_nombre = serializers.SerializerMethodField()
+    variant_name = serializers.SerializerMethodField()
 
     def get_usuario_nombre(self, obj):
         if not obj.usuario:
@@ -100,15 +102,21 @@ class KardexMovimientoSerializer(serializers.ModelSerializer):
         full = obj.usuario.get_full_name()
         return full if full.strip() else obj.usuario.email
 
+    def get_variant_name(self, obj):
+        if not obj.variant:
+            return None
+        parts = [p for p in [obj.variant.talla, obj.variant.color] if p]
+        return ' / '.join(parts) if parts else None
+
     class Meta:
         model = KardexMovimiento
         fields = (
             'id', 'inventory', 'product_name', 'almacen', 'almacen_nombre',
             'tipo', 'motivo', 'cantidad', 'stock_anterior', 'stock_actual',
             'costo_promedio', 'documento_ref', 'usuario', 'usuario_email', 'usuario_nombre',
-            'notas', 'created_at',
+            'notas', 'created_at', 'variant_name',
         )
-        read_only_fields = ('id', 'created_at', 'product_name', 'almacen_nombre', 'usuario_email', 'usuario_nombre')
+        read_only_fields = ('id', 'created_at', 'product_name', 'almacen_nombre', 'usuario_email', 'usuario_nombre', 'variant_name')
 
 
 class POSScanProductSerializer(serializers.ModelSerializer):

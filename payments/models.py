@@ -140,6 +140,34 @@ class VentaPOS(models.Model):
     )
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
     descuento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Porcentaje aplicado (ej: 10.00 = 10%)"
+    )
+    discount_type = models.CharField(
+        max_length=10,
+        choices=[('PERCENT', 'Porcentaje'), ('FIXED', 'Monto fijo')],
+        default='FIXED',
+        null=True, blank=True
+    )
+    CANAL_CHOICES = [
+        ('TIENDA', 'Tienda física'),
+        ('LIVE', 'Live streaming'),
+        ('WEB', 'Tienda web'),
+        ('DOMICILIO', 'Envío a domicilio'),
+        ('INTERPROVINCIAL', 'Envío interprovincial'),
+        ('NACIONAL', 'Envío nacional'),
+    ]
+    canal_venta = models.CharField(
+        max_length=20,
+        choices=CANAL_CHOICES,
+        default='TIENDA'
+    )
+    direccion_envio = models.TextField(
+        null=True, blank=True,
+        help_text="Dirección para canales de envío"
+    )
     total = models.DecimalField(max_digits=10, decimal_places=2)
     monto_recibido = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     vuelto = models.DecimalField(max_digits=10, decimal_places=2, default=0)

@@ -196,6 +196,14 @@ class KardexMovimiento(models.Model):
         Almacen, on_delete=models.SET_NULL,
         null=True, related_name='movimientos'
     )
+    # Variante vendida; null cuando el producto no tiene variantes
+    variant = models.ForeignKey(
+        'products.ProductVariant',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='kardex_movimientos',
+        verbose_name='Variante',
+    )
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
     motivo = models.CharField(max_length=30, choices=MOTIVO_CHOICES)
     cantidad = models.IntegerField()

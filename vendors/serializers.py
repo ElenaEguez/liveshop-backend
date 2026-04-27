@@ -104,6 +104,7 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
     sucursal_nombre = serializers.SerializerMethodField()
     usuario_nombre = serializers.SerializerMethodField()
     usuario_email = serializers.EmailField(source='usuario.email', read_only=True, allow_null=True)
+    metodos_pago = serializers.SerializerMethodField()
 
     class Meta:
         model = TurnoCaja
@@ -114,11 +115,13 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
             'efectivo_esperado', 'diferencia_cierre',
             'fecha_apertura', 'fecha_cierre', 'notas_cierre',
             'total_ventas', 'total_ingresos_manuales', 'total_retiros',
+            'metodos_pago',
         )
         read_only_fields = (
             'id', 'fecha_apertura', 'total_ventas',
             'total_ingresos_manuales', 'total_retiros',
             'caja_nombre', 'sucursal_nombre', 'usuario_email', 'usuario_nombre',
+            'metodos_pago',
         )
 
     def get_caja_nombre(self, obj):
@@ -131,6 +134,23 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
         if not obj.usuario:
             return None
         return obj.usuario.get_full_name() or obj.usuario.email
+
+    def get_metodos_pago(self, obj):
+        from django.db.models import Count, Sum
+        ventas = (
+            obj.ventas
+            .filter(status='completada')
+            .values('metodo_pago__nombre')
+            .annotate(monto_total=Sum('total'), cantidad=Count('id'))
+        )
+        resultado = {}
+        for v in ventas:
+            nombre = v['metodo_pago__nombre'] or 'Sin método'
+            resultado[nombre] = {
+                'monto': float(v['monto_total'] or 0),
+                'cantidad': v['cantidad'],
+            }
+        return resultado
 
 
 class TicketConfigSerializer(serializers.ModelSerializer):

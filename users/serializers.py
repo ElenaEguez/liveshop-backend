@@ -30,12 +30,49 @@ class UserProfileSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
     password2 = serializers.CharField(write_only=True, required=False)
     full_name = serializers.CharField(source='get_full_name', read_only=True)
+    is_vendor_owner = serializers.SerializerMethodField()
+    menu_access = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('id', 'email', 'nombre', 'apellido', 'full_name', 'telefono', 'ciudad', 
-                  'foto_perfil', 'rol', 'is_active', 'date_joined', 'password', 'password2')
-        read_only_fields = ('id', 'email', 'is_active', 'date_joined', 'full_name', 'rol')
+        fields = ('id', 'email', 'nombre', 'apellido', 'full_name', 'telefono', 'ciudad',
+                  'foto_perfil', 'rol', 'is_active', 'date_joined', 'password', 'password2',
+                  'is_vendor_owner', 'menu_access')
+        read_only_fields = ('id', 'email', 'is_active', 'date_joined', 'full_name', 'rol',
+                            'is_vendor_owner', 'menu_access')
+
+    def get_is_vendor_owner(self, obj):
+        return hasattr(obj, 'vendor_profile')
+
+    def get_menu_access(self, obj):
+        # Vendor owner tiene acceso completo
+        if hasattr(obj, 'vendor_profile'):
+            return ['all']
+
+        # Sub-usuario: construir lista desde permisos del rol
+        try:
+            cr = obj.team_member_profile.custom_role
+        except Exception:
+            return []
+
+        if not cr:
+            return []
+
+        perm_map = {
+            'products':      cr.perm_products,
+            'categories':    cr.perm_categories,
+            'inventory':     cr.perm_inventory,
+            'live_sessions': cr.perm_live_sessions,
+            'my_store':      cr.perm_my_store,
+            'orders':        cr.perm_orders,
+            'payments':      cr.perm_payments,
+            'team':          cr.perm_team,
+            'dashboard':     cr.perm_dashboard,
+            'pos':           cr.perm_pos,
+            'warehouse':     cr.perm_warehouse,
+            'expenses':      cr.perm_expenses,
+        }
+        return [modulo for modulo, tiene_acceso in perm_map.items() if tiene_acceso]
 
     def validate(self, data):
         if 'password' in data and 'password2' in data:
