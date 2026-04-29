@@ -77,6 +77,20 @@ class IsVendorOrTeamMember(BasePermission):
                 if session:
                     vendor = getattr(session, 'vendor', None)
         if vendor is None:
+            # TurnoCaja / Caja / Sucursal style objects
+            caja = getattr(obj, 'caja', None)
+            if caja and getattr(caja, 'sucursal', None):
+                vendor = getattr(caja.sucursal, 'vendor', None)
+        if vendor is None:
+            sucursal = getattr(obj, 'sucursal', None)
+            if sucursal:
+                vendor = getattr(sucursal, 'vendor', None)
+        if vendor is None:
+            # MovimientoCaja → turno → caja → sucursal → vendor
+            turno = getattr(obj, 'turno', None)
+            if turno and getattr(turno, 'caja', None) and getattr(turno.caja, 'sucursal', None):
+                vendor = getattr(turno.caja.sucursal, 'vendor', None)
+        if vendor is None:
             return False
         # Owner
         if hasattr(user, 'vendor_profile') and user.vendor_profile == vendor:

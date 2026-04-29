@@ -845,27 +845,35 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
 
         periodo = request.query_params.get('periodo', 'month')
         today = timezone.localdate()
+        ventas_periodo_filter = Q()
         if periodo == 'today':
-            qs = qs.filter(
-                Q(fecha_apertura__date=today) |
-                Q(ventas__created_at__date=today)
-            ).distinct()
+            qs = qs.filter(fecha_apertura__date=today)
+            ventas_periodo_filter = Q(created_at__date=today)
         elif periodo == 'week':
             week_start = today - timedelta(days=today.weekday())  # lunes
-            qs = qs.filter(
-                Q(fecha_apertura__date__gte=week_start, fecha_apertura__date__lte=today) |
-                Q(ventas__created_at__date__gte=week_start, ventas__created_at__date__lte=today)
-            ).distinct()
+            qs = qs.filter(fecha_apertura__date__gte=week_start, fecha_apertura__date__lte=today)
+            ventas_periodo_filter = Q(created_at__date__gte=week_start, created_at__date__lte=today)
         elif periodo == 'month':
-            qs = qs.filter(
-                Q(fecha_apertura__year=today.year, fecha_apertura__month=today.month) |
-                Q(ventas__created_at__year=today.year, ventas__created_at__month=today.month)
-            ).distinct()
+            qs = qs.filter(fecha_apertura__year=today.year, fecha_apertura__month=today.month)
+            ventas_periodo_filter = Q(created_at__year=today.year, created_at__month=today.month)
         elif periodo == 'year':
-            qs = qs.filter(
-                Q(fecha_apertura__year=today.year) |
-                Q(ventas__created_at__year=today.year)
-            ).distinct()
+            qs = qs.filter(fecha_apertura__year=today.year)
+            ventas_periodo_filter = Q(created_at__year=today.year)
+
+        # Incluye turnos que tengan ventas en el período aunque se hayan abierto fuera del rango.
+        if ventas_periodo_filter:
+            turno_ids_from_sales = list(
+                VentaPOS.objects.filter(
+                    ventas_periodo_filter,
+                    vendor=vendor,
+                    turno_id__isnull=False,
+                ).values_list('turno_id', flat=True).distinct()
+            )
+            if turno_ids_from_sales:
+                qs = TurnoCaja.objects.filter(
+                    Q(id__in=qs.values_list('id', flat=True)) | Q(id__in=turno_ids_from_sales),
+                    caja__sucursal__vendor=vendor,
+                ).select_related('caja__sucursal', 'usuario').order_by('-fecha_apertura')
 
         # Filtro semana del mes (solo periodo=month)
         semana_param = request.query_params.get('semana')
