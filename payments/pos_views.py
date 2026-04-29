@@ -945,8 +945,8 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             ventas_cajero_qs = (
                 VentaPOS.objects.filter(**ventas_filter)
                 .values(
-                    'usuario__id', 'usuario__first_name',
-                    'usuario__last_name', 'usuario__email',
+                    'usuario__id', 'usuario__nombre',
+                    'usuario__apellido', 'usuario__email',
                     'metodo_pago__tipo', 'metodo_pago__nombre',
                 )
                 .annotate(subtotal_venta=Sum('total'), cant=Count('id'))
@@ -956,9 +956,9 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             for row in ventas_cajero_qs:
                 uid = row['usuario__id']
                 if uid not in cajero_map:
-                    first = row['usuario__first_name'] or ''
-                    last  = row['usuario__last_name'] or ''
-                    name  = f'{first} {last}'.strip() or row['usuario__email'] or '—'
+                    nom = row['usuario__nombre'] or ''
+                    ape = row['usuario__apellido'] or ''
+                    name = f'{nom} {ape}'.strip() or row['usuario__email'] or '—'
                     cajero_map[uid] = {
                         'id': uid, 'nombre': name,
                         'total': Decimal('0'), 'por_metodo': {},
