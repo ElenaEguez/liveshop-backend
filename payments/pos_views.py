@@ -918,72 +918,77 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         # ── Totales agregados sobre el período completo (sin paginar) ─────────
         turno_ids = list(qs.values_list('id', flat=True))
 
-        # Ventas agrupadas por cajero + método
-        ventas_filter = {'turno_id__in': turno_ids, 'status': 'completada'}
-        if metodo_pago_tipo:
-            ventas_filter['metodo_pago__tipo'] = metodo_pago_tipo
+        # Sin turnos en el queryset: evita consultas con turno_id__in=[] (algunos backends / drivers).
+        if not turno_ids:
+            totales_por_cajero = []
+            totales_por_metodo = []
+        else:
+            # Ventas agrupadas por cajero + método
+            ventas_filter = {'turno_id__in': turno_ids, 'status': 'completada'}
+            if metodo_pago_tipo:
+                ventas_filter['metodo_pago__tipo'] = metodo_pago_tipo
 
-        ventas_cajero_qs = (
-            VentaPOS.objects.filter(**ventas_filter)
-            .values(
-                'usuario__id', 'usuario__first_name',
-                'usuario__last_name', 'usuario__email',
-                'metodo_pago__tipo', 'metodo_pago__nombre',
+            ventas_cajero_qs = (
+                VentaPOS.objects.filter(**ventas_filter)
+                .values(
+                    'usuario__id', 'usuario__first_name',
+                    'usuario__last_name', 'usuario__email',
+                    'metodo_pago__tipo', 'metodo_pago__nombre',
+                )
+                .annotate(subtotal_venta=Sum('total'), cant=Count('id'))
             )
-            .annotate(subtotal_venta=Sum('total'), cant=Count('id'))
-        )
 
-        cajero_map: dict = {}
-        for row in ventas_cajero_qs:
-            uid = row['usuario__id']
-            if uid not in cajero_map:
-                first = row['usuario__first_name'] or ''
-                last  = row['usuario__last_name'] or ''
-                name  = f'{first} {last}'.strip() or row['usuario__email'] or '—'
-                cajero_map[uid] = {
-                    'id': uid, 'nombre': name,
-                    'total': Decimal('0'), 'por_metodo': {},
+            cajero_map: dict = {}
+            for row in ventas_cajero_qs:
+                uid = row['usuario__id']
+                if uid not in cajero_map:
+                    first = row['usuario__first_name'] or ''
+                    last  = row['usuario__last_name'] or ''
+                    name  = f'{first} {last}'.strip() or row['usuario__email'] or '—'
+                    cajero_map[uid] = {
+                        'id': uid, 'nombre': name,
+                        'total': Decimal('0'), 'por_metodo': {},
+                    }
+                monto = row['subtotal_venta'] or Decimal('0')
+                cajero_map[uid]['total'] += monto
+                tipo  = row['metodo_pago__tipo'] or 'otro'
+                mnombre = row['metodo_pago__nombre'] or 'Otro'
+                pm = cajero_map[uid]['por_metodo'].setdefault(
+                    tipo, {'nombre': mnombre, 'total': Decimal('0'), 'cantidad': 0}
+                )
+                pm['total'] += monto
+                pm['cantidad'] += row['cant'] or 0
+
+            totales_por_cajero = [
+                {
+                    'id': v['id'],
+                    'nombre': v['nombre'],
+                    'total': str(round(v['total'], 2)),
+                    'por_metodo': [
+                        {'tipo': k, 'nombre': m['nombre'],
+                         'total': str(round(m['total'], 2)), 'cantidad': m['cantidad']}
+                        for k, m in v['por_metodo'].items()
+                    ],
                 }
-            monto = row['subtotal_venta'] or Decimal('0')
-            cajero_map[uid]['total'] += monto
-            tipo  = row['metodo_pago__tipo'] or 'otro'
-            mnombre = row['metodo_pago__nombre'] or 'Otro'
-            pm = cajero_map[uid]['por_metodo'].setdefault(
-                tipo, {'nombre': mnombre, 'total': Decimal('0'), 'cantidad': 0}
+                for v in cajero_map.values()
+            ]
+
+            # Totales globales por método
+            ventas_metodo_qs = (
+                VentaPOS.objects.filter(**ventas_filter)
+                .values('metodo_pago__tipo', 'metodo_pago__nombre')
+                .annotate(total=Sum('total'), cantidad=Count('id'))
+                .order_by('-total')
             )
-            pm['total'] += monto
-            pm['cantidad'] += row['cant'] or 0
-
-        totales_por_cajero = [
-            {
-                'id': v['id'],
-                'nombre': v['nombre'],
-                'total': str(round(v['total'], 2)),
-                'por_metodo': [
-                    {'tipo': k, 'nombre': m['nombre'],
-                     'total': str(round(m['total'], 2)), 'cantidad': m['cantidad']}
-                    for k, m in v['por_metodo'].items()
-                ],
-            }
-            for v in cajero_map.values()
-        ]
-
-        # Totales globales por método
-        ventas_metodo_qs = (
-            VentaPOS.objects.filter(**ventas_filter)
-            .values('metodo_pago__tipo', 'metodo_pago__nombre')
-            .annotate(total=Sum('total'), cantidad=Count('id'))
-            .order_by('-total')
-        )
-        totales_por_metodo = [
-            {
-                'tipo': r['metodo_pago__tipo'] or 'otro',
-                'nombre': r['metodo_pago__nombre'] or 'Otro',
-                'total': str(round(r['total'] or Decimal('0'), 2)),
-                'cantidad': r['cantidad'],
-            }
-            for r in ventas_metodo_qs
-        ]
+            totales_por_metodo = [
+                {
+                    'tipo': r['metodo_pago__tipo'] or 'otro',
+                    'nombre': r['metodo_pago__nombre'] or 'Otro',
+                    'total': str(round(r['total'] or Decimal('0'), 2)),
+                    'cantidad': r['cantidad'],
+                }
+                for r in ventas_metodo_qs
+            ]
 
         # ── Paginación ────────────────────────────────────────────────────────
         page_size = _safe_int(request.query_params.get('page_size', 20), default=20, min_value=1, max_value=100)
