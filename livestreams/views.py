@@ -99,6 +99,8 @@ class PublicLiveSessionDetailView(APIView):
                 'name': producto.name,
                 'description': producto.description,
                 'price': producto.price,
+                'category_id': producto.category_id,
+                'category_name': producto.category.name if producto.category else '',
                 'stock': producto.stock,
                 'variants': variants_data,
                 'available_quantity': available,

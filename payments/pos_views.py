@@ -776,7 +776,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         )
         return Response(MovimientoCajaSerializer(mov).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['patch'], url_path='editar-fondo')
+    @action(detail=True, methods=['patch', 'post'], url_path='editar-fondo')
     def editar_fondo(self, request, pk=None):
         """PATCH /api/v1/pos/turnos/{pk}/editar-fondo/ — edita el monto de apertura de un turno abierto."""
         from decimal import InvalidOperation
@@ -846,16 +846,26 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         periodo = request.query_params.get('periodo', 'month')
         today = timezone.localdate()
         if periodo == 'today':
-            qs = qs.filter(fecha_apertura__date=today)
+            qs = qs.filter(
+                Q(fecha_apertura__date=today) |
+                Q(ventas__created_at__date=today)
+            ).distinct()
         elif periodo == 'week':
             week_start = today - timedelta(days=today.weekday())  # lunes
-            qs = qs.filter(fecha_apertura__date__gte=week_start,
-                           fecha_apertura__date__lte=today)
+            qs = qs.filter(
+                Q(fecha_apertura__date__gte=week_start, fecha_apertura__date__lte=today) |
+                Q(ventas__created_at__date__gte=week_start, ventas__created_at__date__lte=today)
+            ).distinct()
         elif periodo == 'month':
-            qs = qs.filter(fecha_apertura__year=today.year,
-                           fecha_apertura__month=today.month)
+            qs = qs.filter(
+                Q(fecha_apertura__year=today.year, fecha_apertura__month=today.month) |
+                Q(ventas__created_at__year=today.year, ventas__created_at__month=today.month)
+            ).distinct()
         elif periodo == 'year':
-            qs = qs.filter(fecha_apertura__year=today.year)
+            qs = qs.filter(
+                Q(fecha_apertura__year=today.year) |
+                Q(ventas__created_at__year=today.year)
+            ).distinct()
 
         # Filtro semana del mes (solo periodo=month)
         semana_param = request.query_params.get('semana')
