@@ -162,6 +162,8 @@ MEDIA_ROOT = '/var/www/liveshop/media/'
 
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
     'https://innovatecsystelen.com',
+    'https://gaiabolivia.com',
+    'https://www.gaiabolivia.com',
     'http://76.13.160.126',
     'http://srv1544228.hstgr.cloud',
 ])
@@ -170,6 +172,9 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     'http://localhost:4200',
     'http://localhost:5500',
+    'https://gaiabolivia.com',
+    'https://www.gaiabolivia.com',
+    'https://innovatecsystelen.com',
     'http://76.13.160.126',
     'http://76.13.160.126:8080',
     'http://srv1544228.hstgr.cloud',
