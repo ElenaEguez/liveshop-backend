@@ -66,6 +66,17 @@ def _safe_int(value, default, min_value=None, max_value=None):
     return parsed
 
 
+def _to_decimal(val):
+    """
+    SQLite aggregates sometimes return float; mixing Decimal + float raises TypeError.
+    """
+    if val is None:
+        return Decimal('0')
+    if isinstance(val, Decimal):
+        return val
+    return Decimal(str(val))
+
+
 # ─── VentaPOS ────────────────────────────────────────────────────────────────
 
 class VentaPOSViewSet(viewsets.GenericViewSet):
@@ -949,7 +960,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
                         'id': uid, 'nombre': name,
                         'total': Decimal('0'), 'por_metodo': {},
                     }
-                monto = row['subtotal_venta'] or Decimal('0')
+                monto = _to_decimal(row['subtotal_venta'])
                 cajero_map[uid]['total'] += monto
                 tipo  = row['metodo_pago__tipo'] or 'otro'
                 mnombre = row['metodo_pago__nombre'] or 'Otro'
@@ -963,10 +974,11 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
                 {
                     'id': v['id'],
                     'nombre': v['nombre'],
-                    'total': str(round(v['total'], 2)),
+                    'total': str(_to_decimal(v['total']).quantize(Decimal('0.01'))),
                     'por_metodo': [
                         {'tipo': k, 'nombre': m['nombre'],
-                         'total': str(round(m['total'], 2)), 'cantidad': m['cantidad']}
+                         'total': str(_to_decimal(m['total']).quantize(Decimal('0.01'))),
+                         'cantidad': m['cantidad']}
                         for k, m in v['por_metodo'].items()
                     ],
                 }
@@ -984,7 +996,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
                 {
                     'tipo': r['metodo_pago__tipo'] or 'otro',
                     'nombre': r['metodo_pago__nombre'] or 'Otro',
-                    'total': str(round(r['total'] or Decimal('0'), 2)),
+                    'total': str(_to_decimal(r['total']).quantize(Decimal('0.01'))),
                     'cantidad': r['cantidad'],
                 }
                 for r in ventas_metodo_qs
