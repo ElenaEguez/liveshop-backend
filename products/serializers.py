@@ -143,3 +143,46 @@ class POSScanProductSerializer(serializers.ModelSerializer):
 
     def get_categoria(self, obj):
         return obj.category.name if obj.category else None
+
+
+class SubcategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'slug', 'order', 'is_active']
+
+
+class CategoryWithSubcategoriesSerializer(serializers.ModelSerializer):
+    subcategories = SubcategorySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'slug', 'order', 'is_active', 'subcategories']
+
+
+class PublicProductSerializer(serializers.ModelSerializer):
+    colors = serializers.SerializerMethodField()
+    category = SubcategorySerializer(read_only=True)
+    images = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'price', 'description',
+            'category', 'colors', 'images', 'is_active',
+        ]
+
+    def get_colors(self, obj):
+        """Devuelve lista de colores únicos de las variantes del producto."""
+        return list(
+            obj.variant_objects.filter(is_active=True)
+            .exclude(color='')
+            .values('color', 'color_hex')
+            .distinct()
+        )
+
+    def get_images(self, obj):
+        request = self.context.get('request')
+        return [
+            request.build_absolute_uri(img.image.url) if request else img.image.url
+            for img in obj.images.all()
+        ]

@@ -413,8 +413,9 @@ class OrdersDashboardView(APIView):
         )
         total_orders = totals['total_orders'] or 0
         total_revenue = totals['total_revenue'] or Decimal('0')
-        total_cost = totals['total_cost']  # None if all purchase_costs are NULL
-        gross_margin = (total_revenue - total_cost) if total_cost is not None else None
+        total_cost = totals['total_cost'] or Decimal('0')
+        gross_margin = total_revenue - total_cost
+        missing_cost_data = qs_with_cost.filter(unit_cost__isnull=True).exists()
 
         # ── Gastos operativos ────────────────────────────────────────────────
         from payments.models import GastoOperativo
@@ -425,7 +426,7 @@ class OrdersDashboardView(APIView):
         )
         gastos_totals = gastos_qs.aggregate(total=Sum('monto'))
         total_gastos_operativos = gastos_totals['total'] or Decimal('0')
-        utilidad_neta = (gross_margin - total_gastos_operativos) if gross_margin is not None else None
+        utilidad_neta = gross_margin - total_gastos_operativos
 
         gastos_por_categoria = list(
             gastos_qs.values('categoria__nombre').annotate(
@@ -686,15 +687,15 @@ class OrdersDashboardView(APIView):
             'sales_by_product': sales_by_product,
             'sales_by_period': sales_by_period,
         }
-        if total_cost is not None:
-            response_data['total_cost'] = str(total_cost)
-            response_data['gross_margin'] = str(gross_margin)
-        else:
-            response_data['total_cost'] = None
-            response_data['gross_margin'] = None
+        response_data['total_cost'] = str(total_cost)
+        response_data['gross_margin'] = str(gross_margin)
+        response_data['missing_cost_data'] = missing_cost_data
+
+        # Retiros de caja (almuerzo, etc.) descuentan la utilidad neta
+        utilidad_neta_final = utilidad_neta - total_retiros_caja
 
         response_data['total_gastos_operativos'] = str(total_gastos_operativos)
-        response_data['utilidad_neta'] = str(utilidad_neta) if utilidad_neta is not None else None
+        response_data['utilidad_neta'] = str(round(utilidad_neta_final, 2))
         response_data['gastos_por_categoria'] = gastos_por_categoria
         response_data['total_ingresos_caja'] = str(total_ingresos_caja)
         response_data['total_retiros_caja'] = str(total_retiros_caja)

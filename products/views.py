@@ -1,13 +1,16 @@
 import json
 from decimal import Decimal, InvalidOperation
-from rest_framework import viewsets
+from rest_framework import generics, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import IntegerField, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
-from .serializers import CategorySerializer, ProductSerializer, InventorySerializer, ProductVariantSerializer
+from .serializers import (
+    CategorySerializer, CategoryWithSubcategoriesSerializer,
+    ProductSerializer, InventorySerializer, ProductVariantSerializer,
+)
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -236,3 +239,24 @@ class InventoryViewSet(viewsets.ModelViewSet):
         qs = qs.annotate(vendido=Coalesce(Subquery(vendido_sq, output_field=IntegerField()), 0))
 
         return qs
+
+
+class PublicCategoryListView(generics.ListAPIView):
+    """
+    Endpoint público: /api/public/{vendor_slug}/categories/
+    Retorna solo categorías raíz (parent=None) con sus subcategorías anidadas.
+    """
+    serializer_class = CategoryWithSubcategoriesSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        vendor_slug = self.kwargs['vendor_slug']
+        return (
+            Category.objects.filter(
+                vendor__slug=vendor_slug,
+                parent=None,
+                is_active=True,
+            )
+            .prefetch_related('subcategories')
+            .order_by('order', 'name')
+        )

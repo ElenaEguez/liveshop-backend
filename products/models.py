@@ -3,17 +3,36 @@ from vendors.models import Vendor
 
 
 class Category(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    vendor = models.ForeignKey(
+        'vendors.Vendor', on_delete=models.CASCADE,
+        null=True, blank=True, related_name='categories'
+    )
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, blank=True)
     description = models.TextField(blank=True, null=True)
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='subcategories'
+    )
+    order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = 'Categoría'
         verbose_name_plural = 'Categorías'
+        ordering = ['order', 'name']
+        unique_together = ['vendor', 'slug']
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_parent(self):
+        return self.parent is None
 
 
 class Product(models.Model):

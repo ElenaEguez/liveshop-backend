@@ -789,8 +789,9 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['get'])
     def arqueos(self, request):
         """
-        GET /api/v1/pos/turnos/arqueos/?periodo=today|week|month|year&page=1&page_size=20
-        Lista turnos cerrados con su arqueo de caja (diferencia_cierre).
+        GET /api/v1/pos/turnos/arqueos/
+        Params: periodo, page, page_size, semana, cajero_id, sucursal_id
+        Returns paginated turnos + totales_por_cajero + totales_por_metodo.
         """
         vendor = self._get_vendor()
         qs = TurnoCaja.objects.filter(
@@ -802,13 +803,16 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         if periodo == 'today':
             qs = qs.filter(fecha_apertura__date=today)
         elif periodo == 'week':
-            qs = qs.filter(fecha_apertura__date__gte=today - timedelta(days=7))
+            week_start = today - timedelta(days=today.weekday())  # lunes
+            qs = qs.filter(fecha_apertura__date__gte=week_start,
+                           fecha_apertura__date__lte=today)
         elif periodo == 'month':
-            qs = qs.filter(fecha_apertura__date__gte=today - timedelta(days=30))
+            qs = qs.filter(fecha_apertura__year=today.year,
+                           fecha_apertura__month=today.month)
         elif periodo == 'year':
             qs = qs.filter(fecha_apertura__year=today.year)
 
-        # Filtro de semana del mes (solo aplica cuando periodo=month)
+        # Filtro semana del mes (solo periodo=month)
         semana_param = request.query_params.get('semana')
         if semana_param and periodo == 'month':
             try:
@@ -823,17 +827,95 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             except (ValueError, TypeError):
                 pass
 
+        # Filtros opcionales
+        cajero_id = request.query_params.get('cajero_id')
+        if cajero_id:
+            qs = qs.filter(usuario_id=cajero_id)
+
+        sucursal_id = request.query_params.get('sucursal_id')
+        if sucursal_id:
+            qs = qs.filter(caja__sucursal_id=sucursal_id)
+
+        # ── Totales agregados sobre el período completo (sin paginar) ─────────
+        turno_ids = list(qs.values_list('id', flat=True))
+
+        # Ventas agrupadas por cajero + método
+        ventas_cajero_qs = (
+            VentaPOS.objects.filter(turno_id__in=turno_ids, status='completada')
+            .values(
+                'usuario__id', 'usuario__first_name',
+                'usuario__last_name', 'usuario__email',
+                'metodo_pago__tipo', 'metodo_pago__nombre',
+            )
+            .annotate(subtotal_venta=Sum('total'), cant=Count('id'))
+        )
+
+        cajero_map: dict = {}
+        for row in ventas_cajero_qs:
+            uid = row['usuario__id']
+            if uid not in cajero_map:
+                first = row['usuario__first_name'] or ''
+                last  = row['usuario__last_name'] or ''
+                name  = f'{first} {last}'.strip() or row['usuario__email'] or '—'
+                cajero_map[uid] = {
+                    'id': uid, 'nombre': name,
+                    'total': Decimal('0'), 'por_metodo': {},
+                }
+            monto = row['subtotal_venta'] or Decimal('0')
+            cajero_map[uid]['total'] += monto
+            tipo  = row['metodo_pago__tipo'] or 'otro'
+            mnombre = row['metodo_pago__nombre'] or 'Otro'
+            pm = cajero_map[uid]['por_metodo'].setdefault(
+                tipo, {'nombre': mnombre, 'total': Decimal('0'), 'cantidad': 0}
+            )
+            pm['total'] += monto
+            pm['cantidad'] += row['cant'] or 0
+
+        totales_por_cajero = [
+            {
+                'id': v['id'],
+                'nombre': v['nombre'],
+                'total': str(round(v['total'], 2)),
+                'por_metodo': [
+                    {'tipo': k, 'nombre': m['nombre'],
+                     'total': str(round(m['total'], 2)), 'cantidad': m['cantidad']}
+                    for k, m in v['por_metodo'].items()
+                ],
+            }
+            for v in cajero_map.values()
+        ]
+
+        # Totales globales por método
+        ventas_metodo_qs = (
+            VentaPOS.objects.filter(turno_id__in=turno_ids, status='completada')
+            .values('metodo_pago__tipo', 'metodo_pago__nombre')
+            .annotate(total=Sum('total'), cantidad=Count('id'))
+            .order_by('-total')
+        )
+        totales_por_metodo = [
+            {
+                'tipo': r['metodo_pago__tipo'] or 'otro',
+                'nombre': r['metodo_pago__nombre'] or 'Otro',
+                'total': str(round(r['total'] or Decimal('0'), 2)),
+                'cantidad': r['cantidad'],
+            }
+            for r in ventas_metodo_qs
+        ]
+
+        # ── Paginación ────────────────────────────────────────────────────────
         page_size = min(int(request.query_params.get('page_size', 20)), 100)
         page_num  = max(int(request.query_params.get('page', 1)), 1)
-        total = qs.count()
+        total_count = qs.count()
         start = (page_num - 1) * page_size
         qs_page = qs[start:start + page_size]
 
         return Response({
-            'count': total,
+            'count': total_count,
             'page': page_num,
-            'pages': max(1, -(-total // page_size)),
+            'pages': max(1, -(-total_count // page_size)),
             'results': TurnoCajaSerializer(qs_page, many=True).data,
+            'totales_por_cajero': totales_por_cajero,
+            'totales_por_metodo': totales_por_metodo,
         })
 
 
