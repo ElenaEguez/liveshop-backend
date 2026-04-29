@@ -51,6 +51,21 @@ def _vendor_or_403(user):
     return vendor
 
 
+def _safe_int(value, default, min_value=None, max_value=None):
+    """
+    Parse integer query params safely to avoid 500 errors on bad input.
+    """
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if min_value is not None:
+        parsed = max(min_value, parsed)
+    if max_value is not None:
+        parsed = min(max_value, parsed)
+    return parsed
+
+
 # ─── VentaPOS ────────────────────────────────────────────────────────────────
 
 class VentaPOSViewSet(viewsets.GenericViewSet):
@@ -971,8 +986,8 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         ]
 
         # ── Paginación ────────────────────────────────────────────────────────
-        page_size = min(int(request.query_params.get('page_size', 20)), 100)
-        page_num  = max(int(request.query_params.get('page', 1)), 1)
+        page_size = _safe_int(request.query_params.get('page_size', 20), default=20, min_value=1, max_value=100)
+        page_num  = _safe_int(request.query_params.get('page', 1), default=1, min_value=1)
         total_count = qs.count()
         start = (page_num - 1) * page_size
         qs_page = qs[start:start + page_size]
@@ -1199,8 +1214,8 @@ class MovimientosCajaView(APIView):
     def get(self, request):
         vendor = _vendor_or_403(request.user)
         period = request.query_params.get('period', 'today')
-        page      = max(int(request.query_params.get('page', 1)), 1)
-        page_size = min(int(request.query_params.get('page_size', 10)), 10000)
+        page = _safe_int(request.query_params.get('page', 1), default=1, min_value=1)
+        page_size = _safe_int(request.query_params.get('page_size', 10), default=10, min_value=1, max_value=10000)
 
         today = timezone.localdate()
 

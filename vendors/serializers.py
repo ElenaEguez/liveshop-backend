@@ -88,12 +88,15 @@ class CajaSerializer(serializers.ModelSerializer):
 
 
 class MovimientoCajaSerializer(serializers.ModelSerializer):
-    usuario_email = serializers.EmailField(source='usuario.email', read_only=True, allow_null=True)
+    usuario_email = serializers.SerializerMethodField()
 
     class Meta:
         model = MovimientoCaja
         fields = ('id', 'turno', 'tipo', 'concepto', 'monto', 'usuario', 'usuario_email', 'created_at')
         read_only_fields = ('id', 'created_at', 'usuario', 'usuario_email')
+
+    def get_usuario_email(self, obj):
+        return obj.usuario.email if obj.usuario else None
 
 
 class TurnoCajaSerializer(serializers.ModelSerializer):
@@ -103,7 +106,7 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
     caja_nombre = serializers.SerializerMethodField()
     sucursal_nombre = serializers.SerializerMethodField()
     usuario_nombre = serializers.SerializerMethodField()
-    usuario_email = serializers.EmailField(source='usuario.email', read_only=True, allow_null=True)
+    usuario_email = serializers.SerializerMethodField()
     metodos_pago = serializers.SerializerMethodField()
 
     class Meta:
@@ -134,6 +137,9 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
         if not obj.usuario:
             return None
         return obj.usuario.get_full_name() or obj.usuario.email
+
+    def get_usuario_email(self, obj):
+        return obj.usuario.email if obj.usuario else None
 
     def get_metodos_pago(self, obj):
         from django.db.models import Count, Sum
