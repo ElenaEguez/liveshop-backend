@@ -528,7 +528,7 @@ class OrdersDashboardView(APIView):
 
         pos_qs = VentaPOS.objects.filter(
             vendor=vendor,
-            status__in=['completada', 'credito'],
+            status='completada',
             **pos_date_filter
         )
         pos_totals = pos_qs.aggregate(

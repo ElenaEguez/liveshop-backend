@@ -114,6 +114,10 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['get'])
     def resumen(self, request):
         qs = self.get_queryset().exclude(status='anulada')
+        requested_status = request.query_params.get('status')
+        # Regla contable por defecto: solo ventas confirmadas/completadas
+        if not requested_status:
+            qs = qs.filter(status='completada')
         agg = qs.aggregate(total_ventas=Sum('total'), cantidad_ventas=Count('id'))
         cobrado_expr = Sum(
             Case(
@@ -123,9 +127,11 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             )
         )
         total_cobrado_contado = qs.aggregate(total=cobrado_expr)['total'] or Decimal('0')
-        total_cobrado_credito = (
-            PagoCredito.objects.filter(venta__in=qs).aggregate(total=Sum('monto'))['total'] or Decimal('0')
-        )
+        total_cobrado_credito = Decimal('0')
+        if requested_status == 'credito':
+            total_cobrado_credito = (
+                PagoCredito.objects.filter(venta__in=qs).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+            )
         return Response({
             'total_ventas': str(agg['total_ventas'] or Decimal('0')),
             'total_cobrado': str(total_cobrado_contado + total_cobrado_credito),
