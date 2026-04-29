@@ -74,7 +74,10 @@ def _to_decimal(val):
         return Decimal('0')
     if isinstance(val, Decimal):
         return val
-    return Decimal(str(val))
+    try:
+        return Decimal(str(val))
+    except Exception:
+        return Decimal('0')
 
 
 # ─── VentaPOS ────────────────────────────────────────────────────────────────
@@ -986,17 +989,18 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             ]
 
             # Totales globales por método
+            # No usar alias "total" (colisiona con el campo VentaPOS.total en ORDER BY en SQLite).
             ventas_metodo_qs = (
                 VentaPOS.objects.filter(**ventas_filter)
                 .values('metodo_pago__tipo', 'metodo_pago__nombre')
-                .annotate(total=Sum('total'), cantidad=Count('id'))
-                .order_by('-total')
+                .annotate(sum_total=Sum('total'), cantidad=Count('id'))
+                .order_by('-sum_total')
             )
             totales_por_metodo = [
                 {
                     'tipo': r['metodo_pago__tipo'] or 'otro',
                     'nombre': r['metodo_pago__nombre'] or 'Otro',
-                    'total': str(_to_decimal(r['total']).quantize(Decimal('0.01'))),
+                    'total': str(_to_decimal(r['sum_total']).quantize(Decimal('0.01'))),
                     'cantidad': r['cantidad'],
                 }
                 for r in ventas_metodo_qs

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 from .models import Vendor, TeamMember, CustomRole, Sucursal, Almacen, Caja, TurnoCaja, MovimientoCaja, TicketConfig, Comprobante
 from users.serializers import UserProfileSerializer
@@ -100,9 +102,9 @@ class MovimientoCajaSerializer(serializers.ModelSerializer):
 
 
 class TurnoCajaSerializer(serializers.ModelSerializer):
-    total_ventas = serializers.ReadOnlyField()
-    total_ingresos_manuales = serializers.ReadOnlyField()
-    total_retiros = serializers.ReadOnlyField()
+    total_ventas = serializers.SerializerMethodField()
+    total_ingresos_manuales = serializers.SerializerMethodField()
+    total_retiros = serializers.SerializerMethodField()
     caja_nombre = serializers.SerializerMethodField()
     sucursal_nombre = serializers.SerializerMethodField()
     usuario_nombre = serializers.SerializerMethodField()
@@ -141,22 +143,57 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
     def get_usuario_email(self, obj):
         return obj.usuario.email if obj.usuario else None
 
+    def _safe_money_str(self, val):
+        try:
+            if val is None:
+                return '0.00'
+            d = val if isinstance(val, Decimal) else Decimal(str(val))
+            return str(d.quantize(Decimal('0.01')))
+        except Exception:
+            return '0.00'
+
+    def get_total_ventas(self, obj):
+        try:
+            return self._safe_money_str(obj.total_ventas)
+        except Exception:
+            return '0.00'
+
+    def get_total_ingresos_manuales(self, obj):
+        try:
+            return self._safe_money_str(obj.total_ingresos_manuales)
+        except Exception:
+            return '0.00'
+
+    def get_total_retiros(self, obj):
+        try:
+            return self._safe_money_str(obj.total_retiros)
+        except Exception:
+            return '0.00'
+
     def get_metodos_pago(self, obj):
         from django.db.models import Count, Sum
-        ventas = (
-            obj.ventas
-            .filter(status='completada')
-            .values('metodo_pago__nombre')
-            .annotate(monto_total=Sum('total'), cantidad=Count('id'))
-        )
-        resultado = {}
-        for v in ventas:
-            nombre = v['metodo_pago__nombre'] or 'Sin método'
-            resultado[nombre] = {
-                'monto': float(v['monto_total'] or 0),
-                'cantidad': v['cantidad'],
-            }
-        return resultado
+        try:
+            ventas = (
+                obj.ventas
+                .filter(status='completada')
+                .values('metodo_pago__nombre')
+                .annotate(monto_total=Sum('total'), cantidad=Count('id'))
+            )
+            resultado = {}
+            for v in ventas:
+                nombre = v['metodo_pago__nombre'] or 'Sin método'
+                mt = v['monto_total']
+                try:
+                    monto_f = float(mt) if mt is not None else 0.0
+                except (TypeError, ValueError):
+                    monto_f = 0.0
+                resultado[nombre] = {
+                    'monto': monto_f,
+                    'cantidad': v['cantidad'],
+                }
+            return resultado
+        except Exception:
+            return {}
 
 
 class TicketConfigSerializer(serializers.ModelSerializer):
