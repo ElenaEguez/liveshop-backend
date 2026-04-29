@@ -405,17 +405,17 @@ class OrdersDashboardView(APIView):
             output_field=DecimalField(max_digits=12, decimal_places=2)
         )
 
-        # ── Totals ──────────────────────────────────────────────────────────
+        # ── Totals (LIVE) ───────────────────────────────────────────────────
         totals = qs_with_cost.aggregate(
             total_orders=Count('id'),
             total_revenue=Sum(revenue_expr),
             total_cost=Sum(cost_expr),
         )
         total_orders = totals['total_orders'] or 0
-        total_revenue = totals['total_revenue'] or Decimal('0')
-        total_cost = totals['total_cost'] or Decimal('0')
-        gross_margin = total_revenue - total_cost
-        missing_cost_data = qs_with_cost.filter(unit_cost__isnull=True).exists()
+        live_total_revenue = totals['total_revenue'] or Decimal('0')
+        live_total_cost = totals['total_cost'] or Decimal('0')
+        live_gross_margin = live_total_revenue - live_total_cost
+        live_missing_cost_data = qs_with_cost.filter(unit_cost__isnull=True).exists()
 
         # ── Gastos operativos ────────────────────────────────────────────────
         from payments.models import GastoOperativo
@@ -425,8 +425,7 @@ class OrdersDashboardView(APIView):
             **gasto_date_filter
         )
         gastos_totals = gastos_qs.aggregate(total=Sum('monto'))
-        total_gastos_operativos = gastos_totals['total'] or Decimal('0')
-        utilidad_neta = gross_margin - total_gastos_operativos
+        total_gastos_operativos_base = gastos_totals['total'] or Decimal('0')
 
         gastos_por_categoria = list(
             gastos_qs.values('categoria__nombre').annotate(
@@ -529,7 +528,7 @@ class OrdersDashboardView(APIView):
 
         pos_qs = VentaPOS.objects.filter(
             vendor=vendor,
-            status='completada',
+            status__in=['completada', 'credito'],
             **pos_date_filter
         )
         pos_totals = pos_qs.aggregate(
@@ -538,6 +537,19 @@ class OrdersDashboardView(APIView):
         )
         pos_total_orders = pos_totals['total_orders'] or 0
         pos_total_revenue = pos_totals['total_revenue'] or Decimal('0')
+        from payments.models import VentaPOSItem
+        pos_items_all = VentaPOSItem.objects.filter(venta__in=pos_qs)
+        pos_cost_agg = pos_items_all.aggregate(
+            total_cost=Sum(
+                ExpressionWrapper(
+                    F('costo_unitario') * F('cantidad'),
+                    output_field=DecimalField(max_digits=12, decimal_places=2)
+                )
+            )
+        )
+        pos_total_cost = pos_cost_agg['total_cost'] or Decimal('0')
+        pos_missing_cost_data = pos_items_all.filter(costo_unitario__isnull=True).exists()
+        pos_gross_margin = pos_total_revenue - pos_total_cost
 
         # ── Ventas web (CartOrder) ──────────────────────────────────────────
         from website_builder.models import CartOrder
@@ -552,6 +564,24 @@ class OrdersDashboardView(APIView):
         )
         web_total_orders = web_totals['total_orders'] or 0
         web_total_revenue = web_totals['total_revenue'] or Decimal('0')
+        from website_builder.models import CartOrderItem
+        web_cost_sq = Inventory.objects.filter(
+            product=OuterRef('product'), is_active=True
+        ).values('purchase_cost')[:1]
+        web_items_all = CartOrderItem.objects.filter(order__in=web_qs).annotate(
+            unit_cost=Subquery(web_cost_sq, output_field=DecimalField(max_digits=10, decimal_places=2))
+        )
+        web_cost_agg = web_items_all.aggregate(
+            total_cost=Sum(
+                ExpressionWrapper(
+                    F('unit_cost') * F('quantity'),
+                    output_field=DecimalField(max_digits=12, decimal_places=2)
+                )
+            )
+        )
+        web_total_cost = web_cost_agg['total_cost'] or Decimal('0')
+        web_missing_cost_data = web_items_all.filter(unit_cost__isnull=True).exists()
+        web_gross_margin = web_total_revenue - web_total_cost
 
         # ── Canal: chart y tabla para tienda/web ───────────────────────────
         if canal == 'tienda':
@@ -570,7 +600,6 @@ class OrdersDashboardView(APIView):
                 for i, r in enumerate(pos_period_rows, 1)
             ]
             # Tabla por producto (desde VentaPOSItem)
-            from payments.models import VentaPOSItem
             pos_item_qs = VentaPOSItem.objects.filter(
                 venta__in=pos_qs
             ).select_related('product', 'product__category')
@@ -620,7 +649,6 @@ class OrdersDashboardView(APIView):
             ]
             # Tabla web — CartOrderItem
             try:
-                from website_builder.models import CartOrderItem
                 web_item_qs = CartOrderItem.objects.filter(order__in=web_qs)
                 if category_id:
                     web_item_qs = web_item_qs.filter(product__category_id=category_id)
@@ -674,11 +702,45 @@ class OrdersDashboardView(APIView):
             elif row['tipo'] == 'retiro':
                 total_retiros_caja = row['total'] or Decimal('0')
 
+        # ── Consolidado de utilidades por canal ─────────────────────────────
+        if canal == 'tienda':
+            total_cost = pos_total_cost
+            gross_margin = pos_gross_margin
+            missing_cost_data = pos_missing_cost_data
+        elif canal == 'web':
+            total_cost = web_total_cost
+            gross_margin = web_gross_margin
+            missing_cost_data = web_missing_cost_data
+        elif canal == 'todos':
+            total_cost = live_total_cost + pos_total_cost + web_total_cost
+            gross_margin = live_gross_margin + pos_gross_margin + web_gross_margin
+            missing_cost_data = live_missing_cost_data or pos_missing_cost_data or web_missing_cost_data
+        else:
+            total_cost = live_total_cost
+            gross_margin = live_gross_margin
+            missing_cost_data = live_missing_cost_data
+
+        total_gastos_operativos_final = total_gastos_operativos_base + total_retiros_caja
+        utilidad_neta = gross_margin - total_gastos_operativos_final
+
+        if canal == 'tienda':
+            canal_total_orders = pos_total_orders
+            canal_total_revenue = pos_total_revenue
+        elif canal == 'web':
+            canal_total_orders = web_total_orders
+            canal_total_revenue = web_total_revenue
+        elif canal == 'todos':
+            canal_total_orders = total_orders + pos_total_orders + web_total_orders
+            canal_total_revenue = live_total_revenue + pos_total_revenue + web_total_revenue
+        else:
+            canal_total_orders = total_orders
+            canal_total_revenue = live_total_revenue
+
         # ── Response ────────────────────────────────────────────────────────
         response_data = {
             'period_label': period_label,
-            'total_orders': total_orders,
-            'total_revenue': str(total_revenue),
+            'total_orders': canal_total_orders,
+            'total_revenue': str(canal_total_revenue),
             'pos_total_orders': pos_total_orders,
             'pos_total_revenue': str(pos_total_revenue),
             'web_total_orders': web_total_orders,
@@ -691,11 +753,10 @@ class OrdersDashboardView(APIView):
         response_data['gross_margin'] = str(gross_margin)
         response_data['missing_cost_data'] = missing_cost_data
 
-        # Retiros de caja (almuerzo, etc.) descuentan la utilidad neta
-        utilidad_neta_final = utilidad_neta - total_retiros_caja
-
-        response_data['total_gastos_operativos'] = str(total_gastos_operativos)
-        response_data['utilidad_neta'] = str(round(utilidad_neta_final, 2))
+        response_data['total_gastos_operativos_base'] = str(total_gastos_operativos_base)
+        response_data['total_gastos_operativos_final'] = str(total_gastos_operativos_final)
+        response_data['total_gastos_operativos'] = str(total_gastos_operativos_final)
+        response_data['utilidad_neta'] = str(round(utilidad_neta, 2))
         response_data['gastos_por_categoria'] = gastos_por_categoria
         response_data['total_ingresos_caja'] = str(total_ingresos_caja)
         response_data['total_retiros_caja'] = str(total_retiros_caja)

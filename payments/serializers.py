@@ -80,8 +80,10 @@ class VentaPOSSerializer(serializers.ModelSerializer):
         source='metodo_pago.nombre', read_only=True, allow_null=True)
     sucursal_nombre = serializers.CharField(
         source='sucursal.nombre', read_only=True, allow_null=True)
+    usuario_nombre = serializers.SerializerMethodField()
     monto_pagado = serializers.SerializerMethodField()
     saldo_pendiente = serializers.SerializerMethodField()
+    monto_cobrado = serializers.SerializerMethodField()
 
     class Meta:
         model = VentaPOS
@@ -92,10 +94,15 @@ class VentaPOSSerializer(serializers.ModelSerializer):
             'discount_percentage', 'discount_type',
             'total', 'monto_recibido', 'vuelto', 'cupon', 'status',
             'canal_venta', 'direccion_envio',
-            'usuario', 'es_credito', 'plazo_dias', 'fecha_vencimiento_credito',
-            'notas', 'created_at', 'items', 'monto_pagado', 'saldo_pendiente',
+            'usuario', 'usuario_nombre', 'es_credito', 'plazo_dias', 'fecha_vencimiento_credito',
+            'notas', 'created_at', 'items', 'monto_pagado', 'saldo_pendiente', 'monto_cobrado',
         )
         read_only_fields = ('id', 'numero_ticket', 'vendor', 'created_at')
+
+    def get_usuario_nombre(self, obj):
+        if not obj.usuario:
+            return ''
+        return obj.usuario.get_full_name() or obj.usuario.email
 
     def get_monto_pagado(self, obj):
         from django.db.models import Sum
@@ -107,6 +114,15 @@ class VentaPOSSerializer(serializers.ModelSerializer):
         pagado = obj.pagos_credito.aggregate(t=Sum('monto'))['t'] or 0
         saldo = max(obj.total - pagado, 0)
         return str(saldo)
+
+    def get_monto_cobrado(self, obj):
+        from django.db.models import Sum
+        if obj.es_credito:
+            pagado = obj.pagos_credito.aggregate(t=Sum('monto'))['t'] or 0
+            return str(pagado)
+        if obj.monto_recibido is not None:
+            return str(obj.monto_recibido)
+        return str(obj.total)
 
 
 class VentaPOSItemInputSerializer(serializers.Serializer):

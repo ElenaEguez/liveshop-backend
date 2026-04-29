@@ -7,7 +7,8 @@ from datetime import date, timedelta, datetime as dt
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import F, Max, Q, Sum, Count
+from django.db.models import F, Max, Q, Sum, Count, Case, When, DecimalField
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
@@ -75,8 +76,23 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         ).order_by('-created_at')
 
         p = self.request.query_params
+        periodo = p.get('periodo')
+        today = timezone.localdate()
+        if periodo == 'today':
+            qs = qs.filter(created_at__date=today)
+        elif periodo == 'week':
+            week_start = today - timedelta(days=today.weekday())
+            qs = qs.filter(created_at__date__gte=week_start, created_at__date__lte=today)
+        elif periodo == 'month':
+            qs = qs.filter(created_at__year=today.year, created_at__month=today.month)
+        elif periodo == 'year':
+            qs = qs.filter(created_at__year=today.year)
         if p.get('sucursal_id'):
             qs = qs.filter(sucursal_id=p['sucursal_id'])
+        if p.get('cajero_id'):
+            qs = qs.filter(usuario_id=p['cajero_id'])
+        if p.get('metodo_pago_tipo'):
+            qs = qs.filter(metodo_pago__tipo=p['metodo_pago_tipo'])
         if p.get('fecha'):
             qs = qs.filter(created_at__date=p['fecha'])
         if p.get('status'):
@@ -94,6 +110,27 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         if page is not None:
             return self.get_paginated_response(VentaPOSSerializer(page, many=True).data)
         return Response(VentaPOSSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=['get'])
+    def resumen(self, request):
+        qs = self.get_queryset().exclude(status='anulada')
+        agg = qs.aggregate(total_ventas=Sum('total'), cantidad_ventas=Count('id'))
+        cobrado_expr = Sum(
+            Case(
+                When(es_credito=False, then=Coalesce('monto_recibido', F('total'))),
+                default=Decimal('0'),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            )
+        )
+        total_cobrado_contado = qs.aggregate(total=cobrado_expr)['total'] or Decimal('0')
+        total_cobrado_credito = (
+            PagoCredito.objects.filter(venta__in=qs).aggregate(total=Sum('monto'))['total'] or Decimal('0')
+        )
+        return Response({
+            'total_ventas': str(agg['total_ventas'] or Decimal('0')),
+            'total_cobrado': str(total_cobrado_contado + total_cobrado_credito),
+            'cantidad_ventas': agg['cantidad_ventas'] or 0,
+        })
 
     def retrieve(self, request, pk=None):
         venta = get_object_or_404(self.get_queryset(), pk=pk)
@@ -211,13 +248,15 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             # ── 7. Caja y turno ───────────────────────────────────────────────
             caja = None
             turno = None
-            if data.get('caja_id'):
-                caja = get_object_or_404(
-                    Caja, id=data['caja_id'], sucursal__vendor=vendor)
-            if data.get('turno_id'):
-                turno = get_object_or_404(
-                    TurnoCaja, id=data['turno_id'],
-                    caja__sucursal__vendor=vendor, status='abierto')
+            if not data.get('caja_id') or not data.get('turno_id'):
+                raise ValidationError({'error': 'Debe seleccionar caja y turno abierto para registrar la venta.'})
+            caja = get_object_or_404(
+                Caja, id=data['caja_id'], sucursal__vendor=vendor)
+            turno = get_object_or_404(
+                TurnoCaja, id=data['turno_id'],
+                caja__sucursal__vendor=vendor, status='abierto')
+            if turno.caja_id != caja.id:
+                raise ValidationError({'error': 'El turno abierto no corresponde a la caja seleccionada.'})
 
             # ── 8. Crear VentaPOS ─────────────────────────────────────────────
             venta = VentaPOS.objects.create(
@@ -790,7 +829,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
     def arqueos(self, request):
         """
         GET /api/v1/pos/turnos/arqueos/
-        Params: periodo, page, page_size, semana, cajero_id, sucursal_id
+        Params: periodo, page, page_size, semana, cajero_id, sucursal_id, metodo_pago_tipo
         Returns paginated turnos + totales_por_cajero + totales_por_metodo.
         """
         vendor = self._get_vendor()
@@ -835,13 +874,18 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         sucursal_id = request.query_params.get('sucursal_id')
         if sucursal_id:
             qs = qs.filter(caja__sucursal_id=sucursal_id)
+        metodo_pago_tipo = request.query_params.get('metodo_pago_tipo')
 
         # ── Totales agregados sobre el período completo (sin paginar) ─────────
         turno_ids = list(qs.values_list('id', flat=True))
 
         # Ventas agrupadas por cajero + método
+        ventas_filter = {'turno_id__in': turno_ids, 'status': 'completada'}
+        if metodo_pago_tipo:
+            ventas_filter['metodo_pago__tipo'] = metodo_pago_tipo
+
         ventas_cajero_qs = (
-            VentaPOS.objects.filter(turno_id__in=turno_ids, status='completada')
+            VentaPOS.objects.filter(**ventas_filter)
             .values(
                 'usuario__id', 'usuario__first_name',
                 'usuario__last_name', 'usuario__email',
@@ -887,7 +931,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
 
         # Totales globales por método
         ventas_metodo_qs = (
-            VentaPOS.objects.filter(turno_id__in=turno_ids, status='completada')
+            VentaPOS.objects.filter(**ventas_filter)
             .values('metodo_pago__tipo', 'metodo_pago__nombre')
             .annotate(total=Sum('total'), cantidad=Count('id'))
             .order_by('-total')
