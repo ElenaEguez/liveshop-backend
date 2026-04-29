@@ -48,14 +48,21 @@ class ProductViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_active=is_active.lower() in ('true', '1', 'yes'))
 
         # Filter by variant talla
-        talla = self.request.query_params.get('talla')
+        talla = (self.request.query_params.get('talla') or '').strip()
         if talla:
-            qs = qs.filter(variant_objects__talla__iexact=talla, variant_objects__is_active=True).distinct()
+            qs = qs.filter(
+                Q(variant_objects__talla__iexact=talla, variant_objects__is_active=True) |
+                Q(variants__icontains=f'"size": "{talla}"') |
+                Q(variants__icontains=f'"talla": "{talla}"')
+            ).distinct()
 
         # Filter by variant color
-        color = self.request.query_params.get('color')
+        color = (self.request.query_params.get('color') or '').strip()
         if color:
-            qs = qs.filter(variant_objects__color__icontains=color, variant_objects__is_active=True).distinct()
+            qs = qs.filter(
+                Q(variant_objects__color__icontains=color, variant_objects__is_active=True) |
+                Q(variants__icontains=f'"color": "{color}"')
+            ).distinct()
 
         return qs
 
@@ -219,13 +226,14 @@ class InventoryViewSet(viewsets.ModelViewSet):
             )
         if talla:
             qs = qs.filter(
-                product__variant_objects__talla__iexact=talla,
-                product__variant_objects__is_active=True
+                Q(product__variant_objects__talla__iexact=talla, product__variant_objects__is_active=True) |
+                Q(product__variants__icontains=f'"size": "{talla}"') |
+                Q(product__variants__icontains=f'"talla": "{talla}"')
             ).distinct()
         if color:
             qs = qs.filter(
-                product__variant_objects__color__icontains=color,
-                product__variant_objects__is_active=True
+                Q(product__variant_objects__color__icontains=color, product__variant_objects__is_active=True) |
+                Q(product__variants__icontains=f'"color": "{color}"')
             ).distinct()
 
         # Anotación de unidades vendidas por producto (solo ventas completadas)
