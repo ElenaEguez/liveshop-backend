@@ -70,6 +70,8 @@ class CartOrder(models.Model):
     DELIVERY_CHOICES = [
         ('pickup', 'Recoger en tienda'),
         ('delivery', 'Envío a domicilio'),
+        ('envio_nacional', 'Envío nacional'),
+        ('envio_scz', 'Envío Departamento SCZ'),
     ]
     STATUS_CHOICES = [
         ('pending', 'Pendiente'),

@@ -143,7 +143,7 @@ class CartOrderCreateSerializer(serializers.Serializer):
     customer_phone = serializers.CharField(max_length=20)
     customer_email = serializers.CharField(max_length=254, required=False, allow_blank=True, default='')
     customer_address = serializers.CharField(required=False, allow_blank=True, default='')
-    delivery_method = serializers.ChoiceField(choices=['pickup', 'delivery'])
+    delivery_method = serializers.ChoiceField(choices=['pickup', 'delivery', 'envio_nacional', 'envio_scz'])
     payment_method = serializers.ChoiceField(choices=['tigo_money', 'banco_union', 'efectivo'])
     notes = serializers.CharField(required=False, allow_blank=True, default='')
     items = CartOrderItemCreateSerializer(many=True)
