@@ -15,7 +15,7 @@ class PublicVariantSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductVariant
-        fields = ['id', 'size', 'color', 'stock', 'price', 'disponible']
+        fields = ['id', 'size', 'color', 'color_hex', 'stock', 'price', 'disponible']
 
     def get_stock(self, obj):
         return obj.stock_extra if obj.stock_extra > 0 else obj.product.stock

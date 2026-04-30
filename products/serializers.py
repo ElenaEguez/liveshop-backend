@@ -8,7 +8,8 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = '__all__'
-        read_only_fields = ['created_at']
+        # vendor is injected by CategoryViewSet.perform_create/perform_update — never from client
+        read_only_fields = ['created_at', 'vendor']
 
     def _build_unique_slug(self, *, name, vendor, instance=None):
         base_slug = slugify((name or '').strip()) or 'categoria'
@@ -25,22 +26,16 @@ class CategorySerializer(serializers.ModelSerializer):
             suffix += 1
 
     def create(self, validated_data):
-        request = self.context.get('request')
-        vendor = getattr(getattr(request, 'user', None), 'vendor_profile', None)
-
-        if vendor is not None:
-            validated_data['vendor'] = vendor
-
+        # vendor is passed in by the ViewSet via serializer.save(vendor=...)
         if not (validated_data.get('slug') or '').strip():
             validated_data['slug'] = self._build_unique_slug(
                 name=validated_data.get('name', ''),
                 vendor=validated_data.get('vendor'),
             )
-
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        vendor = validated_data.get('vendor', instance.vendor)
+        vendor = instance.vendor
         incoming_slug = (validated_data.get('slug') or '').strip()
         incoming_name = (validated_data.get('name') or instance.name or '').strip()
 

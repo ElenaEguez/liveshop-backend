@@ -2,11 +2,13 @@ import json
 from decimal import Decimal, InvalidOperation
 from rest_framework import generics, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import IntegerField, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
+from vendors.permissions import get_vendor_for_user
 from .serializers import (
     CategorySerializer, CategoryWithSubcategoriesSerializer,
     ProductSerializer, InventorySerializer, ProductVariantSerializer,
@@ -18,11 +20,16 @@ class CategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        vendor = getattr(self.request.user, 'vendor_profile', None)
-        queryset = Category.objects.all()
-        if vendor is not None:
-            queryset = queryset.filter(vendor=vendor)
-        return queryset
+        vendor = get_vendor_for_user(self.request.user)
+        if vendor is None:
+            return Category.objects.none()
+        return Category.objects.filter(vendor=vendor)
+
+    def perform_create(self, serializer):
+        vendor = get_vendor_for_user(self.request.user)
+        if not vendor:
+            raise ValidationError({'vendor': 'Sin perfil de vendedor asociado.'})
+        serializer.save(vendor=vendor)
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -31,7 +38,10 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
 
     def get_queryset(self):
-        qs = Product.objects.filter(vendor=self.request.user.vendor_profile)
+        vendor = get_vendor_for_user(self.request.user)
+        if not vendor:
+            return Product.objects.none()
+        qs = Product.objects.filter(vendor=vendor)
         canal = (self.request.query_params.get('canal') or '').strip().lower()
         if canal == 'live':
             qs = qs.filter(is_active_live=True)
@@ -142,10 +152,13 @@ class ProductViewSet(viewsets.ModelViewSet):
             return None
 
     def perform_create(self, serializer):
+        vendor = get_vendor_for_user(self.request.user)
+        if not vendor:
+            raise ValidationError({'detail': 'Sin perfil de vendedor asociado.'})
         variants = self._parse_variants(self.request)
         shipping_cost = self._parse_decimal_field(self.request, 'shipping_cost')
         product = serializer.save(
-            vendor=self.request.user.vendor_profile,
+            vendor=vendor,
             variants=variants,
             shipping_cost=shipping_cost,
         )
@@ -208,7 +221,9 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='variant-options')
     def variant_options(self, request):
         """Return all distinct tallas and colors across vendor's products."""
-        vendor = request.user.vendor_profile
+        vendor = get_vendor_for_user(request.user)
+        if not vendor:
+            return Response({'tallas': [], 'colors': []})
 
         # From ProductVariant model objects
         pv_qs = ProductVariant.objects.filter(
@@ -248,7 +263,10 @@ class InventoryViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         from payments.models import VentaPOSItem
 
-        qs = Inventory.objects.filter(product__vendor=self.request.user.vendor_profile)
+        vendor = get_vendor_for_user(self.request.user)
+        if not vendor:
+            return Inventory.objects.none()
+        qs = Inventory.objects.filter(product__vendor=vendor)
         almacen_id = self.request.query_params.get('almacen_id')
         category_id = self.request.query_params.get('category')
         search = self.request.query_params.get('search', '').strip()
