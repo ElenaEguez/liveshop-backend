@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils.text import slugify
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from vendors.models import KardexMovimiento
 
@@ -7,6 +8,50 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = '__all__'
+        read_only_fields = ['created_at']
+
+    def _build_unique_slug(self, *, name, vendor, instance=None):
+        base_slug = slugify((name or '').strip()) or 'categoria'
+        candidate = base_slug
+        suffix = 2
+
+        while True:
+            qs = Category.objects.filter(vendor=vendor, slug=candidate)
+            if instance is not None:
+                qs = qs.exclude(pk=instance.pk)
+            if not qs.exists():
+                return candidate
+            candidate = f'{base_slug}-{suffix}'
+            suffix += 1
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        vendor = getattr(getattr(request, 'user', None), 'vendor_profile', None)
+
+        if vendor is not None:
+            validated_data['vendor'] = vendor
+
+        if not (validated_data.get('slug') or '').strip():
+            validated_data['slug'] = self._build_unique_slug(
+                name=validated_data.get('name', ''),
+                vendor=validated_data.get('vendor'),
+            )
+
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        vendor = validated_data.get('vendor', instance.vendor)
+        incoming_slug = (validated_data.get('slug') or '').strip()
+        incoming_name = (validated_data.get('name') or instance.name or '').strip()
+
+        if not incoming_slug:
+            validated_data['slug'] = self._build_unique_slug(
+                name=incoming_name,
+                vendor=vendor,
+                instance=instance,
+            )
+
+        return super().update(instance, validated_data)
 
 
 class ProductSerializer(serializers.ModelSerializer):

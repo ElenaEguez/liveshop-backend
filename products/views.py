@@ -14,9 +14,15 @@ from .serializers import (
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
-    queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        vendor = getattr(self.request.user, 'vendor_profile', None)
+        queryset = Category.objects.all()
+        if vendor is not None:
+            queryset = queryset.filter(vendor=vendor)
+        return queryset
 
 
 class ProductViewSet(viewsets.ModelViewSet):
