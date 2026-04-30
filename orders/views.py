@@ -112,7 +112,7 @@ class PublicReservationCreateView(generics.CreateAPIView):
         if variant_id:
             try:
                 variant = ProductVariant.objects.get(id=variant_id, product=product)
-                if variant.stock_extra > 0 and variant.stock_extra < quantity:
+                if variant.stock_extra < quantity:
                     return Response(
                         {'error': f'Stock insuficiente para esta variante. Disponible: {variant.stock_extra}'},
                         status=status.HTTP_400_BAD_REQUEST,
@@ -148,7 +148,7 @@ class PublicReservationCreateView(generics.CreateAPIView):
                 reserved_quantity=F('reserved_quantity') + quantity
             )
             # Decrement variant stock if it has its own stock
-            if variant and variant.stock_extra > 0:
+            if variant:
                 ProductVariant.objects.filter(pk=variant.pk).update(
                     stock_extra=F('stock_extra') - quantity
                 )
@@ -448,6 +448,7 @@ class OrdersDashboardView(APIView):
             'product__id', 'variant_detail',
         ).annotate(
             units_sold=Sum('quantity'),
+            revenue=Sum(revenue_expr),
         ).order_by('product__id', 'variant_detail')
 
         variant_by_product = {}
@@ -456,6 +457,7 @@ class OrdersDashboardView(APIView):
             variant_by_product.setdefault(pid, []).append({
                 'variante': vr['variant_detail'],
                 'units_sold': vr['units_sold'],
+                'revenue': str(vr['revenue'] or Decimal('0')),
             })
 
         # ── Sales by product ────────────────────────────────────────────────
@@ -617,6 +619,23 @@ class OrdersDashboardView(APIView):
                     )
                 ),
             ).order_by('-revenue')
+            pos_variant_rows = pos_item_qs.exclude(variant__isnull=True).values(
+                'product__id', 'variant__talla', 'variant__color',
+            ).annotate(
+                units_sold=Sum('cantidad'),
+                revenue=Sum('subtotal'),
+            ).order_by('product__id', 'variant__talla', 'variant__color')
+            pos_variant_by_product = {}
+            for vr in pos_variant_rows:
+                pid = vr['product__id']
+                talla = (vr.get('variant__talla') or '').strip()
+                color = (vr.get('variant__color') or '').strip()
+                etiqueta = ' / '.join([p for p in [talla, color] if p]) or 'Variante'
+                pos_variant_by_product.setdefault(pid, []).append({
+                    'variante': etiqueta,
+                    'units_sold': vr['units_sold'] or 0,
+                    'revenue': str(vr['revenue'] or Decimal('0')),
+                })
             sales_by_product = []
             for row in pos_prod_rows:
                 item = {
@@ -625,7 +644,7 @@ class OrdersDashboardView(APIView):
                     'category': row['product__category__name'] or '',
                     'units_sold': row['units_sold'],
                     'revenue': str(row['revenue'] or Decimal('0')),
-                    'variantes': [],
+                    'variantes': pos_variant_by_product.get(row['product__id'], []),
                 }
                 if row['cost'] is not None:
                     item['cost'] = str(row['cost'])
@@ -671,6 +690,135 @@ class OrdersDashboardView(APIView):
                 ]
             except Exception:
                 sales_by_product = []
+
+        elif canal == 'todos':
+            # Consolida Live + POS + Web en una sola tabla de productos.
+            merged = {}
+
+            def _add_row(pid, name, category, units_sold, revenue, cost=None, margin=None, variantes=None):
+                if pid is None:
+                    return
+                row = merged.get(pid)
+                if not row:
+                    row = {
+                        'product_id': pid,
+                        'product_name': name or '—',
+                        'category': category or '',
+                        'units_sold': 0,
+                        'revenue': Decimal('0'),
+                        'cost': Decimal('0'),
+                        'has_cost': False,
+                        'variantes': [],
+                    }
+                    merged[pid] = row
+                row['units_sold'] += int(units_sold or 0)
+                row['revenue'] += Decimal(str(revenue or 0))
+                if cost is not None:
+                    row['cost'] += Decimal(str(cost))
+                    row['has_cost'] = True
+                if margin is not None:
+                    row['has_cost'] = True
+                if variantes:
+                    row['variantes'].extend(variantes)
+
+            # Base live (ya calculada arriba)
+            for live_row in sales_by_product:
+                _add_row(
+                    live_row.get('product_id'),
+                    live_row.get('product_name'),
+                    live_row.get('category'),
+                    live_row.get('units_sold', 0),
+                    live_row.get('revenue', '0'),
+                    live_row.get('cost'),
+                    live_row.get('margin'),
+                    live_row.get('variantes', []),
+                )
+
+            # POS
+            pos_item_qs = VentaPOSItem.objects.filter(
+                venta__in=pos_qs
+            ).select_related('product', 'product__category')
+            if category_id:
+                pos_item_qs = pos_item_qs.filter(product__category_id=category_id)
+
+            pos_prod_rows = pos_item_qs.values(
+                'product__id', 'product__name', 'product__category__name'
+            ).annotate(
+                units_sold=Sum('cantidad'),
+                revenue=Sum('subtotal'),
+                cost=Sum(
+                    ExpressionWrapper(
+                        F('costo_unitario') * F('cantidad'),
+                        output_field=DecimalField(max_digits=12, decimal_places=2)
+                    )
+                ),
+            )
+            pos_variant_rows = pos_item_qs.exclude(variant__isnull=True).values(
+                'product__id', 'variant__talla', 'variant__color',
+            ).annotate(
+                units_sold=Sum('cantidad'),
+                revenue=Sum('subtotal'),
+            )
+            pos_variant_by_product = {}
+            for vr in pos_variant_rows:
+                pid = vr['product__id']
+                talla = (vr.get('variant__talla') or '').strip()
+                color = (vr.get('variant__color') or '').strip()
+                etiqueta = ' / '.join([p for p in [talla, color] if p]) or 'Variante'
+                pos_variant_by_product.setdefault(pid, []).append({
+                    'variante': etiqueta,
+                    'units_sold': vr['units_sold'] or 0,
+                    'revenue': str(vr['revenue'] or Decimal('0')),
+                })
+            for row in pos_prod_rows:
+                _add_row(
+                    row['product__id'],
+                    row['product__name'],
+                    row['product__category__name'],
+                    row['units_sold'],
+                    row['revenue'] or Decimal('0'),
+                    row['cost'],
+                    None,
+                    pos_variant_by_product.get(row['product__id'], []),
+                )
+
+            # WEB
+            try:
+                web_item_qs = CartOrderItem.objects.filter(order__in=web_qs)
+                if category_id:
+                    web_item_qs = web_item_qs.filter(product__category_id=category_id)
+                web_prod_rows = web_item_qs.values(
+                    'product__id', 'product__name', 'product__category__name'
+                ).annotate(
+                    units_sold=Sum('quantity'),
+                    revenue=Sum('subtotal'),
+                )
+                for row in web_prod_rows:
+                    _add_row(
+                        row['product__id'],
+                        row['product__name'],
+                        row['product__category__name'],
+                        row['units_sold'],
+                        row['revenue'] or Decimal('0'),
+                    )
+            except Exception:
+                pass
+
+            sales_by_product = []
+            for pid, row in merged.items():
+                out = {
+                    'product_id': pid,
+                    'product_name': row['product_name'],
+                    'category': row['category'],
+                    'units_sold': row['units_sold'],
+                    'revenue': str(row['revenue']),
+                    'variantes': row['variantes'],
+                }
+                if row['has_cost']:
+                    out['cost'] = str(row['cost'])
+                    out['margin'] = str(row['revenue'] - row['cost'])
+                sales_by_product.append(out)
+            sales_by_product.sort(key=lambda x: Decimal(str(x.get('revenue', '0'))), reverse=True)
 
         # ── Flujo de caja (MovimientoCaja) ──────────────────────────────────
         from vendors.models import MovimientoCaja, TurnoCaja

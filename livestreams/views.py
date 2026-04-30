@@ -26,7 +26,8 @@ class PublicLiveSessionDetailView(APIView):
         # (más antiguo primero = PEPS)
         all_products = list(Product.objects.filter(
             vendor=session.vendor,
-            is_active=True
+            is_active=True,
+            is_active_live=True,
         ).order_by('created_at'))
 
         product_ids = [p.id for p in all_products]
@@ -87,10 +88,8 @@ class PublicLiveSessionDetailView(APIView):
                     'id': v.id,
                     'size': v.talla,
                     'color': v.color,
-                    # stock_extra > 0 → stock propio de la variante
-                    # stock_extra == 0 → comparte el stock del producto
-                    'stock': v.stock_extra if v.stock_extra > 0 else available,
-                    'disponible': v.stock_extra > 0 or available > 0,
+                    'stock': max(0, v.stock_extra),
+                    'disponible': v.stock_extra > 0,
                 }
                 for v in product_variants
             ]

@@ -26,6 +26,14 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Product.objects.filter(vendor=self.request.user.vendor_profile)
+        canal = (self.request.query_params.get('canal') or '').strip().lower()
+        if canal == 'live':
+            qs = qs.filter(is_active_live=True)
+        elif canal in ('pos', 'tienda'):
+            qs = qs.filter(is_active_pos=True)
+        elif canal == 'web':
+            qs = qs.filter(is_active_web=True)
+
 
         # Manual search to support both ?search= and ?q=
         search = self.request.query_params.get('search') or self.request.query_params.get('q')
@@ -84,6 +92,31 @@ class ProductViewSet(viewsets.ModelViewSet):
         for image in request.FILES.getlist('images'):
             ProductImage.objects.create(product=product, image=image)
 
+    def _sync_variant_objects(self, product, variants):
+        ProductVariant.objects.filter(product=product).delete()
+        if not isinstance(variants, list):
+            return
+
+        for v in variants:
+            if not isinstance(v, dict):
+                continue
+            talla = (v.get('size') or v.get('talla') or '').strip()
+            color = (v.get('color') or '').strip()
+            color_hex = (v.get('color_hex') or '').strip()
+            stock = v.get('stock', 0)
+            try:
+                stock_int = int(stock)
+            except (TypeError, ValueError):
+                stock_int = 0
+            ProductVariant.objects.create(
+                product=product,
+                talla=talla,
+                color=color,
+                color_hex=color_hex,
+                stock_extra=max(stock_int, 0),
+                is_active=True,
+            )
+
     def _parse_purchase_cost(self, request):
         raw = request.data.get('purchase_cost', None)
         if raw is None or raw == '' or raw == 'null':
@@ -111,6 +144,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             shipping_cost=shipping_cost,
         )
         self._save_images(product, self.request)
+        self._sync_variant_objects(product, variants)
         purchase_cost = self._parse_purchase_cost(self.request)
         Inventory.objects.get_or_create(
             product=product,
@@ -122,6 +156,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         shipping_cost = self._parse_decimal_field(self.request, 'shipping_cost')
         product = serializer.save(variants=variants, shipping_cost=shipping_cost)
         self._save_images(product, self.request)
+        self._sync_variant_objects(product, variants)
         if 'purchase_cost' in self.request.data:
             purchase_cost = self._parse_purchase_cost(self.request)
             inventory, _ = Inventory.objects.get_or_create(

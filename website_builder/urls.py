@@ -7,12 +7,14 @@ from .views import (
     PublicCheckoutView,
     PublicOrderStatusView,
     PublicReceiptUploadView,
+    PublicOrderCancelView,
     VendorCartOrderListView,
     VendorCartOrderDetailView,
     VendorCartOrderConfirmView,
     VendorCartOrderCancelView,
     VendorCartOrderMarkDeliveredView,
     VendorCartOrderPendingCountView,
+    VendorCartOrderDeleteView,
 )
 
 urlpatterns = [
@@ -28,8 +30,10 @@ urlpatterns = [
     path('orders/<int:pk>/confirm/', VendorCartOrderConfirmView.as_view(), name='vendor-cartorder-confirm'),
     path('orders/<int:pk>/cancel/', VendorCartOrderCancelView.as_view(), name='vendor-cartorder-cancel'),
     path('orders/<int:pk>/mark-delivered/', VendorCartOrderMarkDeliveredView.as_view(), name='vendor-cartorder-mark-delivered'),
+    path('orders/<int:pk>/delete/', VendorCartOrderDeleteView.as_view(), name='vendor-cartorder-delete'),
     # ── Flujo de compra ────────────────────────────────────────────────────
     path('public/<slug:vendor_slug>/checkout/', PublicCheckoutView.as_view(), name='public-checkout'),
     path('public/<slug:vendor_slug>/order/<int:pk>/', PublicOrderStatusView.as_view(), name='public-order-status'),
     path('public/<slug:vendor_slug>/order/<int:pk>/receipt/', PublicReceiptUploadView.as_view(), name='public-receipt-upload'),
+    path('public/<slug:vendor_slug>/order/<int:pk>/cancel/', PublicOrderCancelView.as_view(), name='public-order-cancel'),
 ]

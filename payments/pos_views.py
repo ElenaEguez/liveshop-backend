@@ -332,10 +332,12 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                         ProductVariant,
                         id=item['variant_id'], product_id=pid,
                     )
-                    # Descontar stock propio de la variante si lo tiene registrado
-                    if variant.stock_extra > 0:
-                        variant.stock_extra = max(0, variant.stock_extra - item['cantidad'])
-                        variant.save(update_fields=['stock_extra'])
+                    if variant.stock_extra < item['cantidad']:
+                        raise ValidationError({
+                            'items': f"Stock insuficiente para la variante seleccionada ({variant.talla} / {variant.color}). Disponible: {variant.stock_extra}."
+                        })
+                    variant.stock_extra = max(0, variant.stock_extra - item['cantidad'])
+                    variant.save(update_fields=['stock_extra'])
 
                 cantidad_pendiente = item['cantidad']
                 precio = item['precio_unitario']
@@ -559,6 +561,7 @@ class ProductoPOSSearchView(APIView):
         qs = Product.objects.filter(vendor=vendor, is_active=True).prefetch_related(
             'images', 'variant_objects', 'inventories',
         )
+        qs = qs.filter(is_active_pos=True)
         # Barcode exacto primero, luego nombre
         qs = qs.filter(Q(barcode=q) | Q(name__icontains=q))[:10]
 
@@ -586,6 +589,7 @@ class POSScanView(APIView):
         base_qs = Product.objects.filter(vendor=vendor, is_active=True).select_related('category').prefetch_related(
             'images', 'inventories', 'variant_objects'
         )
+        base_qs = base_qs.filter(is_active_pos=True)
 
         # 1. Buscar match exacto en orden de prioridad
         exact_match = None

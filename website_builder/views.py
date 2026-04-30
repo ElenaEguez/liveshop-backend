@@ -53,7 +53,7 @@ class PublicCatalogView(ListAPIView):
         vendor = get_object_or_404(Vendor, slug=self.kwargs['vendor_slug'])
         qs = (
             Product.objects
-            .filter(vendor=vendor, is_active=True)
+            .filter(vendor=vendor, is_active=True, is_active_web=True)
             .select_related('category')
             .prefetch_related('images', 'variant_objects')
         )
@@ -85,6 +85,7 @@ class PublicProductDetailView(RetrieveAPIView):
             pk=self.kwargs['pk'],
             vendor=vendor,
             is_active=True,
+            is_active_web=True,
         )
 
 
@@ -98,7 +99,7 @@ class PublicCategoriesView(ListAPIView):
         vendor = get_object_or_404(Vendor, slug=self.kwargs['vendor_slug'])
         return (
             Category.objects
-            .filter(products__vendor=vendor, products__is_active=True)
+            .filter(products__vendor=vendor, products__is_active=True, products__is_active_web=True)
             .distinct()
         )
 
@@ -259,6 +260,40 @@ class PublicReceiptUploadView(APIView):
         return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
 
 
+class PublicOrderCancelView(APIView):
+    """POST /api/public/{vendor_slug}/order/{pk}/cancel/ — cancelar pedido público."""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request, vendor_slug, pk):
+        vendor = get_object_or_404(Vendor, slug=vendor_slug)
+        order = get_object_or_404(CartOrder.objects.prefetch_related('items__product'), pk=pk, vendor=vendor)
+
+        if order.status in ('delivered', 'cancelled'):
+            return Response(
+                {'error': 'No se puede cancelar un pedido entregado o ya cancelado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Restaurar stock de cada ítem al cancelar.
+        for item in order.items.select_related('product').all():
+            if item.variant_id:
+                try:
+                    variant = ProductVariant.objects.get(pk=item.variant_id)
+                    variant.stock_extra += item.quantity
+                    variant.save(update_fields=['stock_extra'])
+                except ProductVariant.DoesNotExist:
+                    item.product.stock += item.quantity
+                    item.product.save(update_fields=['stock'])
+            else:
+                item.product.stock += item.quantity
+                item.product.save(update_fields=['stock'])
+
+        order.status = 'cancelled'
+        order.save(update_fields=['status'])
+        return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
+
+
 class VendorCartOrderListView(ListAPIView):
     """GET /api/website-builder/orders/ — lista de pedidos de la tienda."""
     permission_classes = [IsAuthenticated, IsVendorOrTeamMember]
@@ -380,3 +415,21 @@ class VendorCartOrderMarkDeliveredView(APIView):
         order.save(update_fields=['status'])
 
         return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
+
+
+class VendorCartOrderDeleteView(APIView):
+    """DELETE /api/website-builder/orders/{pk}/delete/ — eliminar pedido cancelado."""
+    permission_classes = [IsAuthenticated, IsVendorOrTeamMember]
+
+    def delete(self, request, pk):
+        vendor = get_vendor_for_user(request.user)
+        order = get_object_or_404(CartOrder, pk=pk, vendor=vendor)
+
+        if order.status != 'cancelled':
+            return Response(
+                {'error': 'Solo se pueden eliminar pedidos en estado cancelado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

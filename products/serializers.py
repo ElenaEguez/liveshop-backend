@@ -20,6 +20,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'id', 'name', 'description', 'price', 'stock', 'category',
             'is_active', 'variants', 'images', 'vendor', 'purchase_cost',
             'shipping_cost', 'profit_margin_percent', 'barcode', 'internal_code', 'sell_by',
+            'is_active_live', 'is_active_pos', 'is_active_web',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['vendor', 'images', 'variants', 'purchase_cost', 'created_at', 'updated_at']
@@ -65,7 +66,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 class ProductPOSSerializer(serializers.ModelSerializer):
     """Serializer ligero para búsqueda POS."""
     stock_disponible = serializers.SerializerMethodField()
-    variantes = ProductVariantSerializer(source='variant_objects', many=True, read_only=True)
+    variantes = serializers.SerializerMethodField()
     imagen_thumbnail = serializers.SerializerMethodField()
 
     class Meta:
@@ -87,6 +88,10 @@ class ProductPOSSerializer(serializers.ModelSerializer):
         if img:
             return request.build_absolute_uri(img.image.url) if request else img.image.url
         return None
+
+    def get_variantes(self, obj):
+        variants = obj.variant_objects.filter(is_active=True).order_by('id')
+        return ProductVariantSerializer(variants, many=True).data
 
 
 class KardexMovimientoSerializer(serializers.ModelSerializer):

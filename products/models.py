@@ -70,6 +70,9 @@ class Product(models.Model):
         help_text="Lista de unidades: unidad, qq, lbs, lts"
     )
     is_active = models.BooleanField(default=True)
+    is_active_live = models.BooleanField(default=True)
+    is_active_pos = models.BooleanField(default=True)
+    is_active_web = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
