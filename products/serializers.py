@@ -9,7 +9,7 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = '__all__'
         # vendor is injected by CategoryViewSet.perform_create/perform_update — never from client
-        read_only_fields = ['created_at', 'vendor']
+        read_only_fields = ['created_at', 'vendor', 'slug']
 
     def _build_unique_slug(self, *, name, vendor, instance=None):
         base_slug = slugify((name or '').strip()) or 'categoria'
