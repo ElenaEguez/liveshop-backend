@@ -748,15 +748,22 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         # Ventas agrupadas por método de pago
         por_metodo: dict = {}
         total_ventas_efectivo = Decimal('0')
+        cantidad_ventas_efectivo = 0
         for v in ventas:
             tipo_mp = v.metodo_pago.tipo if v.metodo_pago else ''
-            nombre = v.metodo_pago.nombre if v.metodo_pago else 'Sin método'
+            if v.metodo_pago:
+                nombre = v.metodo_pago.nombre
+            elif v.es_credito:
+                nombre = 'Crédito'
+            else:
+                nombre = 'Sin método'
             if nombre not in por_metodo:
                 por_metodo[nombre] = {'total': Decimal('0'), 'cantidad': 0}
             por_metodo[nombre]['total'] += v.total
             por_metodo[nombre]['cantidad'] += 1
             if tipo_mp == 'efectivo':
                 total_ventas_efectivo += v.total
+                cantidad_ventas_efectivo += 1
 
         # Movimientos manuales de caja
         movs = MovimientoCaja.objects.filter(turno=turno)
@@ -769,6 +776,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             'turno': TurnoCajaSerializer(turno).data,
             'total_ventas': str(total_ventas),
             'cantidad_ventas': agg['cantidad'] or 0,
+            'cantidad_ventas_efectivo': cantidad_ventas_efectivo,
             'total_ventas_efectivo': str(total_ventas_efectivo),
             'total_ingresos': str(total_ingresos),
             'total_retiros': str(total_retiros),
