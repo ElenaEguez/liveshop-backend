@@ -11,6 +11,8 @@ from django.db.models import F, Max, Q, Sum, Count, Case, When, DecimalField
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -20,7 +22,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from vendors.models import Sucursal, Caja, TurnoCaja, MovimientoCaja, KardexMovimiento, Vendor
+from vendors.models import Sucursal, Caja, TurnoCaja, MovimientoCaja, KardexMovimiento, Vendor, TeamMember
 from vendors.permissions import IsVendorOrTeamMember, get_vendor_for_user
 from vendors.serializers import TurnoCajaSerializer, MovimientoCajaSerializer
 from products.models import Inventory, ProductVariant
@@ -80,6 +82,18 @@ def _to_decimal(val):
         return Decimal('0')
 
 
+def _emit_vendor_update(vendor_id, event_type, data):
+    """Send a real-time event to the vendor's WebSocket group."""
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'vendor_{vendor_id}',
+            {'type': 'vendor_update', 'event_type': event_type, 'data': data},
+        )
+    except Exception:
+        pass
+
+
 # ─── VentaPOS ────────────────────────────────────────────────────────────────
 
 class VentaPOSViewSet(viewsets.GenericViewSet):
@@ -120,6 +134,26 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             qs = qs.filter(sucursal_id=p['sucursal_id'])
         if p.get('cajero_id'):
             qs = qs.filter(usuario_id=p['cajero_id'])
+        rol = (p.get('rol') or '').strip()
+        if rol:
+            if rol in ('owner', 'propietario'):
+                qs = qs.filter(usuario_id=vendor.user_id)
+            elif rol.startswith('role:') and rol.split(':', 1)[1].isdigit():
+                role_id = int(rol.split(':', 1)[1])
+                user_ids = TeamMember.objects.filter(
+                    vendor=vendor, is_active=True, custom_role_id=role_id
+                ).values_list('user_id', flat=True)
+                qs = qs.filter(usuario_id__in=user_ids)
+            elif rol.isdigit():
+                user_ids = TeamMember.objects.filter(
+                    vendor=vendor, is_active=True, custom_role_id=int(rol)
+                ).values_list('user_id', flat=True)
+                qs = qs.filter(usuario_id__in=user_ids)
+            else:
+                user_ids = TeamMember.objects.filter(
+                    vendor=vendor, is_active=True, custom_role__name__iexact=rol
+                ).values_list('user_id', flat=True)
+                qs = qs.filter(usuario_id__in=user_ids)
         if p.get('metodo_pago_tipo'):
             qs = qs.filter(metodo_pago__tipo=p['metodo_pago_tipo'])
         if p.get('fecha'):
@@ -400,6 +434,16 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                     usos_actuales=F('usos_actuales') + 1)
 
         venta.refresh_from_db()
+        _emit_vendor_update(
+            vendor.id,
+            'venta_pos',
+            {
+                'venta_id': venta.id,
+                'total': str(venta.total),
+                'status': venta.status,
+                'canal_venta': venta.canal_venta,
+            },
+        )
         return Response(VentaPOSSerializer(venta).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['patch', 'post'])
@@ -474,6 +518,11 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         if monto_recibido is not None:
             venta.monto_recibido = monto_recibido
         venta.save(update_fields=['status', 'metodo_pago', 'monto_recibido'])
+        _emit_vendor_update(
+            venta.vendor_id,
+            'venta_pos',
+            {'venta_id': venta.id, 'total': str(venta.total), 'status': venta.status, 'canal_venta': venta.canal_venta},
+        )
 
         venta.refresh_from_db()
         return Response(VentaPOSSerializer(venta).data)
@@ -668,6 +717,11 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             status='abierto',
             monto_apertura=monto_apertura,
         )
+        _emit_vendor_update(
+            vendor.id,
+            'cash_movement',
+            {'action': 'turno_abierto', 'turno_id': turno.id, 'caja_id': caja.id},
+        )
         return Response(TurnoCajaSerializer(turno).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
@@ -703,6 +757,11 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             turno.fecha_cierre = timezone.now()
             turno.notas_cierre = notas_cierre
             turno.save()
+            _emit_vendor_update(
+                turno.caja.sucursal.vendor_id,
+                'cash_movement',
+                {'action': 'turno_cerrado', 'turno_id': turno.id, 'caja_id': turno.caja_id},
+            )
 
         ventas_agg = VentaPOS.objects.filter(
             turno=turno, status='completada'
@@ -815,6 +874,11 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             monto=Decimal(str(monto)),
             usuario=request.user,
         )
+        _emit_vendor_update(
+            turno.caja.sucursal.vendor_id,
+            'cash_movement',
+            {'action': 'movimiento_manual', 'turno_id': turno.id, 'tipo': tipo, 'monto': str(mov.monto)},
+        )
         return Response(MovimientoCajaSerializer(mov).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['patch', 'post'], url_path='editar-fondo')
@@ -876,7 +940,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
     def arqueos(self, request):
         """
         GET /api/v1/pos/turnos/arqueos/
-        Params: periodo, page, page_size, semana, cajero_id, sucursal_id, metodo_pago_tipo
+        Params: periodo, page, page_size, semana, cajero_id, sucursal_id, metodo_pago_tipo, rol
         Returns paginated turnos + totales_por_cajero + totales_por_metodo.
         """
         vendor = self._get_vendor()
@@ -935,6 +999,26 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         cajero_id = request.query_params.get('cajero_id')
         if cajero_id:
             qs = qs.filter(usuario_id=cajero_id)
+        rol = (request.query_params.get('rol') or '').strip()
+        if rol:
+            if rol in ('owner', 'propietario'):
+                qs = qs.filter(usuario_id=vendor.user_id)
+            elif rol.startswith('role:') and rol.split(':', 1)[1].isdigit():
+                role_id = int(rol.split(':', 1)[1])
+                user_ids = TeamMember.objects.filter(
+                    vendor=vendor, is_active=True, custom_role_id=role_id
+                ).values_list('user_id', flat=True)
+                qs = qs.filter(usuario_id__in=user_ids)
+            elif rol.isdigit():
+                user_ids = TeamMember.objects.filter(
+                    vendor=vendor, is_active=True, custom_role_id=int(rol)
+                ).values_list('user_id', flat=True)
+                qs = qs.filter(usuario_id__in=user_ids)
+            else:
+                user_ids = TeamMember.objects.filter(
+                    vendor=vendor, is_active=True, custom_role__name__iexact=rol
+                ).values_list('user_id', flat=True)
+                qs = qs.filter(usuario_id__in=user_ids)
 
         sucursal_id = request.query_params.get('sucursal_id')
         if sucursal_id:

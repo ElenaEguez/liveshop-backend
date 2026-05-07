@@ -3,6 +3,7 @@ from .models import (
     Payment, MetodoPago, Cupon, CategoriaGasto,
     VentaPOS, VentaPOSItem, GastoOperativo, PagoCredito,
 )
+from vendors.models import TeamMember
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -50,11 +51,22 @@ class CategoriaGastoSerializer(serializers.ModelSerializer):
 
 class VentaPOSItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True, allow_null=True)
+    variant_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = VentaPOSItem
         fields = ('id', 'product', 'product_name', 'variant', 'cantidad',
-                  'precio_unitario', 'costo_unitario', 'subtotal')
+                  'precio_unitario', 'costo_unitario', 'subtotal', 'variant_detail')
+
+    def get_variant_detail(self, obj):
+        if not obj.variant:
+            return ''
+        parts = []
+        if obj.variant.talla:
+            parts.append(f"Talla: {obj.variant.talla}")
+        if obj.variant.color:
+            parts.append(f"Color: {obj.variant.color}")
+        return ' / '.join(parts)
 
 
 class PagoCreditoSerializer(serializers.ModelSerializer):
@@ -81,6 +93,7 @@ class VentaPOSSerializer(serializers.ModelSerializer):
     sucursal_nombre = serializers.CharField(
         source='sucursal.nombre', read_only=True, allow_null=True)
     usuario_nombre = serializers.SerializerMethodField()
+    usuario_rol_nombre = serializers.SerializerMethodField()
     monto_pagado = serializers.SerializerMethodField()
     saldo_pendiente = serializers.SerializerMethodField()
     monto_cobrado = serializers.SerializerMethodField()
@@ -94,7 +107,7 @@ class VentaPOSSerializer(serializers.ModelSerializer):
             'discount_percentage', 'discount_type',
             'total', 'monto_recibido', 'vuelto', 'cupon', 'status',
             'canal_venta', 'direccion_envio',
-            'usuario', 'usuario_nombre', 'es_credito', 'plazo_dias', 'fecha_vencimiento_credito',
+            'usuario', 'usuario_nombre', 'usuario_rol_nombre', 'es_credito', 'plazo_dias', 'fecha_vencimiento_credito',
             'notas', 'created_at', 'items', 'monto_pagado', 'saldo_pendiente', 'monto_cobrado',
         )
         read_only_fields = ('id', 'numero_ticket', 'vendor', 'created_at')
@@ -103,6 +116,16 @@ class VentaPOSSerializer(serializers.ModelSerializer):
         if not obj.usuario:
             return ''
         return obj.usuario.get_full_name() or obj.usuario.email
+
+    def get_usuario_rol_nombre(self, obj):
+        if not obj.usuario:
+            return None
+        tm = TeamMember.objects.filter(vendor=obj.vendor, user=obj.usuario, is_active=True).select_related('custom_role').first()
+        if tm and tm.custom_role:
+            return tm.custom_role.name
+        if obj.vendor and obj.vendor.user_id == obj.usuario_id:
+            return 'Propietario'
+        return None
 
     def get_monto_pagado(self, obj):
         from django.db.models import Sum

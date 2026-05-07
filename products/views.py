@@ -1,4 +1,5 @@
 import json
+from urllib.parse import urlparse
 from decimal import Decimal, InvalidOperation
 from rest_framework import generics, viewsets
 from rest_framework.decorators import action
@@ -33,6 +34,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
+    MAX_IMAGES = 3
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
     ordering = ['-created_at']
@@ -104,6 +106,55 @@ class ProductViewSet(viewsets.ModelViewSet):
                 return []
         return variants_raw if isinstance(variants_raw, list) else []
 
+    def _normalize_keep_images(self, raw_keep):
+        if not raw_keep:
+            return set()
+        if isinstance(raw_keep, str):
+            try:
+                raw_keep = json.loads(raw_keep)
+            except (json.JSONDecodeError, TypeError):
+                raw_keep = []
+        if not isinstance(raw_keep, list):
+            return set()
+        normalized = set()
+        for item in raw_keep:
+            if not item:
+                continue
+            val = str(item).strip()
+            if not val:
+                continue
+            parsed = urlparse(val)
+            normalized.add(parsed.path or val)
+        return normalized
+
+    def _sync_existing_images_on_update(self, product, request):
+        if 'keep_images' not in request.data:
+            return
+        keep_paths = self._normalize_keep_images(request.data.get('keep_images'))
+        for img in product.images.all():
+            current = img.image.url if img.image else ''
+            if current not in keep_paths and urlparse(current).path not in keep_paths:
+                img.delete()
+
+    def _validate_images_limit(self, product, request, *, is_update=False):
+        incoming_count = len(request.FILES.getlist('images'))
+        if not is_update:
+            if incoming_count > self.MAX_IMAGES:
+                raise ValidationError({'images': f'Máximo {self.MAX_IMAGES} imágenes por producto.'})
+            return
+        has_keep_images = 'keep_images' in request.data
+        keep_paths = self._normalize_keep_images(request.data.get('keep_images'))
+        if has_keep_images:
+            existing_kept = 0
+            for img in product.images.all():
+                current = img.image.url if img.image else ''
+                if current in keep_paths or urlparse(current).path in keep_paths:
+                    existing_kept += 1
+        else:
+            existing_kept = product.images.count()
+        if existing_kept + incoming_count > self.MAX_IMAGES:
+            raise ValidationError({'images': f'Máximo {self.MAX_IMAGES} imágenes por producto.'})
+
     def _save_images(self, product, request):
         for image in request.FILES.getlist('images'):
             ProductImage.objects.create(product=product, image=image)
@@ -157,6 +208,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             raise ValidationError({'detail': 'Sin perfil de vendedor asociado.'})
         variants = self._parse_variants(self.request)
         shipping_cost = self._parse_decimal_field(self.request, 'shipping_cost')
+        self._validate_images_limit(None, self.request, is_update=False)
         product = serializer.save(
             vendor=vendor,
             variants=variants,
@@ -171,9 +223,12 @@ class ProductViewSet(viewsets.ModelViewSet):
         )
 
     def perform_update(self, serializer):
+        current = self.get_object()
+        self._validate_images_limit(current, self.request, is_update=True)
         variants = self._parse_variants(self.request)
         shipping_cost = self._parse_decimal_field(self.request, 'shipping_cost')
         product = serializer.save(variants=variants, shipping_cost=shipping_cost)
+        self._sync_existing_images_on_update(product, self.request)
         self._save_images(product, self.request)
         self._sync_variant_objects(product, variants)
         if 'purchase_cost' in self.request.data:

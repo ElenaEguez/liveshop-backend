@@ -146,6 +146,7 @@ class CartOrderCreateSerializer(serializers.Serializer):
     delivery_method = serializers.ChoiceField(choices=['pickup', 'delivery', 'envio_nacional', 'envio_scz'])
     payment_method = serializers.ChoiceField(choices=['tigo_money', 'banco_union', 'efectivo'])
     notes = serializers.CharField(required=False, allow_blank=True, default='')
+    cupon_codigo = serializers.CharField(required=False, allow_blank=True, default='')
     items = CartOrderItemCreateSerializer(many=True)
 
     def validate_items(self, value):
@@ -157,10 +158,25 @@ class CartOrderCreateSerializer(serializers.Serializer):
 class CartOrderItemDetailSerializer(serializers.ModelSerializer):
     product_id = serializers.IntegerField(source='product.id')
     product_name = serializers.CharField(source='product.name')
+    variant_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = CartOrderItem
-        fields = ['id', 'product_id', 'product_name', 'variant_id', 'quantity', 'unit_price', 'subtotal']
+        fields = ['id', 'product_id', 'product_name', 'variant_id', 'variant_detail', 'quantity', 'unit_price', 'subtotal']
+
+    def get_variant_detail(self, obj):
+        if not obj.variant_id:
+            return ''
+        try:
+            variant = ProductVariant.objects.get(pk=obj.variant_id)
+        except ProductVariant.DoesNotExist:
+            return ''
+        parts = []
+        if variant.talla:
+            parts.append(f"Talla: {variant.talla}")
+        if variant.color:
+            parts.append(f"Color: {variant.color}")
+        return ' / '.join(parts)
 
 
 class CartOrderDetailSerializer(serializers.ModelSerializer):

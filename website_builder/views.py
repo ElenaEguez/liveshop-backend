@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, RetrieveAPIView
@@ -11,10 +12,13 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Q
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 from vendors.models import Vendor
 from products.models import Product, ProductVariant, Category
 from vendors.permissions import IsVendorOrTeamMember, get_vendor_for_user
+from payments.models import Cupon
 from .models import CartOrder, CartOrderItem
 from .serializers import (
     PublicStoreSerializer,
@@ -23,6 +27,18 @@ from .serializers import (
     CartOrderCreateSerializer,
     CartOrderDetailSerializer,
 )
+
+
+def _emit_vendor_update(vendor_id, event_type, data):
+    """Send a real-time event to the vendor's WebSocket group."""
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'vendor_{vendor_id}',
+            {'type': 'vendor_update', 'event_type': event_type, 'data': data},
+        )
+    except Exception:
+        pass
 
 
 class PublicPagination(PageNumberPagination):
@@ -178,7 +194,30 @@ class PublicCheckoutView(APIView):
             if errors:
                 return Response({'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
 
-            total = sum(item['subtotal'] for item in resolved)
+            subtotal = sum(item['subtotal'] for item in resolved)
+            cupon_codigo = (data.get('cupon_codigo') or '').strip()
+            descuento_cupon = Decimal('0')
+            cupon = None
+
+            if cupon_codigo:
+                try:
+                    cupon = Cupon.objects.get(codigo=cupon_codigo, vendor=vendor, activo=True)
+                except Cupon.DoesNotExist:
+                    return Response({'error': 'Cupón inválido o inactivo.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                if cupon.usos_maximos and cupon.usos_actuales >= cupon.usos_maximos:
+                    return Response({'error': 'Cupón agotado.'}, status=status.HTTP_400_BAD_REQUEST)
+                if cupon.fecha_vencimiento and cupon.fecha_vencimiento < date.today():
+                    return Response({'error': 'Cupón vencido.'}, status=status.HTTP_400_BAD_REQUEST)
+                if not cupon.aplica_live:
+                    return Response({'error': 'Cupón no aplica para compras web.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                if cupon.tipo == 'porcentaje':
+                    descuento_cupon = (subtotal * cupon.valor / 100).quantize(Decimal('0.01'))
+                else:
+                    descuento_cupon = min(cupon.valor, subtotal)
+
+            total = max(subtotal - descuento_cupon, Decimal('0'))
 
             # ── Create CartOrder ──────────────────────────────────────────
             order = CartOrder.objects.create(
@@ -189,7 +228,7 @@ class PublicCheckoutView(APIView):
                 customer_address=data['customer_address'],
                 delivery_method=data['delivery_method'],
                 payment_method=data['payment_method'],
-                notes=data['notes'],
+                notes=(data['notes'] or '') + (f"\nCupón: {cupon_codigo} (-Bs {descuento_cupon})" if cupon_codigo else ''),
                 total_amount=total,
             )
 
@@ -210,6 +249,15 @@ class PublicCheckoutView(APIView):
                     item['product'].stock -= item['quantity']
                     item['product'].save(update_fields=['stock'])
 
+            if cupon:
+                cupon.usos_actuales += 1
+                cupon.save(update_fields=['usos_actuales'])
+
+        _emit_vendor_update(
+            vendor.id,
+            'web_order_created',
+            {'order_id': order.id, 'status': order.status, 'total_amount': str(order.total_amount)},
+        )
         return Response(
             CartOrderDetailSerializer(order, context={'request': request}).data,
             status=status.HTTP_201_CREATED,
@@ -256,6 +304,11 @@ class PublicReceiptUploadView(APIView):
         order.payment_receipt = request.FILES['receipt']
         order.status = 'pending_confirmation'
         order.save(update_fields=['payment_receipt', 'status'])
+        _emit_vendor_update(
+            vendor.id,
+            'web_order_status_changed',
+            {'order_id': order.id, 'status': order.status},
+        )
 
         return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
 
@@ -291,6 +344,11 @@ class PublicOrderCancelView(APIView):
 
         order.status = 'cancelled'
         order.save(update_fields=['status'])
+        _emit_vendor_update(
+            vendor.id,
+            'web_order_status_changed',
+            {'order_id': order.id, 'status': order.status},
+        )
         return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
 
 
@@ -346,6 +404,11 @@ class VendorCartOrderConfirmView(APIView):
 
         order.status = 'confirmed'
         order.save(update_fields=['status'])
+        _emit_vendor_update(
+            vendor.id,
+            'web_order_status_changed',
+            {'order_id': order.id, 'status': order.status},
+        )
 
         return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
 
@@ -380,6 +443,11 @@ class VendorCartOrderCancelView(APIView):
 
         order.status = 'cancelled'
         order.save(update_fields=['status'])
+        _emit_vendor_update(
+            vendor.id,
+            'web_order_status_changed',
+            {'order_id': order.id, 'status': order.status},
+        )
 
         return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
 
@@ -413,6 +481,11 @@ class VendorCartOrderMarkDeliveredView(APIView):
 
         order.status = 'delivered'
         order.save(update_fields=['status'])
+        _emit_vendor_update(
+            vendor.id,
+            'web_order_status_changed',
+            {'order_id': order.id, 'status': order.status},
+        )
 
         return Response(CartOrderDetailSerializer(order, context={'request': request}).data)
 

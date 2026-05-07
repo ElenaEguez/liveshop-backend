@@ -109,13 +109,14 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
     sucursal_nombre = serializers.SerializerMethodField()
     usuario_nombre = serializers.SerializerMethodField()
     usuario_email = serializers.SerializerMethodField()
+    usuario_rol_nombre = serializers.SerializerMethodField()
     metodos_pago = serializers.SerializerMethodField()
 
     class Meta:
         model = TurnoCaja
         fields = (
             'id', 'caja', 'caja_nombre', 'sucursal_nombre',
-            'usuario', 'usuario_email', 'usuario_nombre',
+            'usuario', 'usuario_email', 'usuario_nombre', 'usuario_rol_nombre',
             'status', 'monto_apertura', 'monto_cierre',
             'efectivo_esperado', 'diferencia_cierre',
             'fecha_apertura', 'fecha_cierre', 'notas_cierre',
@@ -125,7 +126,7 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
         read_only_fields = (
             'id', 'fecha_apertura', 'total_ventas',
             'total_ingresos_manuales', 'total_retiros',
-            'caja_nombre', 'sucursal_nombre', 'usuario_email', 'usuario_nombre',
+            'caja_nombre', 'sucursal_nombre', 'usuario_email', 'usuario_nombre', 'usuario_rol_nombre',
             'metodos_pago',
         )
 
@@ -142,6 +143,19 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
 
     def get_usuario_email(self, obj):
         return obj.usuario.email if obj.usuario else None
+
+    def get_usuario_rol_nombre(self, obj):
+        if not obj.usuario:
+            return None
+        vendor = obj.caja.sucursal.vendor if obj.caja and obj.caja.sucursal else None
+        if not vendor:
+            return None
+        tm = TeamMember.objects.filter(vendor=vendor, user=obj.usuario, is_active=True).select_related('custom_role').first()
+        if tm and tm.custom_role:
+            return tm.custom_role.name
+        if vendor.user_id == obj.usuario_id:
+            return 'Propietario'
+        return None
 
     def _safe_money_str(self, val):
         try:
