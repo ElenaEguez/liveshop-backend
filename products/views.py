@@ -10,6 +10,7 @@ from django.db.models import IntegerField, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from vendors.permissions import get_vendor_for_user
+from vendors.models import Almacen
 from .serializers import (
     CategorySerializer, CategoryWithSubcategoriesSerializer,
     ProductSerializer, InventorySerializer, ProductVariantSerializer,
@@ -105,6 +106,117 @@ class ProductViewSet(viewsets.ModelViewSet):
             except (json.JSONDecodeError, TypeError):
                 return []
         return variants_raw if isinstance(variants_raw, list) else []
+
+    def _parse_inventory_distribution(self, request):
+        raw = request.data.get('inventory_distribution', '[]')
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                parsed = []
+        else:
+            parsed = raw if isinstance(raw, list) else []
+
+        out = []
+        seen_almacenes = set()
+        for row in parsed:
+            if not isinstance(row, dict):
+                continue
+            almacen_id = row.get('almacen_id')
+            qty_raw = row.get('quantity', 0)
+            try:
+                qty = int(qty_raw)
+            except (TypeError, ValueError):
+                qty = 0
+            if almacen_id in (None, '', 'null'):
+                normalized_almacen = None
+            else:
+                try:
+                    normalized_almacen = int(almacen_id)
+                except (TypeError, ValueError):
+                    raise ValidationError({'inventory_distribution': f'Almacén inválido: {almacen_id}.'})
+            if normalized_almacen is not None:
+                if normalized_almacen in seen_almacenes:
+                    raise ValidationError({'inventory_distribution': 'No puedes repetir el mismo almacén en más de una fila.'})
+                seen_almacenes.add(normalized_almacen)
+            out.append({'almacen_id': normalized_almacen, 'quantity': max(qty, 0)})
+        return out
+
+    def _validate_stock_consistency(self, request, *, variants, distribution):
+        stock_raw = request.data.get('stock', 0)
+        try:
+            stock_total = int(stock_raw)
+        except (TypeError, ValueError):
+            stock_total = 0
+
+        if variants:
+            variant_sum = 0
+            for v in variants:
+                if not isinstance(v, dict):
+                    continue
+                try:
+                    variant_sum += int(v.get('stock', 0))
+                except (TypeError, ValueError):
+                    pass
+            if variant_sum != stock_total:
+                raise ValidationError({'variants': f'La suma de variantes ({variant_sum}) debe ser igual al stock total ({stock_total}).'})
+
+        if distribution:
+            dist_sum = sum(int(r.get('quantity', 0)) for r in distribution)
+            if dist_sum != stock_total:
+                raise ValidationError({'inventory_distribution': f'La suma distribuida ({dist_sum}) debe ser igual al stock total ({stock_total}).'})
+
+    def _sync_inventory_distribution(self, product, vendor, distribution, purchase_cost):
+        if not distribution:
+            inv, _ = Inventory.objects.get_or_create(
+                product=product,
+                almacen=None,
+                defaults={'quantity': product.stock, 'purchase_cost': purchase_cost}
+            )
+            inv.quantity = product.stock
+            if purchase_cost is not None:
+                inv.purchase_cost = purchase_cost
+            inv.is_active = True
+            update_fields = ['quantity', 'is_active']
+            if purchase_cost is not None:
+                update_fields.append('purchase_cost')
+            inv.save(update_fields=update_fields)
+            return
+
+        desired = {}
+        for row in distribution:
+            almacen_id = row.get('almacen_id')
+            qty = int(row.get('quantity', 0))
+            if almacen_id is not None:
+                almacen = Almacen.objects.filter(id=almacen_id, sucursal__vendor=vendor, activo=True).first()
+                if not almacen:
+                    raise ValidationError({'inventory_distribution': f'Almacén inválido: {almacen_id}.'})
+            desired[almacen_id] = desired.get(almacen_id, 0) + qty
+
+        existing = list(product.inventories.all())
+        existing_map = {(inv.almacen_id): inv for inv in existing}
+
+        for almacen_id, qty in desired.items():
+            inv = existing_map.get(almacen_id)
+            if inv is None:
+                inv = Inventory(product=product, almacen_id=almacen_id, reserved_quantity=0)
+            if inv.reserved_quantity and qty < inv.reserved_quantity:
+                raise ValidationError({'inventory_distribution': f'No puedes asignar menos de {inv.reserved_quantity} unidades en almacén {almacen_id or "sin almacén"}.'})
+            inv.quantity = qty
+            if purchase_cost is not None:
+                inv.purchase_cost = purchase_cost
+            inv.is_active = True
+            inv.save()
+
+        desired_ids = set(desired.keys())
+        for inv in existing:
+            if inv.almacen_id in desired_ids:
+                continue
+            if inv.reserved_quantity and inv.reserved_quantity > 0:
+                raise ValidationError({'inventory_distribution': f'No se puede quitar almacén {inv.almacen_id or "sin almacén"} porque tiene reserva activa.'})
+            inv.quantity = 0
+            inv.is_active = False
+            inv.save(update_fields=['quantity', 'is_active'])
 
     def _normalize_keep_images(self, raw_keep):
         if not raw_keep:
@@ -207,7 +319,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         if not vendor:
             raise ValidationError({'detail': 'Sin perfil de vendedor asociado.'})
         variants = self._parse_variants(self.request)
+        distribution = self._parse_inventory_distribution(self.request)
         shipping_cost = self._parse_decimal_field(self.request, 'shipping_cost')
+        self._validate_stock_consistency(self.request, variants=variants, distribution=distribution)
         self._validate_images_limit(None, self.request, is_update=False)
         product = serializer.save(
             vendor=vendor,
@@ -217,28 +331,25 @@ class ProductViewSet(viewsets.ModelViewSet):
         self._save_images(product, self.request)
         self._sync_variant_objects(product, variants)
         purchase_cost = self._parse_purchase_cost(self.request)
-        Inventory.objects.get_or_create(
-            product=product,
-            defaults={'quantity': product.stock, 'purchase_cost': purchase_cost}
-        )
+        self._sync_inventory_distribution(product, vendor, distribution, purchase_cost)
 
     def perform_update(self, serializer):
         current = self.get_object()
         self._validate_images_limit(current, self.request, is_update=True)
         variants = self._parse_variants(self.request)
+        has_distribution_payload = 'inventory_distribution' in self.request.data
+        distribution = self._parse_inventory_distribution(self.request) if has_distribution_payload else []
         shipping_cost = self._parse_decimal_field(self.request, 'shipping_cost')
+        if has_distribution_payload:
+            self._validate_stock_consistency(self.request, variants=variants, distribution=distribution)
         product = serializer.save(variants=variants, shipping_cost=shipping_cost)
         self._sync_existing_images_on_update(product, self.request)
         self._save_images(product, self.request)
         self._sync_variant_objects(product, variants)
-        if 'purchase_cost' in self.request.data:
-            purchase_cost = self._parse_purchase_cost(self.request)
-            inventory, _ = Inventory.objects.get_or_create(
-                product=product,
-                defaults={'quantity': product.stock}
-            )
-            inventory.purchase_cost = purchase_cost
-            inventory.save(update_fields=['purchase_cost'])
+        purchase_cost = self._parse_purchase_cost(self.request) if 'purchase_cost' in self.request.data else None
+        vendor = get_vendor_for_user(self.request.user)
+        if has_distribution_payload:
+            self._sync_inventory_distribution(product, vendor, distribution, purchase_cost)
 
     @action(detail=True, methods=['get'], url_path='variantes')
     def variantes(self, request, pk=None):
