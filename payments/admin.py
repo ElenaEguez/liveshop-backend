@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     Payment, MetodoPago, Cupon, CategoriaGasto,
     VentaPOS, VentaPOSItem, GastoOperativo,
+    Devolucion, DevolucionItem,
 )
 
 
@@ -57,3 +58,21 @@ class GastoOperativoAdmin(admin.ModelAdmin):
     list_filter = ['status', 'vendor', 'categoria', 'fecha']
     search_fields = ['concepto', 'vendor__nombre_tienda']
     date_hierarchy = 'fecha'
+
+
+class DevolucionItemInline(admin.TabularInline):
+    model = DevolucionItem
+    extra = 0
+    fields = ['venta_item', 'cantidad',
+              'precio_unitario', 'subtotal']
+    readonly_fields = ['subtotal']
+
+
+@admin.register(Devolucion)
+class DevolucionAdmin(admin.ModelAdmin):
+    list_display = ['id', 'venta', 'tipo',
+                    'tipo_resolucion',
+                    'monto_devuelto', 'created_at']
+    list_filter = ['tipo', 'tipo_resolucion', 'vendor']
+    inlines = [DevolucionItemInline]
+    readonly_fields = ['procesado_por', 'created_at']

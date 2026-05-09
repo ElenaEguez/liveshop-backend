@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import (
     Payment, MetodoPago, Cupon, CategoriaGasto,
     VentaPOS, VentaPOSItem, GastoOperativo, PagoCredito,
+    Devolucion, DevolucionItem,
 )
 from vendors.models import TeamMember
 
@@ -198,3 +199,108 @@ class GastoOperativoSerializer(serializers.ModelSerializer):
             'concepto', 'monto', 'fecha', 'status', 'usuario', 'notas', 'created_at',
         )
         read_only_fields = ('id', 'created_at', 'usuario')
+
+
+class DevolucionItemSerializer(serializers.ModelSerializer):
+    producto_nombre = serializers.SerializerMethodField()
+    variante_detalle = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DevolucionItem
+        fields = ['id', 'venta_item', 'producto_nombre',
+                  'variante_detalle', 'cantidad',
+                  'precio_unitario', 'subtotal']
+        read_only_fields = ['subtotal']
+
+    def get_producto_nombre(self, obj):
+        return obj.venta_item.product.name \
+            if obj.venta_item.product else ''
+
+    def get_variante_detalle(self, obj):
+        v = obj.venta_item.variant
+        if not v:
+            return None
+        return {
+            'id': v.id,
+            'talla': v.talla,
+            'color': v.color,
+            'color_hex': v.color_hex,
+        }
+
+
+class DevolucionSerializer(serializers.ModelSerializer):
+    items = DevolucionItemSerializer(
+        many=True, read_only=True)
+    venta_ticket = serializers.SerializerMethodField()
+    venta_total = serializers.SerializerMethodField()
+    procesado_por_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Devolucion
+        fields = ['id', 'venta', 'venta_ticket',
+                  'venta_total', 'tipo',
+                  'tipo_resolucion', 'motivo',
+                  'monto_devuelto', 'items',
+                  'procesado_por',
+                  'procesado_por_nombre', 'created_at']
+        read_only_fields = ['tipo', 'monto_devuelto',
+                            'procesado_por', 'created_at']
+
+    def get_venta_ticket(self, obj):
+        return obj.venta.numero_ticket \
+            if obj.venta else ''
+
+    def get_venta_total(self, obj):
+        return float(obj.venta.total) \
+            if obj.venta else 0
+
+    def get_procesado_por_nombre(self, obj):
+        return obj.procesado_por.get_full_name() \
+            if obj.procesado_por else ''
+
+
+class VentaPOSSimpleSerializer(serializers.ModelSerializer):
+    """
+    Serializer simplificado de VentaPOS para la búsqueda
+    al crear una devolución.
+    """
+    items = serializers.SerializerMethodField()
+    cliente = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VentaPOS
+        fields = ['id', 'numero_ticket', 'total',
+                  'descuento', 'status', 'cliente',
+                  'created_at', 'items']
+
+    def get_cliente(self, obj):
+        return {
+            'nombre': obj.cliente_nombre or '',
+            'telefono': obj.cliente_telefono or '',
+        }
+
+    def get_items(self, obj):
+        return [
+            {
+                'id': item.id,
+                'producto_id': item.product.id,
+                'producto_nombre': item.product.name,
+                'variante_id': item.variant.id
+                if item.variant else None,
+                'variante_detalle': {
+                    'talla': item.variant.talla,
+                    'color': item.variant.color,
+                    'color_hex': item.variant.color_hex,
+                } if item.variant else None,
+                'cantidad': item.cantidad,
+                'precio_unitario': float(item.precio_unitario),
+                'subtotal': float(item.subtotal),
+                'cantidad_devuelta': sum(
+                    di.cantidad
+                    for di in item.devoluciones.all()
+                ),
+            }
+            for item in obj.items.select_related(
+                'product', 'variant').prefetch_related(
+                'devoluciones').all()
+        ]

@@ -114,6 +114,8 @@ class VentaPOS(models.Model):
         ('completada', 'Completada'),
         ('anulada', 'Anulada'),
         ('credito', 'Venta a crédito'),
+        ('devuelto', 'Devuelto'),
+        ('parcialmente_devuelto', 'Parcialmente devuelto'),
     ]
     vendor = models.ForeignKey(
         'vendors.Vendor', on_delete=models.CASCADE,
@@ -175,7 +177,7 @@ class VentaPOS(models.Model):
         Cupon, on_delete=models.SET_NULL,
         null=True, blank=True
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='completada')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='completada')
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL, null=True
@@ -283,3 +285,83 @@ class PagoCredito(models.Model):
 
     def __str__(self):
         return f"Pago {self.monto} — {self.venta.numero_ticket}"
+
+
+class Devolucion(models.Model):
+    TIPO_RESOLUCION_CHOICES = [
+        ('cambio', 'Cambio de producto'),
+        ('devolucion_dinero', 'Devolución de dinero'),
+    ]
+    TIPO_CHOICES = [
+        ('total', 'Total'),
+        ('parcial', 'Parcial'),
+    ]
+
+    venta = models.ForeignKey(
+        'VentaPOS',
+        on_delete=models.PROTECT,
+        related_name='devoluciones')
+    vendor = models.ForeignKey(
+        'vendors.Vendor',
+        on_delete=models.CASCADE,
+        related_name='devoluciones')
+    tipo = models.CharField(
+        max_length=10,
+        choices=TIPO_CHOICES,
+        default='parcial')
+    tipo_resolucion = models.CharField(
+        max_length=20,
+        choices=TIPO_RESOLUCION_CHOICES)
+    motivo = models.TextField(
+        blank=True, default='',
+        help_text='Motivo de la devolución')
+    monto_devuelto = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        default=0,
+        help_text='Monto a devolver al cliente')
+    procesado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='devoluciones_procesadas')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Devolución'
+        verbose_name_plural = 'Devoluciones'
+
+    def __str__(self):
+        return (f'Dev #{self.id} — '
+                f'Ticket {self.venta.numero_ticket} '
+                f'[{self.tipo_resolucion}]')
+
+
+class DevolucionItem(models.Model):
+    devolucion = models.ForeignKey(
+        Devolucion,
+        on_delete=models.CASCADE,
+        related_name='items')
+    venta_item = models.ForeignKey(
+        'VentaPOSItem',
+        on_delete=models.PROTECT,
+        related_name='devoluciones')
+    cantidad = models.PositiveIntegerField(default=1)
+    precio_unitario = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        default=0)
+    subtotal = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        default=0)
+
+    class Meta:
+        verbose_name = 'Ítem de Devolución'
+        verbose_name_plural = 'Ítems de Devolución'
+
+    def save(self, *args, **kwargs):
+        self.subtotal = self.cantidad * self.precio_unitario
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return (f'{self.venta_item.product.name} '
+                f'x{self.cantidad}')

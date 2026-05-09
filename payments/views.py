@@ -11,8 +11,13 @@ from django.shortcuts import get_object_or_404
 from django.db import transaction
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
-from .models import Payment
-from .serializers import PaymentSerializer, PaymentConfirmSerializer
+from .models import Payment, Devolucion, DevolucionItem, VentaPOS, VentaPOSItem
+from .serializers import (
+    PaymentSerializer,
+    PaymentConfirmSerializer,
+    DevolucionSerializer,
+    VentaPOSSimpleSerializer,
+)
 from orders.models import Reservation
 from vendors.models import Vendor
 from vendors.permissions import IsVendorOrTeamMember, get_vendor_for_user, get_role_for_user
@@ -252,4 +257,285 @@ class PaymentViewSet(viewsets.ModelViewSet):
             'payment_instructions': vendor.payment_instructions,
             'accepted_payment_methods': vendor.accepted_payment_methods,
         })
+
+
+class BuscarVentaParaDevolucionView(APIView):
+    """
+    Busca una VentaPOS por número de ticket o ID.
+    GET /api/v1/payments/devoluciones/buscar-venta/?ticket=001
+    GET /api/v1/payments/devoluciones/buscar-venta/?id=5
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        vendor = get_vendor_for_user(request.user)
+        if not vendor:
+            return Response(
+                {'error': 'Sin vendor asignado'},
+                status=400)
+
+        ticket = request.query_params.get('ticket')
+        venta_id = request.query_params.get('id')
+
+        if not ticket and not venta_id:
+            return Response(
+                {'error': 'Proporciona ticket o id'},
+                status=400)
+
+        try:
+            if ticket:
+                venta = VentaPOS.objects.prefetch_related(
+                    'items__product',
+                    'items__variant',
+                    'items__devoluciones',
+                ).get(
+                    vendor=vendor,
+                    numero_ticket=ticket
+                )
+            else:
+                venta = VentaPOS.objects.prefetch_related(
+                    'items__product',
+                    'items__variant',
+                    'items__devoluciones',
+                ).get(
+                    vendor=vendor,
+                    id=venta_id
+                )
+        except VentaPOS.DoesNotExist:
+            return Response(
+                {'error': 'Venta no encontrada'},
+                status=404)
+
+        if venta.status == 'devuelto':
+            return Response(
+                {'error': 'Esta venta ya fue devuelta '
+                          'completamente'},
+                status=400)
+
+        return Response(VentaPOSSimpleSerializer(venta).data)
+
+
+class DevolucionViewSet(viewsets.ModelViewSet):
+    """
+    CRUD de devoluciones.
+    Crear: POST /api/v1/payments/devoluciones/
+    Listar: GET /api/v1/payments/devoluciones/
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = DevolucionSerializer
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        vendor = get_vendor_for_user(self.request.user)
+        if not vendor:
+            return Devolucion.objects.none()
+        qs = Devolucion.objects.filter(
+            vendor=vendor
+        ).select_related(
+            'venta', 'procesado_por'
+        ).prefetch_related(
+            'items__venta_item__product',
+            'items__venta_item__variant',
+        )
+        venta_id = self.request.query_params.get('venta')
+        if venta_id:
+            qs = qs.filter(venta_id=venta_id)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        vendor = get_vendor_for_user(request.user)
+        if not vendor:
+            return Response(
+                {'error': 'Sin vendor asignado'},
+                status=400)
+
+        venta_id = request.data.get('venta')
+        tipo_resolucion = request.data.get('tipo_resolucion')
+        motivo = request.data.get('motivo', '')
+        items_data = request.data.get('items', [])
+
+        if not venta_id:
+            return Response(
+                {'error': 'venta es requerida'},
+                status=400)
+        if not tipo_resolucion:
+            return Response(
+                {'error': 'tipo_resolucion es requerido'},
+                status=400)
+        if tipo_resolucion not in ('cambio', 'devolucion_dinero'):
+            return Response(
+                {'error': 'tipo_resolucion inválido'},
+                status=400)
+        if not items_data:
+            return Response(
+                {'error': 'items es requerido'},
+                status=400)
+
+        try:
+            venta = VentaPOS.objects.select_related(
+                'caja__sucursal'
+            ).prefetch_related(
+                'items__devoluciones'
+            ).get(id=venta_id, vendor=vendor)
+        except VentaPOS.DoesNotExist:
+            return Response(
+                {'error': 'Venta no encontrada'},
+                status=404)
+
+        if venta.status == 'devuelto':
+            return Response(
+                {'error': 'Esta venta ya fue devuelta '
+                          'completamente'},
+                status=400)
+
+        almacen = None
+        if venta.caja and venta.caja.sucursal:
+            almacen = venta.caja.sucursal.almacenes.filter(
+                activo=True
+            ).first()
+
+        devolucion_items = []
+        monto_total = 0
+
+        for item_data in items_data:
+            venta_item_id = item_data.get('venta_item')
+            try:
+                cantidad = int(item_data.get('cantidad', 1))
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'cantidad inválida'},
+                    status=400)
+            if cantidad <= 0:
+                return Response(
+                    {'error': 'cantidad debe ser mayor a 0'},
+                    status=400)
+
+            try:
+                venta_item = VentaPOSItem.objects.prefetch_related(
+                    'devoluciones'
+                ).select_related(
+                    'product', 'variant'
+                ).get(
+                    id=venta_item_id,
+                    venta=venta
+                )
+            except VentaPOSItem.DoesNotExist:
+                return Response(
+                    {'error': (
+                        f'Ítem {venta_item_id} '
+                        f'no pertenece a esta venta'
+                    )}, status=400)
+
+            ya_devuelto = sum(
+                di.cantidad
+                for di in venta_item.devoluciones.all()
+            )
+            disponible = venta_item.cantidad - ya_devuelto
+
+            if cantidad > disponible:
+                return Response(
+                    {'error': (
+                        f'"{venta_item.product.name}": '
+                        f'solo {disponible} unidades '
+                        f'disponibles para devolver'
+                    )}, status=400)
+
+            subtotal = cantidad * venta_item.precio_unitario
+            monto_total += subtotal
+            devolucion_items.append({
+                'venta_item': venta_item,
+                'cantidad': cantidad,
+                'precio_unitario': venta_item.precio_unitario,
+                'subtotal': subtotal,
+                'almacen': almacen,
+            })
+
+        total_items_venta = sum(
+            i.cantidad for i in venta.items.all())
+        total_devolviendo = sum(
+            d['cantidad'] for d in devolucion_items)
+
+        items_ya_devueltos = sum(
+            sum(di.cantidad
+                for di in i.devoluciones.all())
+            for i in venta.items.prefetch_related(
+                'devoluciones').all()
+        )
+        tipo = ('total'
+                if (items_ya_devueltos + total_devolviendo)
+                >= total_items_venta
+                else 'parcial')
+
+        from products.models import Inventory
+        from vendors.models import KardexMovimiento
+
+        with transaction.atomic():
+            devolucion = Devolucion.objects.create(
+                venta=venta,
+                vendor=vendor,
+                tipo=tipo,
+                tipo_resolucion=tipo_resolucion,
+                motivo=motivo,
+                monto_devuelto=monto_total,
+                procesado_por=request.user,
+            )
+
+            for d in devolucion_items:
+                DevolucionItem.objects.create(
+                    devolucion=devolucion,
+                    venta_item=d['venta_item'],
+                    cantidad=d['cantidad'],
+                    precio_unitario=d['precio_unitario'],
+                )
+
+                if d['almacen']:
+                    inv, _ = Inventory.objects.get_or_create(
+                        product=d['venta_item'].product,
+                        almacen=d['almacen'],
+                        defaults={
+                            'quantity': 0,
+                            'reserved_quantity': 0,
+                            'is_active': True,
+                        }
+                    )
+                    stock_anterior = inv.quantity
+                    inv.quantity += d['cantidad']
+                    inv.save(update_fields=['quantity'])
+
+                    KardexMovimiento.objects.create(
+                        inventory=inv,
+                        almacen=d['almacen'],
+                        tipo='entrada',
+                        motivo='devolucion',
+                        cantidad=d['cantidad'],
+                        stock_anterior=stock_anterior,
+                        stock_actual=inv.quantity,
+                        documento_ref=(
+                            f'DEV-{devolucion.id}-'
+                            f'T{venta.numero_ticket}'
+                        ),
+                        usuario=request.user,
+                        notas=(
+                            f'Devolución de venta '
+                            f'#{venta.numero_ticket}. '
+                            f'Motivo: {motivo or "Sin motivo"}'
+                        ),
+                    )
+
+            if tipo == 'total':
+                venta.status = 'devuelto'
+            else:
+                venta.status = 'parcialmente_devuelto'
+            venta.save(update_fields=['status'])
+
+        devolucion = Devolucion.objects.prefetch_related(
+            'items__venta_item__product',
+            'items__venta_item__variant'
+        ).select_related(
+            'venta', 'procesado_por'
+        ).get(pk=devolucion.pk)
+
+        return Response(
+            DevolucionSerializer(devolucion).data,
+            status=status.HTTP_201_CREATED)
 
