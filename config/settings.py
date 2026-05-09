@@ -16,6 +16,7 @@ import environ
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(
+    # Cast only; default for missing DEBUG is set explicitly below (local dev).
     DEBUG=(bool, False),
 )
 environ.Env.read_env(BASE_DIR / '.env')
@@ -28,7 +29,9 @@ environ.Env.read_env(BASE_DIR / '.env')
 SECRET_KEY = env('SECRET_KEY', default='changeme')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env('DEBUG')
+# Default True so local runserver (Daphne) serves static files and /admin has CSS.
+# Without DEBUG=True, ASGIStaticFilesHandler is disabled → unstyled admin. Production must set DEBUG=False in .env.
+DEBUG = env.bool('DEBUG', default=True)
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost','127.0.0.1'])
 
@@ -62,6 +65,7 @@ INSTALLED_APPS = [
     'payments',
     'notifications',
     'website_builder',
+    'compras.apps.ComprasConfig',
 ]
 
 MIDDLEWARE = [
@@ -155,10 +159,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = 'static/'
-STATIC_ROOT = '/var/www/liveshop/staticfiles/'
+# STATIC_URL must start with '/' so {% static %} resolves from site root on every path
+# (e.g. /admin/login/). A relative value like 'static/' breaks admin CSS/JS.
+STATIC_URL = '/static/'
+STATIC_ROOT = Path(env.str('STATIC_ROOT', default=str(BASE_DIR / 'staticfiles')))
 MEDIA_URL = '/media/'
-MEDIA_ROOT = '/var/www/liveshop/media/'
+MEDIA_ROOT = Path(env.str('MEDIA_ROOT', default=str(BASE_DIR / 'media')))
 
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
     'https://innovatecsystelen.com',
@@ -207,14 +213,21 @@ CORS_ALLOW_METHODS = [
 # Channels configuration
 ASGI_APPLICATION = 'config.asgi.application'
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [env('REDIS_URL', default='redis://127.0.0.1:6379')],
-        },
-    },
-}
+if DEBUG:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer"
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [("127.0.0.1", 6379)],
+            },
+        }
+    }
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -231,6 +244,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
+        'vendors.permissions.SuscripcionActivaPermission',
     ],
 }
 
@@ -251,7 +265,6 @@ SIMPLE_JWT = {
     'ISSUER': None,
     'JTI_CLAIM': 'jti',
     'TOKEN_TYPE_CLAIM': 'token_type',
-    'JTI_CLAIM': 'jti',
 
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',

@@ -19,12 +19,15 @@ def get_vendor_for_user(user):
 
 def get_role_for_user(user):
     """
-    Returns 'vendor_owner', 'admin', 'assistant', 'payments', or None.
+    Devuelve el CustomRole del usuario o None.
+    Para propietarios devuelve None (tienen acceso total, no necesitan rol).
+    Para miembros devuelve su custom_role (puede ser None si no tiene asignado).
+    Nunca lanza excepción.
     """
     if hasattr(user, 'vendor_profile'):
-        return 'vendor_owner'
+        return None  # propietario: acceso total, sin restricción por rol
     try:
-        return user.team_member_profile.role
+        return user.team_member_profile.custom_role
     except Exception:
         return None
 
@@ -101,3 +104,71 @@ class IsVendorOrTeamMember(BasePermission):
             return tm.is_active and tm.vendor == vendor
         except Exception:
             return False
+
+
+class IsVendorOrWarehouseTeamMember(IsVendorOrTeamMember):
+    """
+    Alias para rutas de almacén / conteo físico:
+    permite al dueño o a miembro activo del vendor (filtrado en el viewset).
+    La granularidad perm_warehouse / perm_inventory se valida por acción.
+    """
+
+    pass
+
+
+class SuscripcionActivaPermission(BasePermission):
+    """
+    Verifica que el vendor tenga suscripción activa.
+    Debe usarse como permiso DRF (no como middleware Django)
+    porque requiere que JWTAuthentication ya haya autenticado al usuario.
+
+    Se agrega a DEFAULT_PERMISSION_CLASSES en settings.py.
+    No aplica a superadmins ni a rutas de auth.
+    """
+
+    PATHS_EXCLUIDAS = [
+        '/api/v1/auth/',
+        '/api/v1/vendors/mis-permisos/',
+        '/api/v1/vendors/admin/',
+        '/admin/',
+        '/media/',
+        '/api/website-builder/',
+        '/tienda/',
+    ]
+
+    def has_permission(self, request, view):
+        # No autenticado: dejar pasar (IsAuthenticated lo bloqueará si aplica)
+        if not request.user or not request.user.is_authenticated:
+            return True
+
+        # Superadmin: siempre pasa
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+
+        # Rutas excluidas: dejar pasar
+        if any(request.path.startswith(p) for p in self.PATHS_EXCLUIDAS):
+            return True
+
+        # website_builder montado también en /api/ (todo lo que no es /api/v1/)
+        if request.path.startswith('/api/') and not request.path.startswith('/api/v1/'):
+            return True
+
+        # Obtener vendor del usuario
+        vendor = get_vendor_for_user(request.user)
+        if not vendor:
+            # Sin vendor: dejar pasar (otras vistas manejarán el error)
+            return True
+
+        estado = getattr(vendor, 'estado_suscripcion', 'activo')
+        if estado not in ('activo', 'prueba'):
+            self.message = {
+                'error': 'suscripcion_inactiva',
+                'mensaje': (
+                    'Tu suscripción no está activa. '
+                    'Contacta a soporte en WhatsApp para reactivarla.'
+                ),
+                'estado': estado,
+            }
+            return False
+
+        return True

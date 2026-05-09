@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
@@ -9,6 +10,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     """Serializer for user registration"""
     password = serializers.CharField(write_only=True, required=True)
     password2 = serializers.CharField(write_only=True, required=True)
+    rol = serializers.CharField(read_only=True, default='vendedor')
 
     class Meta:
         model = User
@@ -21,6 +23,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password2')
+        validated_data.pop('rol', None)  # ignorar rol enviado por el cliente
+        validated_data['rol'] = 'vendedor'  # siempre asignar rol base
         user = User.objects.create_user(**validated_data)
         return user
 
@@ -52,7 +56,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         # Sub-usuario: construir lista desde permisos del rol
         try:
             cr = obj.team_member_profile.custom_role
-        except Exception:
+        except (AttributeError, ObjectDoesNotExist):
             return []
 
         if not cr:
@@ -66,11 +70,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'my_store':      cr.perm_my_store,
             'orders':        cr.perm_orders,
             'payments':      cr.perm_payments,
+            'pedidos':       cr.perm_orders,
+            'pagos':         cr.perm_payments,
             'team':          cr.perm_team,
             'dashboard':     cr.perm_dashboard,
             'pos':           cr.perm_pos,
             'warehouse':     cr.perm_warehouse,
             'expenses':      cr.perm_expenses,
+            'compras':       cr.perm_compras,
         }
         return [modulo for modulo, tiene_acceso in perm_map.items() if tiene_acceso]
 

@@ -36,6 +36,7 @@ urlpatterns = [
         path('livestreams/', include('livestreams.urls')),
         path('orders/', include('orders.urls')),
         path('payments/', include('payments.urls')),
+        path('compras/', include('compras.urls')),
         # ── POS / branches ────────────────────────────────────────────────
         path('branches/', include('vendors.branch_urls')),
         path('inventory/', include('products.kardex_urls')),

@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from django.db.models import IntegerField, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
@@ -472,6 +473,116 @@ class InventoryViewSet(viewsets.ModelViewSet):
         qs = qs.annotate(vendido=Coalesce(Subquery(vendido_sq, output_field=IntegerField()), 0))
 
         return qs
+
+
+class InventoryAdjustView(APIView):
+    """
+    Ajusta el stock de un registro Inventory.
+    PATCH body: { "cantidad": <int>, "nota": "<str>" }
+    cantidad positivo = entrada, negativo = salida.
+    Crea KardexMovimiento automáticamente.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        from vendors.models import KardexMovimiento
+
+        try:
+            inv = Inventory.objects.select_related(
+                'product', 'almacen'
+            ).get(pk=pk)
+        except Inventory.DoesNotExist:
+            return Response({'error': 'Inventario no encontrado'}, status=404)
+
+        cantidad = request.data.get('cantidad', 0)
+        nota = request.data.get('nota', 'Ajuste manual')
+
+        try:
+            cantidad = int(cantidad)
+        except (ValueError, TypeError):
+            return Response({'error': 'cantidad debe ser un número entero'}, status=400)
+
+        if cantidad == 0:
+            return Response({'error': 'cantidad no puede ser 0'}, status=400)
+
+        nuevo_stock = inv.quantity + cantidad
+        if nuevo_stock < 0:
+            return Response(
+                {'error': f'Stock insuficiente. Stock actual: {inv.quantity}'},
+                status=400
+            )
+
+        from django.db import transaction
+        with transaction.atomic():
+            stock_anterior = inv.quantity
+            inv.quantity = nuevo_stock
+            inv.save(update_fields=['quantity'])
+
+            tipo = 'entrada' if cantidad > 0 else 'salida'
+            KardexMovimiento.objects.create(
+                inventory=inv,
+                almacen=inv.almacen,
+                tipo=tipo,
+                motivo='ajuste_manual',
+                cantidad=abs(cantidad),
+                stock_anterior=stock_anterior,
+                stock_actual=nuevo_stock,
+                documento_ref=f'AJUSTE-{inv.id}',
+                usuario=request.user,
+                notas=nota,
+            )
+
+        return Response({
+            'ok': True,
+            'inventory_id': inv.id,
+            'producto': inv.product.name,
+            'stock_anterior': stock_anterior,
+            'stock_nuevo': inv.quantity,
+            'cantidad': cantidad,
+        })
+
+
+class VariantStockAdjustView(APIView):
+    """
+    Ajusta stock_extra de una ProductVariant.
+    PATCH body: { "cantidad": <int>, "nota": "<str>" }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        try:
+            variante = ProductVariant.objects.select_related('product').get(pk=pk)
+        except ProductVariant.DoesNotExist:
+            return Response({'error': 'Variante no encontrada'}, status=404)
+
+        cantidad = request.data.get('cantidad', 0)
+        try:
+            cantidad = int(cantidad)
+        except (ValueError, TypeError):
+            return Response({'error': 'cantidad debe ser un número entero'}, status=400)
+
+        if cantidad == 0:
+            return Response({'error': 'cantidad no puede ser 0'}, status=400)
+
+        stock_anterior = variante.stock_extra
+        nuevo_stock = stock_anterior + cantidad
+        if nuevo_stock < 0:
+            return Response(
+                {'error': f'Stock insuficiente. Stock actual: {variante.stock_extra}'},
+                status=400
+            )
+
+        variante.stock_extra = nuevo_stock
+        variante.save(update_fields=['stock_extra'])
+
+        return Response({
+            'ok': True,
+            'variante_id': variante.id,
+            'talla': variante.talla,
+            'color': variante.color,
+            'stock_anterior': stock_anterior,
+            'stock_nuevo': variante.stock_extra,
+        })
 
 
 class PublicCategoryListView(generics.ListAPIView):

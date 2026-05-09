@@ -16,6 +16,19 @@ class Vendor(models.Model):
         ('promedio', 'Costo Promedio'),
     ]
 
+    PLAN_CHOICES = [
+        ('mensual',    'Mensual - Bs. 300'),
+        ('trimestral', 'Trimestral - Bs. 810'),
+        ('semestral',  'Semestral - Bs. 1.499'),
+    ]
+
+    ESTADO_SUSCRIPCION_CHOICES = [
+        ('prueba',     'Prueba gratuita'),
+        ('activo',     'Activo'),
+        ('vencido',    'Vencido'),
+        ('suspendido', 'Suspendido'),
+    ]
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='vendor_profile')
     nombre_tienda = models.CharField(max_length=200)
     slug = models.SlugField(unique=True, blank=True)
@@ -38,7 +51,24 @@ class Vendor(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+    plan = models.CharField(
+        max_length=20, choices=PLAN_CHOICES,
+        default='mensual', blank=True
+    )
+    max_usuarios = models.PositiveIntegerField(
+        default=3,
+        help_text='Número máximo de miembros de equipo permitidos'
+    )
+    estado_suscripcion = models.CharField(
+        max_length=20, choices=ESTADO_SUSCRIPCION_CHOICES,
+        default='prueba'
+    )
+    fecha_vencimiento = models.DateField(null=True, blank=True)
+    notas_admin = models.TextField(
+        blank=True, default='',
+        help_text='Notas internas del superadmin (no visibles para el vendor)'
+    )
+
     class Meta:
         verbose_name = 'Vendedor'
         verbose_name_plural = 'Vendedores'
@@ -83,15 +113,24 @@ class CustomRole(models.Model):
     # Granular module permissions
     perm_products      = models.BooleanField(default=False, verbose_name='Productos')
     perm_categories    = models.BooleanField(default=False, verbose_name='Categorías')
+    perm_compras       = models.BooleanField(default=False, verbose_name='Compras')
     perm_inventory     = models.BooleanField(default=False, verbose_name='Inventario')
     perm_live_sessions = models.BooleanField(default=False, verbose_name='Lives')
     perm_my_store      = models.BooleanField(default=False, verbose_name='Mi Tienda')
-    perm_orders        = models.BooleanField(default=True,  verbose_name='Pedidos')
-    perm_payments      = models.BooleanField(default=False, verbose_name='Pagos')
+    perm_orders        = models.BooleanField(
+        default=True,
+        help_text='Acceso a pedidos / reservas',
+        verbose_name='Pedidos',
+    )
+    perm_payments      = models.BooleanField(
+        default=False,
+        help_text='Acceso a pagos y caja',
+        verbose_name='Pagos',
+    )
     perm_team          = models.BooleanField(default=False, verbose_name='Equipo')
     perm_dashboard     = models.BooleanField(default=False, verbose_name='Dashboard')
     perm_pos           = models.BooleanField(default=False, verbose_name='Punto de Venta (POS)')
-    perm_warehouse     = models.BooleanField(default=False, verbose_name='Almacén/Kardex')
+    perm_warehouse     = models.BooleanField(default=False, verbose_name='Almacén/Transferencias')
     perm_expenses      = models.BooleanField(default=False, verbose_name='Gastos')
     created_at         = models.DateTimeField(auto_now_add=True)
 
@@ -132,8 +171,11 @@ class TeamMember(models.Model):
 
     def clean(self):
         from django.core.exceptions import ValidationError
-        if TeamMember.objects.filter(vendor=self.vendor).exclude(pk=self.pk).count() >= 3:
-            raise ValidationError("Un vendedor puede tener máximo 3 miembros de equipo.")
+        limite = getattr(self.vendor, 'max_usuarios', 3)
+        if TeamMember.objects.filter(vendor=self.vendor).exclude(pk=self.pk).count() >= limite:
+            raise ValidationError(
+                f'Este vendor no puede tener más de {limite} miembros de equipo.'
+            )
 
 
 class Sucursal(models.Model):
@@ -385,3 +427,158 @@ class Promocion(models.Model):
 
     def __str__(self):
         return f"{self.titulo} — {self.vendor.nombre_tienda}"
+
+
+class TransferenciaAlmacen(models.Model):
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('completada', 'Completada'),
+        ('cancelada', 'Cancelada'),
+    ]
+
+    vendor = models.ForeignKey(
+        Vendor, on_delete=models.CASCADE,
+        related_name='transferencias')
+    almacen_origen = models.ForeignKey(
+        'Almacen', on_delete=models.PROTECT,
+        related_name='transferencias_salida')
+    almacen_destino = models.ForeignKey(
+        'Almacen', on_delete=models.PROTECT,
+        related_name='transferencias_entrada')
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default='pendiente')
+    notas = models.TextField(blank=True, default='')
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='transferencias_creadas')
+    completado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='transferencias_completadas')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Transferencia de Almacén'
+        verbose_name_plural = 'Transferencias de Almacén'
+
+    def __str__(self):
+        return (f'Transferencia {self.almacen_origen} → '
+                f'{self.almacen_destino} [{self.estado}]')
+
+
+class TransferenciaAlmacenItem(models.Model):
+    transferencia = models.ForeignKey(
+        TransferenciaAlmacen,
+        on_delete=models.CASCADE,
+        related_name='items')
+    producto = models.ForeignKey(
+        'products.Product',
+        on_delete=models.PROTECT,
+        related_name='transferencia_items')
+    variante = models.ForeignKey(
+        'products.ProductVariant',
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='transferencia_items')
+    cantidad = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        verbose_name = 'Ítem de Transferencia'
+        verbose_name_plural = 'Ítems de Transferencia'
+
+    def __str__(self):
+        return f'{self.producto.name} x{self.cantidad}'
+
+
+class ConteoFisico(models.Model):
+    ESTADO_CHOICES = [
+        ('abierto',   'Abierto — en progreso'),
+        ('cerrado',   'Cerrado — pendiente aprobación'),
+        ('aprobado',  'Aprobado — ajustes aplicados'),
+        ('cancelado', 'Cancelado'),
+    ]
+
+    vendor = models.ForeignKey(
+        Vendor, on_delete=models.CASCADE,
+        related_name='conteos_fisicos')
+    almacen = models.ForeignKey(
+        'Almacen', on_delete=models.PROTECT,
+        related_name='conteos_fisicos')
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default='abierto')
+    fecha = models.DateField()
+    notas = models.TextField(blank=True, default='')
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True,
+        related_name='conteos_creados')
+    aprobado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='conteos_aprobados')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Conteo Físico'
+        verbose_name_plural = 'Conteos Físicos'
+
+    def __str__(self):
+        return (f'Conteo {self.almacen.nombre} '
+                f'{self.fecha} [{self.estado}]')
+
+
+class ConteoFisicoItem(models.Model):
+    conteo = models.ForeignKey(
+        ConteoFisico, on_delete=models.CASCADE,
+        related_name='items')
+    producto = models.ForeignKey(
+        'products.Product',
+        on_delete=models.PROTECT,
+        related_name='conteo_items')
+    variante = models.ForeignKey(
+        'products.ProductVariant',
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='conteo_items')
+    stock_sistema = models.IntegerField(
+        default=0,
+        help_text='Stock en sistema al momento del conteo')
+    stock_fisico = models.IntegerField(
+        default=0,
+        help_text='Stock contado físicamente')
+    diferencia = models.IntegerField(
+        default=0,
+        help_text='stock_fisico - stock_sistema (calculado)')
+    contado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True,
+        related_name='items_contados')
+    notas = models.CharField(
+        max_length=300, blank=True, default='')
+
+    class Meta:
+        verbose_name = 'Ítem de Conteo'
+        verbose_name_plural = 'Ítems de Conteo'
+        unique_together = [('conteo', 'producto', 'variante')]
+
+    def save(self, *args, **kwargs):
+        self.diferencia = self.stock_fisico - self.stock_sistema
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return (f'{self.producto.name} — '
+                f'sistema:{self.stock_sistema} '
+                f'físico:{self.stock_fisico} '
+                f'dif:{self.diferencia}')

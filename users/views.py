@@ -5,79 +5,149 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from django.contrib.auth import get_user_model
 
 from .serializers import RegisterSerializer, LoginSerializer, UserProfileSerializer
 
 User = get_user_model()
 
+CUSTOM_CLAIMS = [
+    'vendor_id', 'store_name', 'role', 'is_vendor_owner',
+    'role_name', 'perms',
+]
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """
+    Extiende TokenRefreshView para preservar los claims custom
+    (vendor_id, perms, etc.) en el nuevo access token.
+    Sin esto, el access token renovado llega vacio de permisos.
+    """
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError as e:
+            raise InvalidToken(e.args[0])
+
+        try:
+            refresh = RefreshToken(request.data.get('refresh', ''))
+        except TokenError:
+            return Response(serializer.validated_data)
+
+        new_access_token = serializer.validated_data.get('access')
+        if not new_access_token:
+            return Response(serializer.validated_data)
+
+        try:
+            from rest_framework_simplejwt.tokens import AccessToken
+            access_obj = AccessToken(new_access_token)
+            for claim in CUSTOM_CLAIMS:
+                if claim in refresh.payload:
+                    access_obj[claim] = refresh.payload[claim]
+            serializer.validated_data['access'] = str(access_obj)
+        except Exception:
+            pass
+
+        return Response(serializer.validated_data)
+
 
 def _get_tokens_for_user(user):
     """Generate JWT tokens with extra claims: vendor_id, role, is_vendor_owner, perms."""
-    refresh = RefreshToken.for_user(user)
+    token = RefreshToken.for_user(user)
 
     # Vendor owner — has all permissions
     if hasattr(user, 'vendor_profile'):
         vp = user.vendor_profile
-        refresh['vendor_id']      = vp.id
-        refresh['store_name']     = vp.nombre_tienda
-        refresh['role']           = 'vendor_owner'
-        refresh['is_vendor_owner'] = True
-        refresh['role_name']      = 'Propietario'
-        refresh['perms'] = {
-            'products': True, 'categories': True, 'inventory': True,
-            'live_sessions': True, 'my_store': True,
-            'orders': True, 'payments': True, 'team': True, 'dashboard': True,
-            'pos': True, 'warehouse': True, 'expenses': True,
+        claims = {
+            'vendor_id': vp.id,
+            'store_name': vp.nombre_tienda,
+            'role': 'vendor_owner',
+            'is_vendor_owner': True,
+            'role_name': 'Propietario',
+            'perms': {
+                'products': True, 'categories': True, 'inventory': True,
+                'live_sessions': True, 'my_store': True,
+                'orders': True, 'payments': True, 'team': True, 'dashboard': True,
+                'pos': True, 'warehouse': True, 'expenses': True,
+                'compras': True,
+                'pedidos': True,
+                'pagos': True,
+            },
         }
     else:
         # Team member — permissions come from their custom role
         try:
             tm = user.team_member_profile
-            refresh['vendor_id']      = tm.vendor_id
-            refresh['store_name']     = tm.vendor.nombre_tienda
-            refresh['is_vendor_owner'] = False
+            base = {
+                'vendor_id': tm.vendor_id,
+                'store_name': tm.vendor.nombre_tienda,
+                'is_vendor_owner': False,
+            }
             cr = tm.custom_role
             if cr:
-                refresh['role']      = str(cr.id)
-                refresh['role_name'] = cr.name
-                refresh['perms'] = {
-                    'products':      cr.perm_products,
-                    'categories':    cr.perm_categories,
-                    'inventory':     cr.perm_inventory,
-                    'live_sessions': cr.perm_live_sessions,
-                    'my_store':      cr.perm_my_store,
-                    'orders':        cr.perm_orders,
-                    'payments':      cr.perm_payments,
-                    'team':          cr.perm_team,
-                    'dashboard':     cr.perm_dashboard,
-                    'pos':           cr.perm_pos,
-                    'warehouse':     cr.perm_warehouse,
-                    'expenses':      cr.perm_expenses,
+                claims = {
+                    **base,
+                    'role': str(cr.id),
+                    'role_name': cr.name,
+                    'perms': {
+                        'products':      cr.perm_products,
+                        'categories':    cr.perm_categories,
+                        'inventory':     cr.perm_inventory,
+                        'live_sessions': cr.perm_live_sessions,
+                        'my_store':      cr.perm_my_store,
+                        'orders':        cr.perm_orders,
+                        'payments':      cr.perm_payments,
+                        'pedidos':       getattr(cr, 'perm_orders', False),
+                        'pagos':         getattr(cr, 'perm_payments', False),
+                        'team':          cr.perm_team,
+                        'dashboard':     cr.perm_dashboard,
+                        'pos':           cr.perm_pos,
+                        'warehouse':     cr.perm_warehouse,
+                        'expenses':      cr.perm_expenses,
+                        'compras':       getattr(cr, 'perm_compras', False),
+                    },
                 }
             else:
                 # No role assigned — minimal access
-                refresh['role']      = None
-                refresh['role_name'] = None
-                refresh['perms'] = {
-                    'products': False, 'categories': False, 'inventory': False,
-                    'live_sessions': False, 'my_store': False,
-                    'orders': True, 'payments': False, 'team': False, 'dashboard': False,
-                    'pos': False, 'warehouse': False, 'expenses': False,
+                claims = {
+                    **base,
+                    'role': None,
+                    'role_name': None,
+                    'perms': {
+                        'products': False, 'categories': False, 'inventory': False,
+                        'live_sessions': False, 'my_store': False,
+                        'orders': True, 'payments': False, 'team': False, 'dashboard': False,
+                        'pos': False, 'warehouse': False, 'expenses': False,
+                        'compras': False,
+                        'pedidos': True,
+                        'pagos': False,
+                    },
                 }
         except Exception:
-            refresh['vendor_id']      = None
-            refresh['role']           = None
-            refresh['role_name']      = None
-            refresh['is_vendor_owner'] = False
-            refresh['perms'] = {
-                'products': False, 'categories': False, 'inventory': False,
-                'live_sessions': False, 'my_store': False,
-                'orders': False, 'payments': False, 'team': False, 'dashboard': False,
-                'pos': False, 'warehouse': False, 'expenses': False,
+            claims = {
+                'vendor_id': None,
+                'store_name': None,
+                'role': None,
+                'role_name': None,
+                'is_vendor_owner': False,
+                'perms': {
+                    'products': False, 'categories': False, 'inventory': False,
+                    'live_sessions': False, 'my_store': False,
+                    'orders': False, 'payments': False, 'team': False, 'dashboard': False,
+                    'pos': False, 'warehouse': False, 'expenses': False,
+                    'compras': False,
+                    'pedidos': False,
+                    'pagos': False,
+                },
             }
 
-    return refresh
+    for key, value in claims.items():
+        token[key] = value
+        token.access_token[key] = value
+
+    return token
 
 
 class RegisterView(APIView):

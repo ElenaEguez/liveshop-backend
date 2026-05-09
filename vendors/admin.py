@@ -1,5 +1,20 @@
 from django.contrib import admin
-from .models import Vendor, TeamMember, CustomRole, Sucursal, Almacen, KardexMovimiento, Caja, TurnoCaja, TicketConfig, Promocion
+from .models import (
+    Vendor,
+    TeamMember,
+    CustomRole,
+    Sucursal,
+    Almacen,
+    KardexMovimiento,
+    Caja,
+    TurnoCaja,
+    TicketConfig,
+    Promocion,
+    ConteoFisico,
+    ConteoFisicoItem,
+    TransferenciaAlmacen,
+    TransferenciaAlmacenItem,
+)
 
 
 class CustomRoleInline(admin.TabularInline):
@@ -48,6 +63,24 @@ class AlmacenAdmin(admin.ModelAdmin):
     list_display = ['nombre', 'sucursal', 'activo']
     list_filter = ['activo', 'sucursal__vendor']
     search_fields = ['nombre', 'sucursal__nombre']
+
+
+class ConteoFisicoItemInline(admin.TabularInline):
+    model = ConteoFisicoItem
+    extra = 0
+    fields = ['producto', 'variante', 'stock_sistema',
+              'stock_fisico', 'diferencia', 'contado_por']
+    readonly_fields = ['diferencia']
+
+
+@admin.register(ConteoFisico)
+class ConteoFisicoAdmin(admin.ModelAdmin):
+    list_display = ['id', 'vendor', 'almacen', 'fecha',
+                    'estado', 'created_at']
+    list_filter = ['estado', 'vendor']
+    inlines = [ConteoFisicoItemInline]
+    readonly_fields = ['creado_por', 'aprobado_por',
+                       'created_at', 'updated_at']
 
 
 @admin.register(KardexMovimiento)
@@ -105,3 +138,20 @@ class VendorAdmin(admin.ModelAdmin):
             'fields': ('is_verified', 'created_at', 'updated_at')
         }),
     )
+
+
+class TransferenciaItemInline(admin.TabularInline):
+    model = TransferenciaAlmacenItem
+    extra = 0
+    fields = ['producto', 'variante', 'cantidad']
+
+
+@admin.register(TransferenciaAlmacen)
+class TransferenciaAlmacenAdmin(admin.ModelAdmin):
+    list_display = ['id', 'vendor', 'almacen_origen',
+                    'almacen_destino', 'estado',
+                    'created_at']
+    list_filter = ['estado', 'vendor']
+    inlines = [TransferenciaItemInline]
+    readonly_fields = ['creado_por', 'completado_por',
+                       'created_at', 'updated_at']

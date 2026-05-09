@@ -202,10 +202,11 @@ class ReservationViewSet(viewsets.ModelViewSet):
           assistant            → only PATCH (status updates)
           payments             → read-only on reservations
         """
-        role = get_role_for_user(self.request.user)
-        if role in ('vendor_owner', 'admin'):
+        user = self.request.user
+        if hasattr(user, 'vendor_profile'):
             return
-        if role == 'assistant' and self.request.method == 'PATCH':
+        role = get_role_for_user(user)
+        if role is not None and getattr(role, 'perm_orders', False):
             return
         raise PermissionDenied("Tu rol no permite esta acción en reservaciones.")
 

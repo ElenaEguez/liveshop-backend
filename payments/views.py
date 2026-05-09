@@ -145,8 +145,12 @@ class PaymentViewSet(viewsets.ModelViewSet):
         payment = self.get_object()
         self._assert_payment_permission(payment)
 
-        role = get_role_for_user(request.user)
-        if role not in ('vendor_owner', 'admin', 'payments'):
+        if hasattr(request.user, 'vendor_profile'):
+            allowed = True
+        else:
+            role = get_role_for_user(request.user)
+            allowed = role is not None and getattr(role, 'perm_payments', False)
+        if not allowed:
             return Response(
                 {'error': 'Tu rol no permite confirmar pagos.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -188,8 +192,12 @@ class PaymentViewSet(viewsets.ModelViewSet):
         payment = self.get_object()
         self._assert_payment_permission(payment)
 
-        role = get_role_for_user(request.user)
-        if role not in ('vendor_owner', 'admin', 'payments'):
+        if hasattr(request.user, 'vendor_profile'):
+            allowed = True
+        else:
+            role = get_role_for_user(request.user)
+            allowed = role is not None and getattr(role, 'perm_payments', False)
+        if not allowed:
             return Response(
                 {'error': 'Tu rol no permite rechazar pagos.'},
                 status=status.HTTP_403_FORBIDDEN

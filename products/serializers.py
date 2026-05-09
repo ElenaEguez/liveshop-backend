@@ -52,26 +52,24 @@ class CategorySerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     vendor = serializers.PrimaryKeyRelatedField(read_only=True)
-    purchase_cost = serializers.SerializerMethodField()
-    inventory_distribution = serializers.SerializerMethodField()
+    purchase_cost = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        allow_null=True,
+        coerce_to_string=False,
+    )
 
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'description', 'price', 'stock', 'category',
             'is_active', 'variants', 'images', 'vendor', 'purchase_cost',
-            'inventory_distribution',
             'shipping_cost', 'profit_margin_percent', 'barcode', 'internal_code', 'sell_by',
             'is_active_live', 'is_active_pos', 'is_active_web',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['vendor', 'images', 'variants', 'purchase_cost', 'created_at', 'updated_at']
-
-    def get_purchase_cost(self, obj):
-        inv = obj.inventories.filter(is_active=True).first()
-        if inv and inv.purchase_cost is not None:
-            return float(inv.purchase_cost)
-        return None
 
     def get_images(self, obj):
         request = self.context.get('request')
@@ -79,17 +77,6 @@ class ProductSerializer(serializers.ModelSerializer):
             request.build_absolute_uri(img.image.url) if request else img.image.url
             for img in obj.images.all()
         ]
-
-    def get_inventory_distribution(self, obj):
-        rows = []
-        for inv in obj.inventories.filter(is_active=True).select_related('almacen').order_by('almacen__nombre', 'id'):
-            rows.append({
-                'inventory_id': inv.id,
-                'almacen_id': inv.almacen_id,
-                'almacen_nombre': inv.almacen.nombre if inv.almacen else 'Sin almacén',
-                'quantity': inv.quantity,
-            })
-        return rows
 
     def validate_barcode(self, value):
         """Convert empty string to None to avoid unique constraint violations."""

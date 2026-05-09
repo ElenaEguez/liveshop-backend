@@ -1,7 +1,22 @@
 from decimal import Decimal
 
 from rest_framework import serializers
-from .models import Vendor, TeamMember, CustomRole, Sucursal, Almacen, Caja, TurnoCaja, MovimientoCaja, TicketConfig, Comprobante
+from .models import (
+    Vendor,
+    TeamMember,
+    CustomRole,
+    Sucursal,
+    Almacen,
+    Caja,
+    TurnoCaja,
+    MovimientoCaja,
+    TicketConfig,
+    Comprobante,
+    ConteoFisico,
+    ConteoFisicoItem,
+    TransferenciaAlmacen,
+    TransferenciaAlmacenItem,
+)
 from users.serializers import UserProfileSerializer
 
 
@@ -40,7 +55,7 @@ class CustomRoleSerializer(serializers.ModelSerializer):
         model = CustomRole
         fields = (
             'id', 'name',
-            'perm_products', 'perm_categories', 'perm_inventory',
+            'perm_products', 'perm_categories', 'perm_compras', 'perm_inventory',
             'perm_live_sessions', 'perm_my_store',
             'perm_orders', 'perm_payments', 'perm_team', 'perm_dashboard',
             'perm_pos', 'perm_warehouse', 'perm_expenses',
@@ -65,10 +80,57 @@ class TeamMemberSerializer(serializers.ModelSerializer):
 
 
 class AlmacenSerializer(serializers.ModelSerializer):
+    stock_por_variante = serializers.SerializerMethodField()
+
     class Meta:
         model = Almacen
-        fields = ('id', 'sucursal', 'nombre', 'activo')
+        fields = ('id', 'sucursal', 'nombre', 'activo', 'stock_por_variante')
         read_only_fields = ('id',)
+
+    def get_stock_por_variante(self, obj):
+        from products.models import Inventory, ProductVariant
+
+        inventarios = Inventory.objects.filter(
+            almacen=obj, is_active=True
+        ).select_related('product').order_by('product__name')
+
+        resultado = []
+        for inv in inventarios:
+            entry = {
+                'inventory_id': inv.id,
+                'producto_id': inv.product.id,
+                'producto_nombre': inv.product.name,
+                'quantity': inv.quantity,
+                'reserved': inv.reserved_quantity,
+                'disponible': inv.quantity - inv.reserved_quantity,
+                'variante': None,
+            }
+            resultado.append(entry)
+
+        for inv in Inventory.objects.filter(
+            almacen=obj, is_active=True
+        ).select_related('product'):
+            variantes = ProductVariant.objects.filter(
+                product=inv.product, is_active=True
+            )
+            for v in variantes:
+                resultado.append({
+                    'inventory_id': inv.id,
+                    'producto_id': inv.product.id,
+                    'producto_nombre': inv.product.name,
+                    'quantity': v.stock_extra,
+                    'reserved': 0,
+                    'disponible': v.stock_extra,
+                    'variante': {
+                        'id': v.id,
+                        'talla': v.talla,
+                        'color': v.color,
+                        'color_hex': v.color_hex,
+                        'sku': v.sku,
+                    },
+                })
+
+        return resultado
 
 
 class SucursalSerializer(serializers.ModelSerializer):
@@ -239,3 +301,118 @@ class ComprobanteSerializer(serializers.ModelSerializer):
         model = Comprobante
         fields = ('id', 'tipo', 'tipo_display', 'serie', 'correlativo')
         read_only_fields = ('id', 'tipo_display')
+
+
+class ConteoFisicoItemSerializer(serializers.ModelSerializer):
+    producto_nombre = serializers.SerializerMethodField()
+    variante_detalle = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ConteoFisicoItem
+        fields = ['id', 'producto', 'producto_nombre',
+                  'variante', 'variante_detalle',
+                  'stock_sistema', 'stock_fisico',
+                  'diferencia', 'notas', 'contado_por']
+        read_only_fields = ['diferencia', 'contado_por']
+
+    def get_producto_nombre(self, obj):
+        return obj.producto.name if obj.producto else ''
+
+    def get_variante_detalle(self, obj):
+        if not obj.variante:
+            return None
+        v = obj.variante
+        return {
+            'id': v.id, 'talla': v.talla,
+            'color': v.color, 'color_hex': v.color_hex,
+        }
+
+
+class ConteoFisicoSerializer(serializers.ModelSerializer):
+    items = ConteoFisicoItemSerializer(
+        many=True, read_only=True)
+    almacen_nombre = serializers.SerializerMethodField()
+    creado_por_nombre = serializers.SerializerMethodField()
+    total_diferencias = serializers.SerializerMethodField()
+    items_con_diferencia = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ConteoFisico
+        fields = ['id', 'almacen', 'almacen_nombre', 'estado',
+                  'fecha', 'notas', 'items',
+                  'creado_por', 'creado_por_nombre',
+                  'aprobado_por', 'created_at', 'updated_at',
+                  'total_diferencias', 'items_con_diferencia']
+        read_only_fields = ['estado', 'creado_por',
+                            'aprobado_por', 'created_at',
+                            'updated_at']
+
+    def get_almacen_nombre(self, obj):
+        return obj.almacen.nombre if obj.almacen else ''
+
+    def get_creado_por_nombre(self, obj):
+        return obj.creado_por.get_full_name() if obj.creado_por else ''
+
+    def get_total_diferencias(self, obj):
+        return sum(
+            abs(i.diferencia) for i in obj.items.all()
+        )
+
+    def get_items_con_diferencia(self, obj):
+        return obj.items.exclude(diferencia=0).count()
+
+
+class TransferenciaItemSerializer(serializers.ModelSerializer):
+    producto_nombre = serializers.SerializerMethodField()
+    variante_detalle = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TransferenciaAlmacenItem
+        fields = ['id', 'producto', 'producto_nombre',
+                  'variante', 'variante_detalle', 'cantidad']
+
+    def get_producto_nombre(self, obj):
+        return obj.producto.name if obj.producto else ''
+
+    def get_variante_detalle(self, obj):
+        if not obj.variante:
+            return None
+        v = obj.variante
+        return {
+            'id': v.id, 'talla': v.talla,
+            'color': v.color, 'color_hex': v.color_hex,
+        }
+
+
+class TransferenciaAlmacenSerializer(serializers.ModelSerializer):
+    items = TransferenciaItemSerializer(
+        many=True, read_only=True)
+    almacen_origen_nombre = serializers.SerializerMethodField()
+    almacen_destino_nombre = serializers.SerializerMethodField()
+    creado_por_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TransferenciaAlmacen
+        fields = ['id', 'almacen_origen',
+                  'almacen_origen_nombre',
+                  'almacen_destino',
+                  'almacen_destino_nombre',
+                  'estado', 'notas', 'items',
+                  'creado_por', 'creado_por_nombre',
+                  'completado_por',
+                  'created_at', 'updated_at']
+        read_only_fields = ['estado', 'creado_por',
+                            'completado_por',
+                            'created_at', 'updated_at']
+
+    def get_almacen_origen_nombre(self, obj):
+        return obj.almacen_origen.nombre \
+            if obj.almacen_origen else ''
+
+    def get_almacen_destino_nombre(self, obj):
+        return obj.almacen_destino.nombre \
+            if obj.almacen_destino else ''
+
+    def get_creado_por_nombre(self, obj):
+        return obj.creado_por.get_full_name() \
+            if obj.creado_por else ''

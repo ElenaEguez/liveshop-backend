@@ -140,8 +140,11 @@ class LiveSessionViewSet(viewsets.ModelViewSet):
         return vendor
 
     def _check_write_permission(self):
-        role = get_role_for_user(self.request.user)
-        if role in ('vendor_owner', 'admin'):
+        user = self.request.user
+        if hasattr(user, 'vendor_profile'):
+            return
+        role = get_role_for_user(user)
+        if role is not None and getattr(role, 'perm_live_sessions', False):
             return
         raise PermissionDenied("Tu rol no permite modificar sesiones en vivo.")
 

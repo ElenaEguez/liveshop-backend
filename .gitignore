@@ -8,3 +8,7 @@ media/
 staticfiles/
 vendor_logos/
 *.log
+.venv/
+venv/
+*.pyc
+__pycache__/
