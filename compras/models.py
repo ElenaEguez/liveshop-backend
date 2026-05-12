@@ -87,13 +87,15 @@ class OrdenCompra(models.Model):
     def save(self, *args, **kwargs):
         # Auto-número por vendor
         if not self.pk and not self.numero:
-            ultimo = OrdenCompra.objects.filter(
+            numeros = OrdenCompra.objects.filter(
                 vendor=self.vendor
-            ).order_by('-created_at').first()
-            try:
-                n = int(ultimo.numero) + 1 if ultimo else 1
-            except (ValueError, AttributeError):
-                n = 1
+            ).values_list('numero', flat=True)
+            max_numero = 0
+            for numero in numeros:
+                numero_txt = str(numero or '').strip()
+                if numero_txt.isdigit():
+                    max_numero = max(max_numero, int(numero_txt))
+            n = max_numero + 1
             self.numero = str(n).zfill(6)
         super().save(*args, **kwargs)
 
