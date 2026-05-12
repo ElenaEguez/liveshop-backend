@@ -62,7 +62,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'is_active_live', 'is_active_pos', 'is_active_web',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['vendor', 'images', 'variants', 'price', 'created_at', 'updated_at']
+        read_only_fields = ['vendor', 'images', 'variants', 'price', 'stock', 'created_at', 'updated_at']
 
     def get_images(self, obj):
         request = self.context.get('request')
