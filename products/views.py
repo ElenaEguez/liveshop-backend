@@ -1,6 +1,5 @@
 import json
 from urllib.parse import urlparse
-from decimal import Decimal, InvalidOperation
 from rest_framework import generics, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -167,21 +166,16 @@ class ProductViewSet(viewsets.ModelViewSet):
             if dist_sum != stock_total:
                 raise ValidationError({'inventory_distribution': f'La suma distribuida ({dist_sum}) debe ser igual al stock total ({stock_total}).'})
 
-    def _sync_inventory_distribution(self, product, vendor, distribution, purchase_cost):
+    def _sync_inventory_distribution(self, product, vendor, distribution):
         if not distribution:
             inv, _ = Inventory.objects.get_or_create(
                 product=product,
                 almacen=None,
-                defaults={'quantity': product.stock, 'purchase_cost': purchase_cost}
+                defaults={'quantity': product.stock}
             )
             inv.quantity = product.stock
-            if purchase_cost is not None:
-                inv.purchase_cost = purchase_cost
             inv.is_active = True
-            update_fields = ['quantity', 'is_active']
-            if purchase_cost is not None:
-                update_fields.append('purchase_cost')
-            inv.save(update_fields=update_fields)
+            inv.save(update_fields=['quantity', 'is_active'])
             return
 
         desired = {}
@@ -204,8 +198,6 @@ class ProductViewSet(viewsets.ModelViewSet):
             if inv.reserved_quantity and qty < inv.reserved_quantity:
                 raise ValidationError({'inventory_distribution': f'No puedes asignar menos de {inv.reserved_quantity} unidades en almacén {almacen_id or "sin almacén"}.'})
             inv.quantity = qty
-            if purchase_cost is not None:
-                inv.purchase_cost = purchase_cost
             inv.is_active = True
             inv.save()
 
@@ -297,42 +289,22 @@ class ProductViewSet(viewsets.ModelViewSet):
                 is_active=True,
             )
 
-    def _parse_purchase_cost(self, request):
-        raw = request.data.get('purchase_cost', None)
-        if raw is None or raw == '' or raw == 'null':
-            return None
-        try:
-            return Decimal(str(raw))
-        except (InvalidOperation, ValueError):
-            return None
-
-    def _parse_decimal_field(self, request, field_name):
-        raw = request.data.get(field_name, None)
-        if raw is None or raw == '' or raw == 'null':
-            return None
-        try:
-            return Decimal(str(raw))
-        except (InvalidOperation, ValueError):
-            return None
-
     def perform_create(self, serializer):
         vendor = get_vendor_for_user(self.request.user)
         if not vendor:
             raise ValidationError({'detail': 'Sin perfil de vendedor asociado.'})
         variants = self._parse_variants(self.request)
         distribution = self._parse_inventory_distribution(self.request)
-        shipping_cost = self._parse_decimal_field(self.request, 'shipping_cost')
         self._validate_stock_consistency(self.request, variants=variants, distribution=distribution)
         self._validate_images_limit(None, self.request, is_update=False)
         product = serializer.save(
             vendor=vendor,
+            price=0,
             variants=variants,
-            shipping_cost=shipping_cost,
         )
         self._save_images(product, self.request)
         self._sync_variant_objects(product, variants)
-        purchase_cost = self._parse_purchase_cost(self.request)
-        self._sync_inventory_distribution(product, vendor, distribution, purchase_cost)
+        self._sync_inventory_distribution(product, vendor, distribution)
 
     def perform_update(self, serializer):
         current = self.get_object()
@@ -340,17 +312,15 @@ class ProductViewSet(viewsets.ModelViewSet):
         variants = self._parse_variants(self.request)
         has_distribution_payload = 'inventory_distribution' in self.request.data
         distribution = self._parse_inventory_distribution(self.request) if has_distribution_payload else []
-        shipping_cost = self._parse_decimal_field(self.request, 'shipping_cost')
         if has_distribution_payload:
             self._validate_stock_consistency(self.request, variants=variants, distribution=distribution)
-        product = serializer.save(variants=variants, shipping_cost=shipping_cost)
+        product = serializer.save(variants=variants)
         self._sync_existing_images_on_update(product, self.request)
         self._save_images(product, self.request)
         self._sync_variant_objects(product, variants)
-        purchase_cost = self._parse_purchase_cost(self.request) if 'purchase_cost' in self.request.data else None
         vendor = get_vendor_for_user(self.request.user)
         if has_distribution_payload:
-            self._sync_inventory_distribution(product, vendor, distribution, purchase_cost)
+            self._sync_inventory_distribution(product, vendor, distribution)
 
     @action(detail=True, methods=['get'], url_path='variantes')
     def variantes(self, request, pk=None):

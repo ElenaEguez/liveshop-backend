@@ -44,17 +44,21 @@ class OrdenCompraItemSerializer(serializers.ModelSerializer):
 class OrdenCompraSerializer(serializers.ModelSerializer):
     items = OrdenCompraItemSerializer(many=True, read_only=True)
     proveedor_data = ProveedorSerializer(source='proveedor', read_only=True)
+    cantidad_total = serializers.SerializerMethodField()
 
     class Meta:
         model = OrdenCompra
         fields = [
             'id', 'numero', 'proveedor', 'proveedor_data',
-            'sucursal', 'almacen', 'fecha', 'fecha_entrega',
+            'factura_compra', 'sucursal', 'almacen', 'fecha', 'fecha_entrega',
             'estado', 'notas', 'subtotal', 'descuento',
-            'total', 'items', 'created_by', 'created_at',
+            'total', 'cantidad_total', 'items', 'created_by', 'created_at',
             'updated_at'
         ]
         read_only_fields = [
             'numero', 'subtotal', 'total',
             'created_by', 'created_at', 'updated_at'
         ]
+
+    def get_cantidad_total(self, obj):
+        return sum(item.cantidad for item in obj.items.all())

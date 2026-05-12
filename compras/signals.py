@@ -31,10 +31,11 @@ def procesar_recepcion_compra(sender, instance, **kwargs):
 
     with transaction.atomic():
         for item in instance.items.select_related('producto', 'variante').all():
-            # Usar almacen del ítem; si no tiene, usar el de la cabecera
-            almacen_destino = item.almacen or instance.almacen
+            almacen_destino = item.almacen
             if not almacen_destino:
-                continue  # sin almacén no se puede registrar
+                raise ValueError(
+                    'Cada ítem de compra debe tener almacén destino antes de recibir la orden.'
+                )
 
             # ── 1. Actualizar Inventory ──────────────────────────
             inv, _ = Inventory.objects.get_or_create(
@@ -46,7 +47,8 @@ def procesar_recepcion_compra(sender, instance, **kwargs):
             )
             stock_anterior = inv.quantity
             inv.quantity = inv.quantity + item.cantidad
-            inv.save(update_fields=['quantity'])
+            inv.purchase_cost = item.costo_unitario_total
+            inv.save(update_fields=['quantity', 'purchase_cost'])
 
             # ── 2. KardexMovimiento ──────────────────────────────
             KardexMovimiento.objects.create(
@@ -58,6 +60,7 @@ def procesar_recepcion_compra(sender, instance, **kwargs):
                 cantidad=item.cantidad,
                 stock_anterior=stock_anterior,
                 stock_actual=inv.quantity,
+                costo_promedio=item.costo_unitario_total,
                 documento_ref=f'OC-{instance.numero}',
                 usuario=instance.created_by,
                 notas=f'Compra OC-{instance.numero}',
@@ -70,3 +73,9 @@ def procesar_recepcion_compra(sender, instance, **kwargs):
                 if hasattr(variante, 'stock_extra'):
                     variante.stock_extra = variante.stock_extra + item.cantidad
                     variante.save(update_fields=['stock_extra'])
+
+            # ── 4. Precio de venta oficial desde Compras ─────────
+            if item.precio_venta_sugerido and item.precio_venta_sugerido > 0:
+                producto = item.producto
+                producto.price = item.precio_venta_sugerido
+                producto.save(update_fields=['price'])

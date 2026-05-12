@@ -52,24 +52,17 @@ class CategorySerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     vendor = serializers.PrimaryKeyRelatedField(read_only=True)
-    purchase_cost = serializers.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0,
-        allow_null=True,
-        coerce_to_string=False,
-    )
 
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'description', 'price', 'stock', 'category',
-            'is_active', 'variants', 'images', 'vendor', 'purchase_cost',
-            'shipping_cost', 'profit_margin_percent', 'barcode', 'internal_code', 'sell_by',
+            'is_active', 'variants', 'images', 'vendor',
+            'barcode', 'internal_code', 'sell_by',
             'is_active_live', 'is_active_pos', 'is_active_web',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['vendor', 'images', 'variants', 'purchase_cost', 'created_at', 'updated_at']
+        read_only_fields = ['vendor', 'images', 'variants', 'price', 'created_at', 'updated_at']
 
     def get_images(self, obj):
         request = self.context.get('request')
@@ -113,7 +106,7 @@ class ProductPOSSerializer(serializers.ModelSerializer):
         model = Product
         fields = (
             'id', 'name', 'barcode', 'internal_code', 'price',
-            'purchase_cost', 'stock_disponible', 'sell_by', 'variantes', 'imagen_thumbnail',
+            'stock_disponible', 'sell_by', 'variantes', 'imagen_thumbnail',
         )
 
     def get_stock_disponible(self, obj):

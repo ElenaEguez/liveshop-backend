@@ -62,6 +62,10 @@ def _prepare_orden_item_row(raw):
     return item
 
 
+def _items_missing_almacen(items_data):
+    return any(not item.get('almacen') for item in items_data)
+
+
 class ProveedorViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = ProveedorSerializer
@@ -95,6 +99,12 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Sin vendor asignado'}, status=400)
 
         items_data = request.data.get('items', [])
+        estado = request.data.get('estado')
+        if estado in ('pendiente', 'recibida') and _items_missing_almacen(items_data):
+            return Response(
+                {'error': 'Cada producto de la compra debe tener almacén destino.'},
+                status=400
+            )
 
         with transaction.atomic():
             serializer = self.get_serializer(data=request.data)
@@ -121,6 +131,12 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
             )
 
         items_data = request.data.get('items', [])
+        estado = request.data.get('estado', instance.estado)
+        if estado in ('pendiente', 'recibida') and _items_missing_almacen(items_data):
+            return Response(
+                {'error': 'Cada producto de la compra debe tener almacén destino.'},
+                status=400
+            )
 
         with transaction.atomic():
             serializer = self.get_serializer(
@@ -144,6 +160,11 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         if orden.estado != 'pendiente':
             return Response(
                 {'error': 'Solo se pueden confirmar órdenes pendientes'},
+                status=400
+            )
+        if orden.items.filter(almacen__isnull=True).exists():
+            return Response(
+                {'error': 'Cada producto de la compra debe tener almacén destino.'},
                 status=400
             )
         orden.estado = 'recibida'

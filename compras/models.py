@@ -51,6 +51,7 @@ class OrdenCompra(models.Model):
         null=True, blank=True
     )
     numero = models.CharField(max_length=20, unique=True)
+    factura_compra = models.CharField(max_length=80, blank=True, default='')
     fecha = models.DateField()
     fecha_entrega = models.DateField(null=True, blank=True)
     estado = models.CharField(
