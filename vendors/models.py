@@ -226,7 +226,8 @@ class KardexMovimiento(models.Model):
         ('venta_live', 'Venta Live'),
         ('compra', 'Compra/Reposición'),
         ('ajuste_manual', 'Ajuste manual'),
-        ('devolucion', 'Devolución'),
+        ('devolucion', 'Devolución (venta)'),
+        ('devolucion_compra', 'Devolución a proveedor'),
         ('transferencia', 'Transferencia'),
     ]
 

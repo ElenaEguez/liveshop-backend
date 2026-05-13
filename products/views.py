@@ -6,14 +6,15 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db.models import IntegerField, OuterRef, Q, Subquery, Sum
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import IntegerField, OuterRef, Q, Subquery, Sum, Min, Max
 from django.db.models.functions import Coalesce
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from vendors.permissions import get_vendor_for_user
 from vendors.models import Almacen
 from .serializers import (
     CategorySerializer, CategoryWithSubcategoriesSerializer,
-    ProductSerializer, InventorySerializer, ProductVariantSerializer,
+    ProductSerializer, InventorySerializer, InventoryAggregatedSerializer, ProductVariantSerializer,
 )
 
 
@@ -393,9 +394,16 @@ class ProductViewSet(viewsets.ModelViewSet):
         return Response({'tallas': tallas, 'colors': colors})
 
 
+class InventoryListPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class InventoryViewSet(viewsets.ModelViewSet):
     serializer_class = InventorySerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = InventoryListPagination
 
     def get_queryset(self):
         from payments.models import VentaPOSItem
@@ -432,7 +440,6 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 Q(product__variants__icontains=f'"color": "{color}"')
             ).distinct()
 
-        # Anotación de unidades vendidas por producto (solo ventas completadas)
         vendido_sq = (
             VentaPOSItem.objects
             .filter(product_id=OuterRef('product_id'), venta__status='completada')
@@ -443,6 +450,58 @@ class InventoryViewSet(viewsets.ModelViewSet):
         qs = qs.annotate(vendido=Coalesce(Subquery(vendido_sq, output_field=IntegerField()), 0))
 
         return qs
+
+    def list(self, request, *args, **kwargs):
+        if request.query_params.get('almacen_id'):
+            return super().list(request, *args, **kwargs)
+
+        qs = self.filter_queryset(self.get_queryset())
+        agg_qs = (
+            qs.values('product_id')
+            .annotate(
+                quantity=Sum('quantity'),
+                reserved_quantity=Sum('reserved_quantity'),
+                id=Min('id'),
+                purchase_cost=Min('purchase_cost'),
+                almacen=Min('almacen_id'),
+                vendido=Max('vendido'),
+                product_name=Min('product__name'),
+                product_price=Min('product__price'),
+                low_stock_alert=Min('low_stock_alert'),
+            )
+            .order_by('product_name')
+        )
+
+        page = self.paginate_queryset(agg_qs)
+        iterable = page if page is not None else agg_qs
+
+        rows = []
+        for row in iterable:
+            q = int(row['quantity'] or 0)
+            r = int(row['reserved_quantity'] or 0)
+            low_alert = int(row['low_stock_alert'] or 5)
+            rows.append({
+                'id': row['id'],
+                'product': row['product_id'],
+                'product_name': row['product_name'],
+                'product_price': row['product_price'],
+                'quantity': q,
+                'reserved_quantity': r,
+                'available_quantity': q - r,
+                'purchase_cost': row['purchase_cost'],
+                'almacen': row['almacen'],
+                'is_active': True,
+                'low_stock_alert': low_alert,
+                'created_at': None,
+                'updated_at': None,
+                'variante': None,
+                'vendido': row['vendido'],
+            })
+
+        ser = InventoryAggregatedSerializer(rows, many=True)
+        if page is not None:
+            return self.get_paginated_response(ser.data)
+        return Response(ser.data)
 
 
 class InventoryAdjustView(APIView):

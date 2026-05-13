@@ -1,5 +1,16 @@
+from django.db import transaction
+
 from rest_framework import serializers
-from compras.models import Proveedor, OrdenCompra, OrdenCompraItem
+
+from compras.models import (
+    Proveedor,
+    OrdenCompra,
+    OrdenCompraItem,
+    DevolucionCompra,
+    DevolucionCompraItem,
+)
+from products.models import Inventory, Product, ProductVariant
+from vendors.models import Almacen, KardexMovimiento
 
 
 class ProveedorSerializer(serializers.ModelSerializer):
@@ -62,3 +73,133 @@ class OrdenCompraSerializer(serializers.ModelSerializer):
 
     def get_cantidad_total(self, obj):
         return sum(item.cantidad for item in obj.items.all())
+
+
+class DevolucionCompraItemReadSerializer(serializers.ModelSerializer):
+    producto_nombre = serializers.CharField(source='producto.name', read_only=True)
+
+    class Meta:
+        model = DevolucionCompraItem
+        fields = (
+            'id', 'producto', 'producto_nombre', 'variante', 'almacen', 'cantidad',
+        )
+
+
+class DevolucionCompraSerializer(serializers.ModelSerializer):
+    items = DevolucionCompraItemReadSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DevolucionCompra
+        fields = (
+            'id', 'vendor', 'created_by', 'documento_ref', 'notas',
+            'created_at', 'items',
+        )
+        read_only_fields = ('id', 'vendor', 'created_by', 'created_at', 'items')
+
+
+class DevolucionCompraItemWriteSerializer(serializers.Serializer):
+    producto = serializers.IntegerField()
+    variante = serializers.IntegerField(required=False, allow_null=True)
+    almacen = serializers.IntegerField()
+    cantidad = serializers.IntegerField(min_value=1)
+
+
+class DevolucionCompraCreateSerializer(serializers.Serializer):
+    documento_ref = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    notas = serializers.CharField(required=False, allow_blank=True)
+    items = DevolucionCompraItemWriteSerializer(many=True)
+
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError('Debe incluir al menos un ítem.')
+        return value
+
+    def create(self, validated_data):
+        vendor = self.context['vendor']
+        user = self.context['request'].user
+        items_data = validated_data['items']
+
+        with transaction.atomic():
+            dev = DevolucionCompra.objects.create(
+                vendor=vendor,
+                created_by=user,
+                documento_ref=validated_data.get('documento_ref') or '',
+                notas=validated_data.get('notas') or '',
+            )
+            for row in items_data:
+                producto = Product.objects.get(pk=row['producto'], vendor=vendor)
+                almacen = Almacen.objects.select_related('sucursal').get(
+                    pk=row['almacen'],
+                    sucursal__vendor=vendor,
+                )
+                variante = None
+                if row.get('variante'):
+                    variante = ProductVariant.objects.get(
+                        pk=row['variante'],
+                        product=producto,
+                    )
+                cantidad = row['cantidad']
+
+                inv = Inventory.objects.select_for_update().filter(
+                    product=producto,
+                    almacen=almacen,
+                    is_active=True,
+                ).first()
+                if not inv:
+                    raise serializers.ValidationError(
+                        {'items': f'Sin inventario en almacén para "{producto.name}".'}
+                    )
+                if inv.quantity < cantidad:
+                    raise serializers.ValidationError(
+                        {
+                            'items': (
+                                f'"{producto.name}": stock insuficiente en almacén '
+                                f'({inv.quantity} uds.).'
+                            )
+                        }
+                    )
+
+                stock_anterior = inv.quantity
+                inv.quantity = inv.quantity - cantidad
+                inv.save(update_fields=['quantity'])
+
+                KardexMovimiento.objects.create(
+                    inventory=inv,
+                    almacen=almacen,
+                    variant=variante,
+                    tipo='salida',
+                    motivo='devolucion_compra',
+                    cantidad=-cantidad,
+                    stock_anterior=stock_anterior,
+                    stock_actual=inv.quantity,
+                    documento_ref=(
+                        f'DCP-{dev.pk}'
+                        + (f' ({validated_data.get("documento_ref")})' if validated_data.get('documento_ref') else '')
+                    ),
+                    usuario=user,
+                    notas=validated_data.get('notas') or 'Devolución a proveedor',
+                )
+
+                if variante is not None:
+                    ve = ProductVariant.objects.select_for_update().get(pk=variante.pk)
+                    if ve.stock_extra < cantidad:
+                        raise serializers.ValidationError(
+                            {
+                                'items': (
+                                    f'"{producto.name}" variante: stock variante insuficiente '
+                                    f'({ve.stock_extra} uds.).'
+                                )
+                            }
+                        )
+                    ve.stock_extra = ve.stock_extra - cantidad
+                    ve.save(update_fields=['stock_extra'])
+
+                DevolucionCompraItem.objects.create(
+                    devolucion=dev,
+                    producto=producto,
+                    variante=variante,
+                    almacen=almacen,
+                    cantidad=cantidad,
+                )
+
+        return dev

@@ -90,6 +90,27 @@ class InventorySerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class InventoryAggregatedSerializer(serializers.Serializer):
+    """Misma forma que InventorySerializer para listados agrupados por producto."""
+    id = serializers.IntegerField()
+    product = serializers.IntegerField()
+    product_name = serializers.CharField()
+    product_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    quantity = serializers.IntegerField()
+    reserved_quantity = serializers.IntegerField()
+    available_quantity = serializers.IntegerField()
+    purchase_cost = serializers.DecimalField(
+        max_digits=10, decimal_places=2, allow_null=True, required=False,
+    )
+    almacen = serializers.IntegerField(allow_null=True)
+    is_active = serializers.BooleanField()
+    low_stock_alert = serializers.IntegerField(required=False)
+    created_at = serializers.DateTimeField(allow_null=True, required=False)
+    updated_at = serializers.DateTimeField(allow_null=True, required=False)
+    variante = serializers.JSONField(allow_null=True, required=False)
+    vendido = serializers.IntegerField(required=False, default=0)
+
+
 class ProductVariantSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductVariant

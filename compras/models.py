@@ -183,3 +183,62 @@ class OrdenCompraItem(models.Model):
 
     def __str__(self):
         return f'{self.producto} x{self.cantidad}'
+
+
+class DevolucionCompra(models.Model):
+    """
+    Devolución de mercadería al proveedor: descuenta inventario por almacén
+    y stock de variante (si aplica), registrando salida en kardex.
+    """
+    vendor = models.ForeignKey(
+        Vendor, on_delete=models.CASCADE,
+        related_name='devoluciones_compra',
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='devoluciones_compra_creadas',
+    )
+    documento_ref = models.CharField(
+        max_length=120, blank=True, default='',
+        help_text='Nota de remisión, guía u otro documento del proveedor',
+    )
+    notas = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Devolución a proveedor'
+        verbose_name_plural = 'Devoluciones a proveedor'
+
+    def __str__(self):
+        return f'Devolución compra #{self.pk} — {self.vendor}'
+
+
+class DevolucionCompraItem(models.Model):
+    devolucion = models.ForeignKey(
+        DevolucionCompra, on_delete=models.CASCADE,
+        related_name='items',
+    )
+    producto = models.ForeignKey(
+        Product, on_delete=models.PROTECT,
+        related_name='devolucion_compra_items',
+    )
+    variante = models.ForeignKey(
+        ProductVariant, on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='devolucion_compra_items',
+    )
+    almacen = models.ForeignKey(
+        Almacen, on_delete=models.PROTECT,
+        related_name='devolucion_compra_items',
+    )
+    cantidad = models.PositiveIntegerField()
+
+    class Meta:
+        verbose_name = 'Ítem devolución a proveedor'
+        verbose_name_plural = 'Ítems devolución a proveedor'
+
+    def __str__(self):
+        return f'{self.producto} x{self.cantidad}'

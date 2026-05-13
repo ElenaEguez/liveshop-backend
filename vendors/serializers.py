@@ -333,6 +333,7 @@ class ConteoFisicoSerializer(serializers.ModelSerializer):
         many=True, read_only=True)
     almacen_nombre = serializers.SerializerMethodField()
     creado_por_nombre = serializers.SerializerMethodField()
+    aprobado_por_nombre = serializers.SerializerMethodField()
     total_diferencias = serializers.SerializerMethodField()
     items_con_diferencia = serializers.SerializerMethodField()
 
@@ -341,7 +342,8 @@ class ConteoFisicoSerializer(serializers.ModelSerializer):
         fields = ['id', 'almacen', 'almacen_nombre', 'estado',
                   'fecha', 'notas', 'items',
                   'creado_por', 'creado_por_nombre',
-                  'aprobado_por', 'created_at', 'updated_at',
+                  'aprobado_por', 'aprobado_por_nombre',
+                  'created_at', 'updated_at',
                   'total_diferencias', 'items_con_diferencia']
         read_only_fields = ['estado', 'creado_por',
                             'aprobado_por', 'created_at',
@@ -352,6 +354,12 @@ class ConteoFisicoSerializer(serializers.ModelSerializer):
 
     def get_creado_por_nombre(self, obj):
         return obj.creado_por.get_full_name() if obj.creado_por else ''
+
+    def get_aprobado_por_nombre(self, obj):
+        if not obj.aprobado_por:
+            return ''
+        full = obj.aprobado_por.get_full_name()
+        return full.strip() if full and full.strip() else (obj.aprobado_por.email or '')
 
     def get_total_diferencias(self, obj):
         return sum(

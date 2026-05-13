@@ -422,7 +422,7 @@ class MisPermisosView(APIView):
         if user.is_staff or user.is_superuser:
             todos = {
                 m: {'ver': True, 'operar': True}
-                for m in ['pos', 'inventario', 'compras', 'reportes',
+                for m in ['pos', 'inventario', 'almacen', 'compras', 'reportes',
                           'livestream', 'productos', 'configuracion', 'pedidos', 'pagos']
             }
             return Response({
@@ -441,7 +441,7 @@ class MisPermisosView(APIView):
             vendor = user.vendor_profile
             todos = {
                 m: {'ver': True, 'operar': True}
-                for m in ['pos', 'inventario', 'compras', 'reportes',
+                for m in ['pos', 'inventario', 'almacen', 'compras', 'reportes',
                           'livestream', 'productos', 'configuracion', 'pedidos', 'pagos']
             }
             return Response({
@@ -466,6 +466,7 @@ class MisPermisosView(APIView):
             MODULO_MAP = {
                 'pos':           getattr(role, 'perm_pos',           False) if role else False,
                 'inventario':    getattr(role, 'perm_inventory',      False) if role else False,
+                'almacen':       getattr(role, 'perm_warehouse',      False) if role else False,
                 'compras':       getattr(role, 'perm_compras',        False) if role else False,
                 'reportes':      getattr(role, 'perm_dashboard',      False) if role else False,
                 'livestream':    getattr(role, 'perm_live_sessions',  False) if role else False,
@@ -503,11 +504,15 @@ class ConteoFisicoViewSet(viewsets.ModelViewSet):
         vendor = get_vendor_for_user(self.request.user)
         if not vendor:
             return ConteoFisico.objects.none()
-        return ConteoFisico.objects.filter(
+        qs = ConteoFisico.objects.filter(
             vendor=vendor
         ).select_related('almacen', 'creado_por', 'aprobado_por').prefetch_related(
             'items__producto', 'items__variante'
         )
+        estado = (self.request.query_params.get('estado') or '').strip()
+        if estado:
+            qs = qs.filter(estado=estado)
+        return qs
 
     def create(self, request, *args, **kwargs):
         vendor = get_vendor_for_user(request.user)

@@ -6,8 +6,13 @@ from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 
-from compras.models import Proveedor, OrdenCompra, OrdenCompraItem
-from compras.serializers import ProveedorSerializer, OrdenCompraSerializer
+from compras.models import Proveedor, OrdenCompra, OrdenCompraItem, DevolucionCompra
+from compras.serializers import (
+    ProveedorSerializer,
+    OrdenCompraSerializer,
+    DevolucionCompraSerializer,
+    DevolucionCompraCreateSerializer,
+)
 from vendors.permissions import get_vendor_for_user
 
 
@@ -182,4 +187,43 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         orden.estado = 'cancelada'
         orden.save()
         return Response(OrdenCompraSerializer(orden).data)
+
+
+class DevolucionCompraViewSet(viewsets.ModelViewSet):
+    """
+    POST /compras/devoluciones-proveedor/ — registra salida de inventario y variante.
+    GET list / detail — historial de devoluciones a proveedor.
+    """
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        vendor = _get_vendor(self.request)
+        if not vendor:
+            return DevolucionCompra.objects.none()
+        return DevolucionCompra.objects.filter(vendor=vendor).prefetch_related(
+            'items__producto', 'items__variante', 'items__almacen',
+        )
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return DevolucionCompraCreateSerializer
+        return DevolucionCompraSerializer
+
+    def create(self, request, *args, **kwargs):
+        vendor = _get_vendor(request)
+        if not vendor:
+            return Response({'error': 'Sin vendor asignado'}, status=400)
+        ser = self.get_serializer(
+            data=request.data,
+            context={'vendor': vendor, 'request': request},
+        )
+        ser.is_valid(raise_exception=True)
+        dev = ser.save()
+        out = DevolucionCompraSerializer(
+            DevolucionCompra.objects.prefetch_related(
+                'items__producto', 'items__variante', 'items__almacen',
+            ).get(pk=dev.pk)
+        )
+        return Response(out.data, status=status.HTTP_201_CREATED)
 
