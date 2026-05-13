@@ -94,9 +94,13 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         vendor = _get_vendor(self.request)
         if not vendor:
             return OrdenCompra.objects.none()
-        return OrdenCompra.objects.filter(
+        qs = OrdenCompra.objects.filter(
             vendor=vendor
         ).prefetch_related('items__producto', 'items__variante')
+        estado = self.request.query_params.get('estado')
+        if estado:
+            qs = qs.filter(estado=estado)
+        return qs
 
     def create(self, request, *args, **kwargs):
         vendor = _get_vendor(request)

@@ -205,6 +205,14 @@ class DevolucionCompra(models.Model):
         help_text='Nota de remisión, guía u otro documento del proveedor',
     )
     notas = models.TextField(blank=True, default='')
+    orden_compra = models.ForeignKey(
+        OrdenCompra,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='devoluciones',
+        help_text='Si la devolución se originó desde una orden recibida',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

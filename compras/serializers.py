@@ -13,6 +13,87 @@ from products.models import Inventory, Product, ProductVariant
 from vendors.models import Almacen, KardexMovimiento
 
 
+def _procesar_fila_devolucion(dev, vendor, user, row, documento_ref, notas):
+    """
+    row: dict con producto, almacen, cantidad (ints); variante opcional.
+    Descuenta inventario, kardex y stock_extra de variante; crea DevolucionCompraItem.
+    """
+    producto = Product.objects.get(pk=row['producto'], vendor=vendor)
+    almacen = Almacen.objects.select_related('sucursal').get(
+        pk=row['almacen'],
+        sucursal__vendor=vendor,
+    )
+    variante = None
+    if row.get('variante'):
+        variante = ProductVariant.objects.get(
+            pk=row['variante'],
+            product=producto,
+        )
+    cantidad = row['cantidad']
+
+    inv = Inventory.objects.select_for_update().filter(
+        product=producto,
+        almacen=almacen,
+        is_active=True,
+    ).first()
+    if not inv:
+        raise serializers.ValidationError(
+            {'items': f'Sin inventario en almacén para "{producto.name}".'}
+        )
+    if inv.quantity < cantidad:
+        raise serializers.ValidationError(
+            {
+                'items': (
+                    f'"{producto.name}": stock insuficiente en almacén '
+                    f'({inv.quantity} uds.).'
+                )
+            }
+        )
+
+    stock_anterior = inv.quantity
+    inv.quantity = inv.quantity - cantidad
+    inv.save(update_fields=['quantity'])
+
+    KardexMovimiento.objects.create(
+        inventory=inv,
+        almacen=almacen,
+        variant=variante,
+        tipo='salida',
+        motivo='devolucion_compra',
+        cantidad=-cantidad,
+        stock_anterior=stock_anterior,
+        stock_actual=inv.quantity,
+        documento_ref=(
+            f'DCP-{dev.pk}'
+            + (f' ({documento_ref})' if documento_ref else '')
+        ),
+        usuario=user,
+        notas=notas or 'Devolución a proveedor',
+    )
+
+    if variante is not None:
+        ve = ProductVariant.objects.select_for_update().get(pk=variante.pk)
+        if ve.stock_extra < cantidad:
+            raise serializers.ValidationError(
+                {
+                    'items': (
+                        f'"{producto.name}" variante: stock variante insuficiente '
+                        f'({ve.stock_extra} uds.).'
+                    )
+                }
+            )
+        ve.stock_extra = ve.stock_extra - cantidad
+        ve.save(update_fields=['stock_extra'])
+
+    DevolucionCompraItem.objects.create(
+        devolucion=dev,
+        producto=producto,
+        variante=variante,
+        almacen=almacen,
+        cantidad=cantidad,
+    )
+
+
 class ProveedorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Proveedor
@@ -92,9 +173,11 @@ class DevolucionCompraSerializer(serializers.ModelSerializer):
         model = DevolucionCompra
         fields = (
             'id', 'vendor', 'created_by', 'documento_ref', 'notas',
-            'created_at', 'items',
+            'orden_compra', 'created_at', 'items',
         )
-        read_only_fields = ('id', 'vendor', 'created_by', 'created_at', 'items')
+        read_only_fields = (
+            'id', 'vendor', 'created_by', 'created_at', 'items', 'orden_compra',
+        )
 
 
 class DevolucionCompraItemWriteSerializer(serializers.Serializer):
@@ -107,99 +190,123 @@ class DevolucionCompraItemWriteSerializer(serializers.Serializer):
 class DevolucionCompraCreateSerializer(serializers.Serializer):
     documento_ref = serializers.CharField(max_length=120, required=False, allow_blank=True)
     notas = serializers.CharField(required=False, allow_blank=True)
-    items = DevolucionCompraItemWriteSerializer(many=True)
+    orden_compra = serializers.IntegerField(required=False, allow_null=True)
+    items = serializers.ListField(child=serializers.DictField(), allow_empty=False)
 
-    def validate_items(self, value):
-        if not value:
-            raise serializers.ValidationError('Debe incluir al menos un ítem.')
-        return value
+    def validate(self, attrs):
+        vendor = self.context['vendor']
+        raw_items = attrs.get('items') or []
+        orden_pk = attrs.get('orden_compra')
+
+        if orden_pk:
+            try:
+                orden = OrdenCompra.objects.prefetch_related('items').get(
+                    pk=orden_pk, vendor=vendor,
+                )
+            except OrdenCompra.DoesNotExist:
+                raise serializers.ValidationError(
+                    {'orden_compra': 'Orden no encontrada.'}
+                )
+            if orden.estado != 'recibida':
+                raise serializers.ValidationError(
+                    {
+                        'orden_compra': (
+                            'Solo órdenes en estado «recibida» permiten devolución por compra.'
+                        )
+                    }
+                )
+            items_by_id = {i.id: i for i in orden.items.all()}
+            resolved = []
+            seen = set()
+            for raw in raw_items:
+                if not isinstance(raw, dict):
+                    raise serializers.ValidationError({'items': 'Cada ítem debe ser un objeto.'})
+                oid = raw.get('orden_item_id')
+                if oid is None:
+                    raise serializers.ValidationError(
+                        {'items': 'Cada ítem debe incluir orden_item_id y cantidad.'}
+                    )
+                try:
+                    oid = int(oid)
+                except (TypeError, ValueError):
+                    raise serializers.ValidationError({'items': 'orden_item_id inválido.'})
+                try:
+                    cant = int(raw.get('cantidad'))
+                except (TypeError, ValueError):
+                    raise serializers.ValidationError({'items': 'cantidad inválida.'})
+                if cant < 1:
+                    continue
+                if oid in seen:
+                    raise serializers.ValidationError(
+                        {'items': f'Ítem de orden duplicado (id {oid}).'}
+                    )
+                seen.add(oid)
+                oi = items_by_id.get(oid)
+                if not oi:
+                    raise serializers.ValidationError(
+                        {'items': f'La línea {oid} no pertenece a esta orden.'}
+                    )
+                if cant > oi.cantidad:
+                    raise serializers.ValidationError(
+                        {
+                            'items': (
+                                f'"{oi.producto.name if oi.producto else "Producto"}": '
+                                f'no puede devolver más de {oi.cantidad} uds. (compradas en la orden).'
+                            )
+                        }
+                    )
+                almacen_id = oi.almacen_id or orden.almacen_id
+                if not almacen_id:
+                    raise serializers.ValidationError(
+                        {
+                            'items': (
+                                f'La línea de orden {oid} no tiene almacén; '
+                                'no se puede devolver desde orden.'
+                            )
+                        }
+                    )
+                row = {
+                    'producto': oi.producto_id,
+                    'almacen': almacen_id,
+                    'cantidad': cant,
+                }
+                if oi.variante_id:
+                    row['variante'] = oi.variante_id
+                resolved.append(row)
+            if not resolved:
+                raise serializers.ValidationError(
+                    {'items': 'Indique al menos una cantidad a devolver (> 0).'}
+                )
+            attrs['_orden'] = orden
+            attrs['_resolved_items'] = resolved
+        else:
+            writes = DevolucionCompraItemWriteSerializer(data=raw_items, many=True)
+            if not writes.is_valid():
+                raise serializers.ValidationError({'items': writes.errors})
+            attrs['_orden'] = None
+            attrs['_resolved_items'] = writes.validated_data
+
+        return attrs
 
     def create(self, validated_data):
         vendor = self.context['vendor']
         user = self.context['request'].user
-        items_data = validated_data['items']
+        items_data = validated_data.pop('_resolved_items')
+        orden = validated_data.pop('_orden', None)
+        validated_data.pop('items', None)
+        validated_data.pop('orden_compra', None)
+        documento_ref = validated_data.get('documento_ref') or ''
+        notas = validated_data.get('notas') or ''
 
         with transaction.atomic():
             dev = DevolucionCompra.objects.create(
                 vendor=vendor,
                 created_by=user,
-                documento_ref=validated_data.get('documento_ref') or '',
-                notas=validated_data.get('notas') or '',
+                documento_ref=documento_ref,
+                notas=notas,
+                orden_compra=orden,
             )
             for row in items_data:
-                producto = Product.objects.get(pk=row['producto'], vendor=vendor)
-                almacen = Almacen.objects.select_related('sucursal').get(
-                    pk=row['almacen'],
-                    sucursal__vendor=vendor,
-                )
-                variante = None
-                if row.get('variante'):
-                    variante = ProductVariant.objects.get(
-                        pk=row['variante'],
-                        product=producto,
-                    )
-                cantidad = row['cantidad']
-
-                inv = Inventory.objects.select_for_update().filter(
-                    product=producto,
-                    almacen=almacen,
-                    is_active=True,
-                ).first()
-                if not inv:
-                    raise serializers.ValidationError(
-                        {'items': f'Sin inventario en almacén para "{producto.name}".'}
-                    )
-                if inv.quantity < cantidad:
-                    raise serializers.ValidationError(
-                        {
-                            'items': (
-                                f'"{producto.name}": stock insuficiente en almacén '
-                                f'({inv.quantity} uds.).'
-                            )
-                        }
-                    )
-
-                stock_anterior = inv.quantity
-                inv.quantity = inv.quantity - cantidad
-                inv.save(update_fields=['quantity'])
-
-                KardexMovimiento.objects.create(
-                    inventory=inv,
-                    almacen=almacen,
-                    variant=variante,
-                    tipo='salida',
-                    motivo='devolucion_compra',
-                    cantidad=-cantidad,
-                    stock_anterior=stock_anterior,
-                    stock_actual=inv.quantity,
-                    documento_ref=(
-                        f'DCP-{dev.pk}'
-                        + (f' ({validated_data.get("documento_ref")})' if validated_data.get('documento_ref') else '')
-                    ),
-                    usuario=user,
-                    notas=validated_data.get('notas') or 'Devolución a proveedor',
-                )
-
-                if variante is not None:
-                    ve = ProductVariant.objects.select_for_update().get(pk=variante.pk)
-                    if ve.stock_extra < cantidad:
-                        raise serializers.ValidationError(
-                            {
-                                'items': (
-                                    f'"{producto.name}" variante: stock variante insuficiente '
-                                    f'({ve.stock_extra} uds.).'
-                                )
-                            }
-                        )
-                    ve.stock_extra = ve.stock_extra - cantidad
-                    ve.save(update_fields=['stock_extra'])
-
-                DevolucionCompraItem.objects.create(
-                    devolucion=dev,
-                    producto=producto,
-                    variante=variante,
-                    almacen=almacen,
-                    cantidad=cantidad,
-                )
+                _procesar_fila_devolucion(dev, vendor, user, row, documento_ref, notas)
 
         return dev
