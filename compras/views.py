@@ -6,7 +6,15 @@ from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 
-from compras.models import Proveedor, OrdenCompra, OrdenCompraItem, DevolucionCompra
+from products.models import Product, ProductVariant
+
+from compras.models import (
+    Proveedor,
+    OrdenCompra,
+    OrdenCompraItem,
+    OrdenCompraItemDistribucion,
+    DevolucionCompra,
+)
 from compras.serializers import (
     ProveedorSerializer,
     OrdenCompraSerializer,
@@ -41,12 +49,23 @@ def _int_from_request(val, default=1):
         return default
 
 
+def _optional_int(val):
+    if val is None or val == '':
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
 def _prepare_orden_item_row(raw):
     """
     Convierte FKs a *_id, elimina campos de solo lectura del API
     y fuerza tipos numéricos (JSON/Form pueden enviar strings).
+    Devuelve (dict para OrdenCompraItem.objects.create, lista distribución o None).
     """
     item = dict(raw)
+    dist_raw = item.pop('distribuciones', None)
     for key in ('id', 'producto_nombre', 'variante_detalle'):
         item.pop(key, None)
     if 'producto' in item:
@@ -64,11 +83,108 @@ def _prepare_orden_item_row(raw):
             item[fld] = _decimal_from_request(item[fld])
     if 'cantidad' in item:
         item['cantidad'] = _int_from_request(item['cantidad'], 1)
-    return item
+    if 'precio_venta_es_manual' in item:
+        v = item['precio_venta_es_manual']
+        item['precio_venta_es_manual'] = v in (True, 'true', 'True', '1', 1, 'on', 'yes')
+    item.pop('subtotal', None)
+    item.pop('costo_unitario_total', None)
+
+    dist_list = None
+    if dist_raw is not None:
+        if not isinstance(dist_raw, list):
+            dist_raw = []
+        dist_list = []
+        for d in dist_raw:
+            if not isinstance(d, dict):
+                continue
+            vid = d.get('variante')
+            if vid is None:
+                vid = d.get('variante_id')
+            if vid is None:
+                continue
+            try:
+                vid_int = int(vid)
+            except (TypeError, ValueError):
+                continue
+            cq = _int_from_request(d.get('cantidad'), 0)
+            if cq <= 0:
+                continue
+            dist_list.append({'variante_id': vid_int, 'cantidad': cq})
+        if not dist_list:
+            dist_list = None
+    return item, dist_list
 
 
-def _items_missing_almacen(items_data):
-    return any(not item.get('almacen') for item in items_data)
+def _items_missing_almacen(items_data, orden_almacen_id=None):
+    for raw in items_data:
+        row, _ = _prepare_orden_item_row(raw)
+        if not (row.get('almacen_id') or orden_almacen_id):
+            return True
+    return False
+
+
+def _validate_compra_items(vendor, prepared_rows):
+    """prepared_rows: list of (item_row dict, dist_list | None)."""
+    for item_row, dist_list in prepared_rows:
+        pid = item_row.get('producto_id')
+        if not pid:
+            raise ValueError('Cada ítem debe incluir un producto.')
+        try:
+            producto = Product.objects.get(pk=pid, vendor=vendor)
+        except Product.DoesNotExist as exc:
+            raise ValueError('Producto no encontrado o no pertenece a su tienda.') from exc
+
+        var_qs = ProductVariant.objects.filter(product=producto, is_active=True)
+        has_variants = var_qs.exists()
+        cantidad = item_row.get('cantidad', 1)
+
+        if has_variants:
+            if not dist_list:
+                raise ValueError(
+                    f'"{producto.name}": indique la distribución por variantes '
+                    f'(cantidad por talla/color). La suma debe ser {cantidad} uds.'
+                )
+            total_dist = sum(d['cantidad'] for d in dist_list)
+            if total_dist != cantidad:
+                raise ValueError(
+                    f'"{producto.name}": la suma por variante ({total_dist}) debe igualar '
+                    f'la cantidad total del ítem ({cantidad}).'
+                )
+            seen_v = set()
+            for d in dist_list:
+                vid = d['variante_id']
+                if vid in seen_v:
+                    raise ValueError(f'"{producto.name}": variante repetida en la distribución.')
+                seen_v.add(vid)
+                try:
+                    ProductVariant.objects.get(pk=vid, product=producto, is_active=True)
+                except ProductVariant.DoesNotExist as exc:
+                    raise ValueError(
+                        f'"{producto.name}": variante no válida para este producto.'
+                    ) from exc
+            item_row['variante_id'] = None
+        else:
+            if dist_list:
+                raise ValueError(
+                    f'"{producto.name}" no tiene variantes; no envíe "distribuciones".'
+                )
+
+
+def _persist_items(orden, items_data, orden_almacen_id):
+    """Crea ítems y distribuciones. Almacén de cabecera (orden o payload) en líneas sin almacén."""
+    cabecera_alm = orden_almacen_id or orden.almacen_id
+    for item_data in items_data:
+        item_row, dist_list = _prepare_orden_item_row(item_data)
+        if not item_row.get('almacen_id') and cabecera_alm:
+            item_row['almacen_id'] = cabecera_alm
+        oi = OrdenCompraItem.objects.create(orden=orden, **item_row)
+        if dist_list:
+            for d in dist_list:
+                OrdenCompraItemDistribucion.objects.create(
+                    item=oi,
+                    variante_id=d['variante_id'],
+                    cantidad=d['cantidad'],
+                )
 
 
 class ProveedorViewSet(viewsets.ModelViewSet):
@@ -96,7 +212,11 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
             return OrdenCompra.objects.none()
         qs = OrdenCompra.objects.filter(
             vendor=vendor
-        ).prefetch_related('items__producto', 'items__variante')
+        ).prefetch_related(
+            'items__producto',
+            'items__variante',
+            'items__distribuciones__variante',
+        )
         estado = self.request.query_params.get('estado')
         if estado:
             qs = qs.filter(estado=estado)
@@ -109,19 +229,26 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
 
         items_data = request.data.get('items', [])
         estado = request.data.get('estado')
-        if estado in ('pendiente', 'recibida') and _items_missing_almacen(items_data):
+        orden_almacen_id = _optional_int(request.data.get('almacen'))
+
+        prepared = [_prepare_orden_item_row(x) for x in items_data]
+        if estado in ('pendiente', 'recibida') and _items_missing_almacen(
+            items_data, orden_almacen_id
+        ):
             return Response(
-                {'error': 'Cada producto de la compra debe tener almacén destino.'},
+                {'error': 'Indique almacén destino en la cabecera o en cada línea.'},
                 status=400
             )
+        try:
+            _validate_compra_items(vendor, prepared)
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=400)
 
         with transaction.atomic():
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             orden = serializer.save(vendor=vendor, created_by=request.user)
-            for item_data in items_data:
-                item = _prepare_orden_item_row(item_data)
-                OrdenCompraItem.objects.create(orden=orden, **item)
+            _persist_items(orden, items_data, orden_almacen_id)
             orden.recalcular_totales()
 
         return Response(
@@ -133,6 +260,10 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
 
+        vendor = _get_vendor(request)
+        if not vendor:
+            return Response({'error': 'Sin vendor asignado'}, status=400)
+
         if instance.estado == 'recibida':
             return Response(
                 {'error': 'No se puede editar una orden recibida'},
@@ -141,11 +272,21 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
 
         items_data = request.data.get('items', [])
         estado = request.data.get('estado', instance.estado)
-        if estado in ('pendiente', 'recibida') and _items_missing_almacen(items_data):
+        orden_almacen_id = _optional_int(request.data.get('almacen'))
+
+        prepared = [_prepare_orden_item_row(x) for x in items_data] if items_data else []
+        if items_data and estado in ('pendiente', 'recibida') and _items_missing_almacen(
+            items_data, orden_almacen_id
+        ):
             return Response(
-                {'error': 'Cada producto de la compra debe tener almacén destino.'},
+                {'error': 'Indique almacén destino en la cabecera o en cada línea.'},
                 status=400
             )
+        if items_data:
+            try:
+                _validate_compra_items(vendor, prepared)
+            except ValueError as exc:
+                return Response({'error': str(exc)}, status=400)
 
         with transaction.atomic():
             serializer = self.get_serializer(
@@ -156,9 +297,7 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
 
             if items_data:
                 orden.items.all().delete()
-                for item_data in items_data:
-                    item = _prepare_orden_item_row(item_data)
-                    OrdenCompraItem.objects.create(orden=orden, **item)
+                _persist_items(orden, items_data, orden_almacen_id)
                 orden.recalcular_totales()
 
         return Response(OrdenCompraSerializer(orden).data)
@@ -171,11 +310,17 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
                 {'error': 'Solo se pueden confirmar órdenes pendientes'},
                 status=400
             )
-        if orden.items.filter(almacen__isnull=True).exists():
-            return Response(
-                {'error': 'Cada producto de la compra debe tener almacén destino.'},
-                status=400
-            )
+        for it in orden.items.all():
+            if not it.almacen_id and not orden.almacen_id:
+                return Response(
+                    {
+                        'error': (
+                            'Indique almacén destino en la cabecera de la orden '
+                            'o en cada línea antes de confirmar.'
+                        )
+                    },
+                    status=400
+                )
         orden.estado = 'recibida'
         orden.save()  # dispara la señal pre_save
         return Response(OrdenCompraSerializer(orden).data)

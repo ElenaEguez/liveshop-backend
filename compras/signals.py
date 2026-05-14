@@ -30,48 +30,64 @@ def procesar_recepcion_compra(sender, instance, **kwargs):
     from vendors.models import KardexMovimiento
 
     with transaction.atomic():
-        for item in instance.items.select_related('producto', 'variante').all():
-            almacen_destino = item.almacen
+        qs_items = instance.items.select_related(
+            'producto', 'variante',
+        ).prefetch_related('distribuciones__variante')
+        for item in qs_items:
+            almacen_destino = item.almacen or instance.almacen
             if not almacen_destino:
                 raise ValueError(
                     'Cada ítem de compra debe tener almacén destino antes de recibir la orden.'
                 )
 
-            # ── 1. Actualizar Inventory ──────────────────────────
-            inv, _ = Inventory.objects.get_or_create(
-                product=item.producto,
-                almacen=almacen_destino,
-                defaults={
-                    'quantity': 0,
-                }
-            )
-            stock_anterior = inv.quantity
-            inv.quantity = inv.quantity + item.cantidad
-            inv.purchase_cost = item.costo_unitario_total
-            inv.save(update_fields=['quantity', 'purchase_cost'])
+            distribuciones = list(item.distribuciones.all())
+            if distribuciones:
+                filas = [
+                    (d.cantidad, d.variante)
+                    for d in distribuciones
+                    if d.cantidad and d.variante_id
+                ]
+            elif item.variante_id:
+                filas = [(item.cantidad, item.variante)]
+            else:
+                filas = [(item.cantidad, None)]
 
-            # ── 2. KardexMovimiento ──────────────────────────────
-            KardexMovimiento.objects.create(
-                inventory=inv,
-                almacen=almacen_destino,
-                variant=item.variante,
-                tipo='entrada',
-                motivo='compra',
-                cantidad=item.cantidad,
-                stock_anterior=stock_anterior,
-                stock_actual=inv.quantity,
-                costo_promedio=item.costo_unitario_total,
-                documento_ref=f'OC-{instance.numero}',
-                usuario=instance.created_by,
-                notas=f'Compra OC-{instance.numero}',
-            )
+            for cant_u, variante in filas:
+                if not cant_u:
+                    continue
 
-            # ── 3. Stock en variante (si aplica) ─────────────────
-            if item.variante:
-                variante = item.variante
-                # ProductVariant no tiene campo "stock"; usa stock_extra
-                if hasattr(variante, 'stock_extra'):
-                    variante.stock_extra = variante.stock_extra + item.cantidad
+                # ── 1. Actualizar Inventory ──────────────────────────
+                inv, _ = Inventory.objects.get_or_create(
+                    product=item.producto,
+                    almacen=almacen_destino,
+                    defaults={
+                        'quantity': 0,
+                    }
+                )
+                stock_anterior = inv.quantity
+                inv.quantity = inv.quantity + cant_u
+                inv.purchase_cost = item.costo_unitario_total
+                inv.save(update_fields=['quantity', 'purchase_cost'])
+
+                # ── 2. KardexMovimiento ──────────────────────────────
+                KardexMovimiento.objects.create(
+                    inventory=inv,
+                    almacen=almacen_destino,
+                    variant=variante,
+                    tipo='entrada',
+                    motivo='compra',
+                    cantidad=cant_u,
+                    stock_anterior=stock_anterior,
+                    stock_actual=inv.quantity,
+                    costo_promedio=item.costo_unitario_total,
+                    documento_ref=f'OC-{instance.numero}',
+                    usuario=instance.created_by,
+                    notas=f'Compra OC-{instance.numero}',
+                )
+
+                # ── 3. Stock en variante (si aplica) ─────────────────
+                if variante is not None and hasattr(variante, 'stock_extra'):
+                    variante.stock_extra = variante.stock_extra + cant_u
                     variante.save(update_fields=['stock_extra'])
 
             # ── 4. Precio de venta oficial desde Compras ─────────

@@ -150,6 +150,10 @@ class OrdenCompraItem(models.Model):
         max_digits=12, decimal_places=2, default=0,
         help_text='Precio de venta calculado (costo * (1 + %ganancia/100))'
     )
+    precio_venta_es_manual = models.BooleanField(
+        default=False,
+        help_text='Si es True, no se recalcula precio_venta_sugerido desde el % de ganancia',
+    )
     descripcion = models.CharField(
         max_length=300, blank=True, default=''
     )
@@ -170,19 +174,44 @@ class OrdenCompraItem(models.Model):
         self.costo_unitario_total = (
             self.costo_mercaderia + self.flete_unitario
         )
-        # Precio de venta sugerido
-        if self.porcentaje_ganancia > 0:
-            self.precio_venta_sugerido = self.costo_unitario_total * (
-                1 + self.porcentaje_ganancia / 100
-            )
-        else:
-            self.precio_venta_sugerido = self.costo_unitario_total
+        # Precio de venta sugerido (fórmula o valor manual)
+        if not self.precio_venta_es_manual:
+            if self.porcentaje_ganancia > 0:
+                self.precio_venta_sugerido = self.costo_unitario_total * (
+                    1 + self.porcentaje_ganancia / 100
+                )
+            else:
+                self.precio_venta_sugerido = self.costo_unitario_total
         # Subtotal basado en precio_unitario (lo que se pagó)
         self.subtotal = self.cantidad * self.precio_unitario
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.producto} x{self.cantidad}'
+
+
+class OrdenCompraItemDistribucion(models.Model):
+    """
+    Reparto de la cantidad total del ítem por variante (talla/color).
+    La suma de cantidades debe coincidir con OrdenCompraItem.cantidad.
+    """
+    item = models.ForeignKey(
+        OrdenCompraItem, on_delete=models.CASCADE,
+        related_name='distribuciones',
+    )
+    variante = models.ForeignKey(
+        ProductVariant, on_delete=models.PROTECT,
+        related_name='compra_distribuciones',
+    )
+    cantidad = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Distribución ítem OC'
+        verbose_name_plural = 'Distribuciones ítem OC'
+        unique_together = [['item', 'variante']]
+
+    def __str__(self):
+        return f'{self.variante} ×{self.cantidad}'
 
 
 class DevolucionCompra(models.Model):

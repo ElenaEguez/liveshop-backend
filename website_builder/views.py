@@ -7,7 +7,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import MultiPartParser, JSONParser
-from rest_framework import status
+from rest_framework.filters import OrderingFilter
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db import transaction
@@ -47,6 +47,19 @@ class PublicPagination(PageNumberPagination):
     max_page_size = 48
 
 
+def _category_branch_ids(root_pk):
+    """IDs de la categoría raíz y todas sus subcategorías (árbol completo)."""
+    ids = [root_pk]
+    frontier = [root_pk]
+    while frontier:
+        children = list(
+            Category.objects.filter(parent_id__in=frontier).values_list('pk', flat=True)
+        )
+        ids.extend(children)
+        frontier = children
+    return ids
+
+
 class PublicStoreView(APIView):
     """GET /api/public/{vendor_slug}/ — información pública de la tienda."""
     permission_classes = [AllowAny]
@@ -64,6 +77,9 @@ class PublicCatalogView(ListAPIView):
     authentication_classes = []
     serializer_class = PublicProductSerializer
     pagination_class = PublicPagination
+    filter_backends = [OrderingFilter]
+    ordering_fields = ['price', 'created_at', 'id', 'name']
+    ordering = ['-created_at']
 
     def get_queryset(self):
         vendor = get_object_or_404(Vendor, slug=self.kwargs['vendor_slug'])
@@ -78,7 +94,13 @@ class PublicCatalogView(ListAPIView):
         search = self.request.query_params.get('search')
 
         if category:
-            qs = qs.filter(category__id=category)
+            try:
+                root_id = int(category)
+            except (ValueError, TypeError):
+                root_id = None
+            if root_id is not None:
+                branch_ids = _category_branch_ids(root_id)
+                qs = qs.filter(category_id__in=branch_ids)
         if search:
             qs = qs.filter(
                 Q(name__icontains=search) | Q(description__icontains=search)

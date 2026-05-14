@@ -6,6 +6,7 @@ from compras.models import (
     Proveedor,
     OrdenCompra,
     OrdenCompraItem,
+    OrdenCompraItemDistribucion,
     DevolucionCompra,
     DevolucionCompraItem,
 )
@@ -100,20 +101,39 @@ class ProveedorSerializer(serializers.ModelSerializer):
         fields = ['id', 'nombre', 'contacto', 'telefono', 'email', 'notas', 'activo']
 
 
+class OrdenCompraItemDistribucionSerializer(serializers.ModelSerializer):
+    variante_detalle = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrdenCompraItemDistribucion
+        fields = ['id', 'variante', 'variante_detalle', 'cantidad']
+
+    def get_variante_detalle(self, obj):
+        v = obj.variante
+        return {
+            'id': v.id,
+            'talla': getattr(v, 'talla', ''),
+            'color': getattr(v, 'color', ''),
+            'color_hex': getattr(v, 'color_hex', ''),
+        }
+
+
 class OrdenCompraItemSerializer(serializers.ModelSerializer):
     producto_nombre = serializers.SerializerMethodField()
     variante_detalle = serializers.SerializerMethodField()
+    distribuciones = OrdenCompraItemDistribucionSerializer(many=True, read_only=True)
 
     class Meta:
         model = OrdenCompraItem
         fields = [
             'id', 'producto', 'producto_nombre',
             'variante', 'variante_detalle',
+            'distribuciones',
             'almacen',
             'descripcion', 'cantidad',
             'costo_mercaderia', 'flete_unitario',
             'costo_unitario_total',
-            'porcentaje_ganancia', 'precio_venta_sugerido',
+            'porcentaje_ganancia', 'precio_venta_sugerido', 'precio_venta_es_manual',
             'precio_unitario', 'subtotal'
         ]
         read_only_fields = ['subtotal', 'costo_unitario_total', 'precio_venta_sugerido']
@@ -200,7 +220,9 @@ class DevolucionCompraCreateSerializer(serializers.Serializer):
 
         if orden_pk:
             try:
-                orden = OrdenCompra.objects.prefetch_related('items').get(
+                orden = OrdenCompra.objects.prefetch_related(
+                    'items__distribuciones',
+                ).get(
                     pk=orden_pk, vendor=vendor,
                 )
             except OrdenCompra.DoesNotExist:
@@ -217,14 +239,76 @@ class DevolucionCompraCreateSerializer(serializers.Serializer):
                 )
             items_by_id = {i.id: i for i in orden.items.all()}
             resolved = []
-            seen = set()
+            seen_items = set()
+            seen_dist = set()
             for raw in raw_items:
                 if not isinstance(raw, dict):
                     raise serializers.ValidationError({'items': 'Cada ítem debe ser un objeto.'})
+
+                ddid = raw.get('orden_distribucion_id')
+                if ddid is not None:
+                    try:
+                        ddid = int(ddid)
+                    except (TypeError, ValueError):
+                        raise serializers.ValidationError(
+                            {'items': 'orden_distribucion_id inválido.'}
+                        )
+                    try:
+                        cant = int(raw.get('cantidad'))
+                    except (TypeError, ValueError):
+                        raise serializers.ValidationError({'items': 'cantidad inválida.'})
+                    if cant < 1:
+                        continue
+                    if ddid in seen_dist:
+                        raise serializers.ValidationError(
+                            {'items': f'Distribución de orden duplicada (id {ddid}).'}
+                        )
+                    seen_dist.add(ddid)
+                    try:
+                        dist = OrdenCompraItemDistribucion.objects.select_related(
+                            'item', 'variante',
+                        ).get(pk=ddid, item__orden=orden)
+                    except OrdenCompraItemDistribucion.DoesNotExist:
+                        raise serializers.ValidationError(
+                            {'items': f'La distribución {ddid} no pertenece a esta orden.'}
+                        )
+                    if cant > dist.cantidad:
+                        raise serializers.ValidationError(
+                            {
+                                'items': (
+                                    f'No puede devolver más de {dist.cantidad} uds. '
+                                    f'en esta variante (compradas en la orden).'
+                                )
+                            }
+                        )
+                    oi = dist.item
+                    almacen_id = oi.almacen_id or orden.almacen_id
+                    if not almacen_id:
+                        raise serializers.ValidationError(
+                            {
+                                'items': (
+                                    'La línea no tiene almacén asignado; '
+                                    'no se puede devolver desde orden.'
+                                )
+                            }
+                        )
+                    resolved.append({
+                        'producto': oi.producto_id,
+                        'almacen': almacen_id,
+                        'cantidad': cant,
+                        'variante': dist.variante_id,
+                    })
+                    continue
+
                 oid = raw.get('orden_item_id')
                 if oid is None:
                     raise serializers.ValidationError(
-                        {'items': 'Cada ítem debe incluir orden_item_id y cantidad.'}
+                        {
+                            'items': (
+                                'Cada ítem debe incluir orden_item_id + cantidad, '
+                                'o orden_distribucion_id + cantidad.'
+                            )
+                        }
                     )
                 try:
                     oid = int(oid)
@@ -236,15 +320,24 @@ class DevolucionCompraCreateSerializer(serializers.Serializer):
                     raise serializers.ValidationError({'items': 'cantidad inválida.'})
                 if cant < 1:
                     continue
-                if oid in seen:
+                if oid in seen_items:
                     raise serializers.ValidationError(
                         {'items': f'Ítem de orden duplicado (id {oid}).'}
                     )
-                seen.add(oid)
+                seen_items.add(oid)
                 oi = items_by_id.get(oid)
                 if not oi:
                     raise serializers.ValidationError(
                         {'items': f'La línea {oid} no pertenece a esta orden.'}
+                    )
+                if list(oi.distribuciones.all()):
+                    raise serializers.ValidationError(
+                        {
+                            'items': (
+                                f'La línea {oid} tiene distribución por variantes; '
+                                'use orden_distribucion_id con la cantidad por cada variante.'
+                            )
+                        }
                     )
                 if cant > oi.cantidad:
                     raise serializers.ValidationError(
