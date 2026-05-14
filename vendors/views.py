@@ -551,19 +551,32 @@ class ConteoFisicoViewSet(viewsets.ModelViewSet):
         Body: { producto, variante(opt), stock_fisico, notas }
         Calcula stock_sistema desde Inventory automáticamente.
         """
-        if not _user_has_inventory_perm(request.user):
-            return Response(
-                {'error': 'Solo el propietario o un usuario con permiso de inventario '
-                          'puede registrar ítems de conteo'},
-                status=403,
-            )
-
         conteo = self.get_object()
-        if conteo.estado not in ('abierto',):
+        estado = conteo.estado
+        if estado in ('aprobado', 'cancelado'):
             return Response(
-                {'error': 'Solo se pueden agregar ítems '
-                          'a conteos abiertos'},
-                status=400)
+                {'error': 'No se pueden modificar conteos aprobados o cancelados'},
+                status=400,
+            )
+        if estado == 'abierto':
+            if not _user_has_inventory_perm(request.user):
+                return Response(
+                    {'error': 'Solo el propietario o un usuario con permiso de inventario '
+                              'puede registrar ítems de conteo'},
+                    status=403,
+                )
+        elif estado == 'cerrado':
+            if not _user_has_warehouse_perm(request.user):
+                return Response(
+                    {'error': 'Solo el propietario o un usuario con permiso de almacén '
+                              'puede corregir un conteo cerrado antes de aprobarlo'},
+                    status=403,
+                )
+        else:
+            return Response(
+                {'error': 'Estado de conteo no válido para registrar ítems'},
+                status=400,
+            )
 
         from products.models import Inventory, Product, ProductVariant
 

@@ -52,17 +52,25 @@ class CategorySerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     vendor = serializers.PrimaryKeyRelatedField(read_only=True)
+    variantes = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'description', 'price', 'stock', 'category',
-            'is_active', 'variants', 'images', 'vendor',
+            'is_active', 'variants', 'variantes', 'images', 'vendor',
             'barcode', 'internal_code', 'sell_by',
             'is_active_live', 'is_active_pos', 'is_active_web',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['vendor', 'images', 'variants', 'price', 'stock', 'created_at', 'updated_at']
+        read_only_fields = [
+            'vendor', 'images', 'variants', 'variantes',
+            'price', 'stock', 'created_at', 'updated_at',
+        ]
+
+    def get_variantes(self, obj):
+        qs = obj.variant_objects.filter(is_active=True).order_by('id')
+        return ProductVariantSerializer(qs, many=True).data
 
     def get_images(self, obj):
         request = self.context.get('request')
