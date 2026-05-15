@@ -117,6 +117,8 @@ class InventoryAggregatedSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField(allow_null=True, required=False)
     variante = serializers.JSONField(allow_null=True, required=False)
     vendido = serializers.IntegerField(required=False, default=0)
+    variantes = serializers.ListField(child=serializers.DictField(), required=False)
+    sin_asignar_variante = serializers.IntegerField(required=False, default=0)
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
@@ -157,6 +159,7 @@ class ProductPOSSerializer(serializers.ModelSerializer):
 
 
 class KardexMovimientoSerializer(serializers.ModelSerializer):
+    product_id = serializers.IntegerField(source='inventory.product_id', read_only=True)
     product_name = serializers.CharField(source='inventory.product.name', read_only=True)
     almacen_nombre = serializers.CharField(source='almacen.nombre', read_only=True, allow_null=True)
     usuario_email = serializers.EmailField(source='usuario.email', read_only=True, allow_null=True)
@@ -178,12 +181,15 @@ class KardexMovimientoSerializer(serializers.ModelSerializer):
     class Meta:
         model = KardexMovimiento
         fields = (
-            'id', 'inventory', 'product_name', 'almacen', 'almacen_nombre',
+            'id', 'inventory', 'product_id', 'product_name', 'almacen', 'almacen_nombre',
             'tipo', 'motivo', 'cantidad', 'stock_anterior', 'stock_actual',
             'costo_promedio', 'documento_ref', 'usuario', 'usuario_email', 'usuario_nombre',
             'notas', 'created_at', 'variant_name',
         )
-        read_only_fields = ('id', 'created_at', 'product_name', 'almacen_nombre', 'usuario_email', 'usuario_nombre', 'variant_name')
+        read_only_fields = (
+            'id', 'created_at', 'product_id', 'product_name', 'almacen_nombre',
+            'usuario_email', 'usuario_nombre', 'variant_name',
+        )
 
 
 class POSScanProductSerializer(serializers.ModelSerializer):

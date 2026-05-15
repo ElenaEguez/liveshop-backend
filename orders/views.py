@@ -20,7 +20,14 @@ from asgiref.sync import async_to_sync
 
 from .models import Reservation
 from .serializers import ReservationSerializer, PublicReservationSerializer
-from products.models import Inventory, ProductVariant
+from products.models import ProductVariant
+from products.stock_service import (
+    StockError,
+    check_available_for_sale,
+    fulfill_reservation_sale,
+    release_reservation,
+    reserve_stock,
+)
 from payments.models import Cupon
 from livestreams.models import LiveSession
 from vendors.permissions import (
@@ -91,34 +98,25 @@ class PublicReservationCreateView(generics.CreateAPIView):
             except Cupon.DoesNotExist:
                 pass
 
-        # ── Validate stock ────────────────────────────────────────────────────
-        # Check main inventory
-        try:
-            inventory = Inventory.objects.get(product=product, is_active=True)
-            available = inventory.available_quantity
-            if available < quantity:
-                return Response(
-                    {'error': 'Stock insuficiente', 'disponible': available},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        except Inventory.DoesNotExist:
-            return Response(
-                {'error': 'Stock insuficiente', 'disponible': 0},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Check variant stock if applicable
         variant = None
         if variant_id:
             try:
-                variant = ProductVariant.objects.get(id=variant_id, product=product)
-                if variant.stock_extra < quantity:
-                    return Response(
-                        {'error': f'Stock insuficiente para esta variante. Disponible: {variant.stock_extra}'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                variant = ProductVariant.objects.get(
+                    id=variant_id, product=product, is_active=True,
+                )
             except ProductVariant.DoesNotExist:
-                pass
+                return Response(
+                    {'error': 'Variante no encontrada.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            check_available_for_sale(product.id, quantity, variant_id)
+        except StockError as exc:
+            return Response(
+                {'error': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         self.perform_create(serializer, cupon=cupon, descuento=descuento, variant=variant)
         headers = self.get_success_headers(serializer.data)
@@ -143,15 +141,7 @@ class PublicReservationCreateView(generics.CreateAPIView):
                 Cupon.objects.filter(pk=cupon.pk).update(
                     usos_actuales=F('usos_actuales') + 1
                 )
-            # Atomic stock reservation
-            Inventory.objects.filter(product=product, is_active=True).update(
-                reserved_quantity=F('reserved_quantity') + quantity
-            )
-            # Decrement variant stock if it has its own stock
-            if variant:
-                ProductVariant.objects.filter(pk=variant.pk).update(
-                    stock_extra=F('stock_extra') - quantity
-                )
+            reserve_stock(product, quantity)
 
         channel_layer = get_channel_layer()
 
@@ -235,30 +225,32 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         self._check_write_permission()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        product = serializer.validated_data['product']
+        quantity = serializer.validated_data['quantity']
+        variant = serializer.validated_data.get('variant')
+        variant_id = variant.id if variant else None
+
+        try:
+            check_available_for_sale(product.id, quantity, variant_id)
+        except StockError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
         from django.db import transaction
-        with transaction.atomic():
-            response = super().create(request, *args, **kwargs)
-            reservation = Reservation.objects.get(pk=response.data['id'])
+        try:
+            with transaction.atomic():
+                reservation = serializer.save()
+                reserve_stock(product, quantity)
+        except StockError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-            try:
-                inventory = Inventory.objects.get(product=reservation.product, is_active=True)
-                if inventory.available_quantity >= reservation.quantity:
-                    inventory.reserved_quantity += reservation.quantity
-                    inventory.save()
-                else:
-                    reservation.delete()
-                    return Response(
-                        {'error': 'No hay suficiente stock disponible.'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-            except Inventory.DoesNotExist:
-                reservation.delete()
-                return Response(
-                    {'error': 'No hay inventario disponible para este producto.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            return response
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            ReservationSerializer(reservation).data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
     def update(self, request, *args, **kwargs):
         self._check_write_permission()
@@ -268,46 +260,25 @@ class ReservationViewSet(viewsets.ModelViewSet):
         self._check_write_permission()
         instance = self.get_object()
         old_status = instance.status
+        new_status = request.data.get('status', old_status)
 
-        response = super().partial_update(request, *args, **kwargs)
-        new_status = response.data.get('status', old_status)
+        if old_status != new_status:
+            if new_status == 'delivered' and old_status != 'delivered':
+                try:
+                    fulfill_reservation_sale(
+                        product=instance.product,
+                        quantity=instance.quantity,
+                        variant=instance.variant,
+                        usuario=request.user,
+                        documento_ref=f'LIVE-{instance.pk}',
+                        notas=f'Venta Live pedido #{instance.pk}',
+                    )
+                except StockError as exc:
+                    return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            elif new_status == 'cancelled' and old_status not in ('cancelled', 'delivered'):
+                release_reservation(instance.product, instance.quantity)
 
-        if old_status == new_status:
-            return response
-
-        from products.models import Inventory
-        from vendors.models import KardexMovimiento
-
-        inv = Inventory.objects.filter(
-            product=instance.product, is_active=True
-        ).first()
-
-        if inv and new_status == 'delivered' and old_status != 'delivered':
-            # Confirmar entrega: descontar stock real y liberar reserva
-            from django.db.models import F
-            stock_anterior = inv.quantity
-            inv.quantity = max(0, inv.quantity - instance.quantity)
-            inv.reserved_quantity = max(0, inv.reserved_quantity - instance.quantity)
-            inv.save(update_fields=['quantity', 'reserved_quantity'])
-            KardexMovimiento.objects.create(
-                inventory=inv,
-                almacen=inv.almacen,
-                tipo='salida',
-                motivo='venta',
-                cantidad=-instance.quantity,
-                stock_anterior=stock_anterior,
-                stock_actual=inv.quantity,
-                documento_ref=f'LIVE-{instance.pk}',
-                usuario=request.user,
-                notas=f'Venta Live pedido #{instance.pk}',
-            )
-
-        elif inv and new_status == 'cancelled' and old_status not in ('cancelled', 'delivered'):
-            # Cancelación: liberar reserva
-            inv.reserved_quantity = max(0, inv.reserved_quantity - instance.quantity)
-            inv.save(update_fields=['reserved_quantity'])
-
-        return response
+        return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         self._check_write_permission()

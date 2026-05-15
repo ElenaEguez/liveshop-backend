@@ -7,8 +7,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
-from django.db.models import IntegerField, OuterRef, Q, Subquery, Sum, Min, Max
-from django.db.models.functions import Coalesce
+from django.db.models import Q, Sum, Min
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from vendors.permissions import get_vendor_for_user
 from vendors.models import Almacen
@@ -406,8 +405,6 @@ class InventoryViewSet(viewsets.ModelViewSet):
     pagination_class = InventoryListPagination
 
     def get_queryset(self):
-        from payments.models import VentaPOSItem
-
         vendor = get_vendor_for_user(self.request.user)
         if not vendor:
             return Inventory.objects.none()
@@ -440,20 +437,13 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 Q(product__variants__icontains=f'"color": "{color}"')
             ).distinct()
 
-        vendido_sq = (
-            VentaPOSItem.objects
-            .filter(product_id=OuterRef('product_id'), venta__status='completada')
-            .values('product_id')
-            .annotate(total=Sum('cantidad'))
-            .values('total')[:1]
-        )
-        qs = qs.annotate(vendido=Coalesce(Subquery(vendido_sq, output_field=IntegerField()), 0))
-
         return qs
 
     def list(self, request, *args, **kwargs):
-        if request.query_params.get('almacen_id'):
-            return super().list(request, *args, **kwargs)
+        from .inventory_stock import enrich_inventory_row
+
+        almacen_id = request.query_params.get('almacen_id')
+        almacen_id_int = int(almacen_id) if almacen_id else None
 
         qs = self.filter_queryset(self.get_queryset())
         agg_qs = (
@@ -464,7 +454,6 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 id=Min('id'),
                 purchase_cost=Min('purchase_cost'),
                 almacen=Min('almacen_id'),
-                vendido=Max('vendido'),
                 product_name=Min('product__name'),
                 product_price=Min('product__price'),
                 low_stock_alert=Min('low_stock_alert'),
@@ -480,23 +469,24 @@ class InventoryViewSet(viewsets.ModelViewSet):
             q = int(row['quantity'] or 0)
             r = int(row['reserved_quantity'] or 0)
             low_alert = int(row['low_stock_alert'] or 5)
-            rows.append({
+            item = {
                 'id': row['id'],
                 'product': row['product_id'],
                 'product_name': row['product_name'],
                 'product_price': row['product_price'],
                 'quantity': q,
                 'reserved_quantity': r,
-                'available_quantity': q - r,
+                'available_quantity': max(0, q - r),
                 'purchase_cost': row['purchase_cost'],
-                'almacen': row['almacen'],
+                'almacen': almacen_id_int if almacen_id_int else row['almacen'],
                 'is_active': True,
                 'low_stock_alert': low_alert,
                 'created_at': None,
                 'updated_at': None,
                 'variante': None,
-                'vendido': row['vendido'],
-            })
+            }
+            enrich_inventory_row(item, almacen_id_int)
+            rows.append(item)
 
         ser = InventoryAggregatedSerializer(rows, many=True)
         if page is not None:
@@ -514,14 +504,25 @@ class InventoryAdjustView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
-        from vendors.models import KardexMovimiento
+        from products.stock_service import StockError, apply_stock_delta, product_has_variants
 
         try:
             inv = Inventory.objects.select_related(
-                'product', 'almacen'
+                'product', 'almacen',
             ).get(pk=pk)
         except Inventory.DoesNotExist:
             return Response({'error': 'Inventario no encontrado'}, status=404)
+
+        if product_has_variants(inv.product_id):
+            return Response(
+                {
+                    'error': (
+                        'Este producto tiene variantes. '
+                        'Ajuste el stock por variante (talla/color).'
+                    ),
+                },
+                status=400,
+            )
 
         cantidad = request.data.get('cantidad', 0)
         nota = request.data.get('nota', 'Ajuste manual')
@@ -534,38 +535,26 @@ class InventoryAdjustView(APIView):
         if cantidad == 0:
             return Response({'error': 'cantidad no puede ser 0'}, status=400)
 
-        nuevo_stock = inv.quantity + cantidad
-        if nuevo_stock < 0:
-            return Response(
-                {'error': f'Stock insuficiente. Stock actual: {inv.quantity}'},
-                status=400
-            )
-
-        from django.db import transaction
-        with transaction.atomic():
-            stock_anterior = inv.quantity
-            inv.quantity = nuevo_stock
-            inv.save(update_fields=['quantity'])
-
-            tipo = 'entrada' if cantidad > 0 else 'salida'
-            KardexMovimiento.objects.create(
-                inventory=inv,
+        try:
+            result = apply_stock_delta(
+                product=inv.product,
                 almacen=inv.almacen,
-                tipo=tipo,
-                motivo='ajuste_manual',
-                cantidad=abs(cantidad),
-                stock_anterior=stock_anterior,
-                stock_actual=nuevo_stock,
-                documento_ref=f'AJUSTE-{inv.id}',
+                delta=cantidad,
+                variant=None,
                 usuario=request.user,
+                motivo='ajuste_manual',
+                documento_ref=f'AJUSTE-{inv.id}',
                 notas=nota,
             )
+        except StockError as exc:
+            return Response({'error': str(exc)}, status=400)
 
+        inv.refresh_from_db()
         return Response({
             'ok': True,
             'inventory_id': inv.id,
             'producto': inv.product.name,
-            'stock_anterior': stock_anterior,
+            'stock_anterior': result['stock_anterior'] if result else inv.quantity,
             'stock_nuevo': inv.quantity,
             'cantidad': cantidad,
         })
@@ -579,12 +568,17 @@ class VariantStockAdjustView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
+        from products.stock_service import StockError, apply_stock_delta
+
         try:
             variante = ProductVariant.objects.select_related('product').get(pk=pk)
         except ProductVariant.DoesNotExist:
             return Response({'error': 'Variante no encontrada'}, status=404)
 
         cantidad = request.data.get('cantidad', 0)
+        nota = request.data.get('nota', 'Ajuste manual')
+        almacen_id = request.data.get('almacen_id')
+
         try:
             cantidad = int(cantidad)
         except (ValueError, TypeError):
@@ -593,17 +587,41 @@ class VariantStockAdjustView(APIView):
         if cantidad == 0:
             return Response({'error': 'cantidad no puede ser 0'}, status=400)
 
-        stock_anterior = variante.stock_extra
-        nuevo_stock = stock_anterior + cantidad
-        if nuevo_stock < 0:
+        almacen = None
+        if almacen_id:
+            almacen = get_object_or_404(
+                Almacen,
+                pk=almacen_id,
+                sucursal__vendor=variante.product.vendor,
+            )
+        else:
+            inv = Inventory.objects.filter(
+                product=variante.product, is_active=True,
+            ).select_related('almacen').first()
+            almacen = inv.almacen if inv else None
+
+        if not almacen:
             return Response(
-                {'error': f'Stock insuficiente. Stock actual: {variante.stock_extra}'},
-                status=400
+                {'error': 'Indique almacen_id o cree inventario para el producto.'},
+                status=400,
             )
 
-        variante.stock_extra = nuevo_stock
-        variante.save(update_fields=['stock_extra'])
+        stock_anterior = variante.stock_extra
+        try:
+            apply_stock_delta(
+                product=variante.product,
+                almacen=almacen,
+                delta=cantidad,
+                variant=variante,
+                usuario=request.user,
+                motivo='ajuste_manual',
+                documento_ref=f'AJUSTE-VAR-{variante.id}',
+                notas=nota,
+            )
+        except StockError as exc:
+            return Response({'error': str(exc)}, status=400)
 
+        variante.refresh_from_db()
         return Response({
             'ok': True,
             'variante_id': variante.id,

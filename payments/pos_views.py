@@ -26,6 +26,12 @@ from vendors.models import Sucursal, Caja, TurnoCaja, MovimientoCaja, KardexMovi
 from vendors.permissions import IsVendorOrTeamMember, get_vendor_for_user
 from vendors.serializers import TurnoCajaSerializer, MovimientoCajaSerializer
 from products.models import Inventory, ProductVariant
+from products.stock_service import (
+    StockError,
+    apply_inventory_kardex_delta,
+    apply_stock_delta,
+    apply_variant_stock_delta,
+)
 from products.serializers import ProductPOSSerializer
 
 from .models import (
@@ -366,12 +372,10 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                         ProductVariant,
                         id=item['variant_id'], product_id=pid,
                     )
-                    if variant.stock_extra < item['cantidad']:
-                        raise ValidationError({
-                            'items': f"Stock insuficiente para la variante seleccionada ({variant.talla} / {variant.color}). Disponible: {variant.stock_extra}."
-                        })
-                    variant.stock_extra = max(0, variant.stock_extra - item['cantidad'])
-                    variant.save(update_fields=['stock_extra'])
+                    try:
+                        apply_variant_stock_delta(variant, -item['cantidad'])
+                    except StockError as exc:
+                        raise ValidationError({'items': str(exc)}) from exc
 
                 cantidad_pendiente = item['cantidad']
                 precio = item['precio_unitario']
@@ -388,28 +392,25 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                         continue
 
                     consumir = min(cantidad_pendiente, disponible)
-                    stock_anterior = lote.quantity
-                    lote.quantity -= consumir
-                    lote.save(update_fields=['quantity'])
-
                     costo_lote = lote.purchase_cost or Decimal('0')
                     costo_total_lotes += costo_lote * consumir
                     cantidad_costeada += consumir
 
-                    KardexMovimiento.objects.create(
-                        inventory=lote,
-                        almacen=lote.almacen,
-                        tipo='salida',
-                        motivo='venta',
-                        cantidad=-consumir,
-                        stock_anterior=stock_anterior,
-                        stock_actual=lote.quantity,
-                        costo_promedio=costo_lote,
-                        documento_ref=numero_ticket,
-                        usuario=request.user,
-                        variant=variant,
-                        notas=f'Venta POS {numero_ticket} [{inv_method.upper()}]',
-                    )
+                    try:
+                        apply_inventory_kardex_delta(
+                            product=lote.product,
+                            almacen=lote.almacen,
+                            delta=-consumir,
+                            variant=variant,
+                            usuario=request.user,
+                            motivo='venta',
+                            documento_ref=numero_ticket,
+                            notas=f'Venta POS {numero_ticket} [{inv_method.upper()}]',
+                            costo_promedio=costo_lote,
+                            inventory=lote,
+                        )
+                    except StockError as exc:
+                        raise ValidationError({'items': str(exc)}) from exc
                     cantidad_pendiente -= consumir
 
                 # Costo unitario ponderado del item completo
@@ -462,28 +463,24 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             )
 
         with transaction.atomic():
-            for item in venta.items.select_related('product').all():
+            for item in venta.items.select_related('product', 'variant').all():
                 if not item.product:
                     continue
                 inv = Inventory.objects.select_for_update().filter(
                     product=item.product, is_active=True,
                 ).first()
-                if inv:
-                    stock_anterior = inv.quantity
-                    inv.quantity += item.cantidad
-                    inv.save(update_fields=['quantity'])
-                    KardexMovimiento.objects.create(
-                        inventory=inv,
-                        almacen=inv.almacen,
-                        tipo='entrada',
-                        motivo='devolucion',
-                        cantidad=item.cantidad,
-                        stock_anterior=stock_anterior,
-                        stock_actual=inv.quantity,
-                        documento_ref=venta.numero_ticket,
-                        usuario=request.user,
-                        notas=f'Anulación venta POS {venta.numero_ticket}',
-                    )
+                if not inv:
+                    continue
+                apply_stock_delta(
+                    product=item.product,
+                    almacen=inv.almacen,
+                    delta=int(item.cantidad),
+                    variant=item.variant,
+                    usuario=request.user,
+                    motivo='devolucion',
+                    documento_ref=venta.numero_ticket,
+                    notas=f'Anulación venta POS {venta.numero_ticket}',
+                )
 
             if venta.cupon_id:
                 Cupon.objects.filter(pk=venta.cupon_id).update(

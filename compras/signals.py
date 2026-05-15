@@ -25,73 +25,60 @@ def procesar_recepcion_compra(sender, instance, **kwargs):
     if instance.estado != 'recibida':
         return
 
-    from django.db import transaction
-    from products.models import Inventory
-    from vendors.models import KardexMovimiento
+    from products.stock_service import (
+        StockError,
+        apply_stock_delta,
+        product_has_variants,
+    )
 
-    with transaction.atomic():
-        qs_items = instance.items.select_related(
-            'producto', 'variante',
-        ).prefetch_related('distribuciones__variante')
-        for item in qs_items:
-            almacen_destino = item.almacen or instance.almacen
-            if not almacen_destino:
-                raise ValueError(
-                    'Cada ítem de compra debe tener almacén destino antes de recibir la orden.'
-                )
+    try:
+        with transaction.atomic():
+            qs_items = instance.items.select_related(
+                'producto', 'variante',
+            ).prefetch_related('distribuciones__variante')
+            for item in qs_items:
+                almacen_destino = item.almacen or instance.almacen
+                if not almacen_destino:
+                    raise ValueError(
+                        'Cada ítem de compra debe tener almacén destino antes de recibir la orden.'
+                    )
 
-            distribuciones = list(item.distribuciones.all())
-            if distribuciones:
-                filas = [
-                    (d.cantidad, d.variante)
-                    for d in distribuciones
-                    if d.cantidad and d.variante_id
-                ]
-            elif item.variante_id:
-                filas = [(item.cantidad, item.variante)]
-            else:
-                filas = [(item.cantidad, None)]
+                distribuciones = list(item.distribuciones.all())
+                if distribuciones:
+                    filas = [
+                        (d.cantidad, d.variante)
+                        for d in distribuciones
+                        if d.cantidad and d.variante_id
+                    ]
+                elif item.variante_id:
+                    filas = [(item.cantidad, item.variante)]
+                elif product_has_variants(item.producto_id):
+                    raise ValueError(
+                        f'"{item.producto.name}": indique distribución por variante '
+                        f'antes de recibir la compra.'
+                    )
+                else:
+                    filas = [(item.cantidad, None)]
 
-            for cant_u, variante in filas:
-                if not cant_u:
-                    continue
+                for cant_u, variante in filas:
+                    if not cant_u:
+                        continue
+                    apply_stock_delta(
+                        product=item.producto,
+                        almacen=almacen_destino,
+                        delta=int(cant_u),
+                        variant=variante,
+                        usuario=instance.created_by,
+                        motivo='compra',
+                        documento_ref=f'OC-{instance.numero}',
+                        notas=f'Compra OC-{instance.numero}',
+                        costo_promedio=item.costo_unitario_total,
+                        update_purchase_cost=item.costo_unitario_total,
+                    )
 
-                # ── 1. Actualizar Inventory ──────────────────────────
-                inv, _ = Inventory.objects.get_or_create(
-                    product=item.producto,
-                    almacen=almacen_destino,
-                    defaults={
-                        'quantity': 0,
-                    }
-                )
-                stock_anterior = inv.quantity
-                inv.quantity = inv.quantity + cant_u
-                inv.purchase_cost = item.costo_unitario_total
-                inv.save(update_fields=['quantity', 'purchase_cost'])
-
-                # ── 2. KardexMovimiento ──────────────────────────────
-                KardexMovimiento.objects.create(
-                    inventory=inv,
-                    almacen=almacen_destino,
-                    variant=variante,
-                    tipo='entrada',
-                    motivo='compra',
-                    cantidad=cant_u,
-                    stock_anterior=stock_anterior,
-                    stock_actual=inv.quantity,
-                    costo_promedio=item.costo_unitario_total,
-                    documento_ref=f'OC-{instance.numero}',
-                    usuario=instance.created_by,
-                    notas=f'Compra OC-{instance.numero}',
-                )
-
-                # ── 3. Stock en variante (si aplica) ─────────────────
-                if variante is not None and hasattr(variante, 'stock_extra'):
-                    variante.stock_extra = variante.stock_extra + cant_u
-                    variante.save(update_fields=['stock_extra'])
-
-            # ── 4. Precio de venta oficial desde Compras ─────────
-            if item.precio_venta_sugerido and item.precio_venta_sugerido > 0:
-                producto = item.producto
-                producto.price = item.precio_venta_sugerido
-                producto.save(update_fields=['price'])
+                if item.precio_venta_sugerido and item.precio_venta_sugerido > 0:
+                    producto = item.producto
+                    producto.price = item.precio_venta_sugerido
+                    producto.save(update_fields=['price'])
+    except StockError as exc:
+        raise ValueError(str(exc)) from exc

@@ -3,7 +3,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from livestreams.models import LiveSession
 from orders.models import Reservation
-from products.models import Inventory
+from products.stock_service import StockError, check_available_for_sale, reserve_stock
 from django.utils import timezone
 
 
@@ -142,38 +142,28 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def create_reservation_in_db(self, session_id, product_id, customer_name, customer_phone, quantity):
-        """Crea la reserva en la BD y decrementa el inventario"""
+        """Crea la reserva y reserva stock (solo reserved_quantity, sin tocar variantes)."""
         try:
             from django.db import transaction
+            from products.models import Product
 
             with transaction.atomic():
-                # Verificar que la sesión existe
                 session = LiveSession.objects.get(id=session_id)
-
-                # Verificar que el producto existe
-                from products.models import Product
                 product = Product.objects.get(id=product_id)
+                qty = int(quantity)
 
-                # Verificar inventario disponible
-                inventory = Inventory.objects.filter(product=product, is_active=True).first()
-                if not inventory or inventory.available_quantity < quantity:
-                    return None
+                check_available_for_sale(product.id, qty)
 
-                # Crear la reserva
                 reservation = Reservation.objects.create(
                     session=session,
                     product=product,
                     customer_name=customer_name,
                     customer_phone=customer_phone,
-                    quantity=quantity,
-                    status='pending'
+                    quantity=qty,
+                    status='pending',
                 )
+                reserve_stock(product, qty)
 
-                # Decrementar reserved_quantity
-                inventory.reserved_quantity += quantity
-                inventory.save()
-
-                # Retornar datos de la reserva
                 return {
                     'id': reservation.id,
                     'customer_name': reservation.customer_name,
@@ -185,7 +175,9 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
                     'created_at': reservation.created_at.isoformat(),
                 }
 
-        except LiveSession.DoesNotExist:
+        except (LiveSession.DoesNotExist, Product.DoesNotExist):
+            return None
+        except StockError:
             return None
         except Exception:
             return None

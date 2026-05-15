@@ -602,14 +602,25 @@ class ConteoFisicoViewSet(viewsets.ModelViewSet):
                 ProductVariant, pk=vid, product_id=producto_id,
             )
 
-        try:
-            inv = Inventory.objects.get(
-                product_id=producto_id,
-                almacen=conteo.almacen
-            )
-            stock_sistema = inv.quantity
-        except Inventory.DoesNotExist:
-            stock_sistema = 0
+        from products.stock_service import (
+            get_system_stock,
+            product_has_variants,
+            sum_variant_stock,
+        )
+
+        if vid:
+            stock_sistema = get_system_stock(producto_id, conteo.almacen_id, vid)
+        elif product_has_variants(producto_id):
+            stock_sistema = sum_variant_stock(producto_id)
+        else:
+            try:
+                inv = Inventory.objects.get(
+                    product_id=producto_id,
+                    almacen=conteo.almacen,
+                )
+                stock_sistema = inv.quantity
+            except Inventory.DoesNotExist:
+                stock_sistema = 0
 
         item, created = ConteoFisicoItem.objects.update_or_create(
             conteo=conteo,
@@ -676,68 +687,65 @@ class ConteoFisicoViewSet(viewsets.ModelViewSet):
                 {'error': 'Solo se pueden aprobar conteos cerrados'},
                 status=400)
 
-        from products.models import Inventory
-        from vendors.models import KardexMovimiento
+        from products.stock_service import (
+            StockError,
+            product_has_variants,
+            set_stock_absolute,
+        )
 
         items_a_ajustar = list(
             conteo.items.exclude(diferencia=0).select_related(
-                'producto', 'variante'
-            )
+                'producto', 'variante',
+            ),
         )
         for item in items_a_ajustar:
             if item.stock_fisico < 0:
                 return Response(
-                    {'error':
-                     f'Stock físico inválido para el producto {item.producto_id} '
-                     f'(Inventory requiere cantidad ≥ 0).'},
+                    {
+                        'error': (
+                            f'Stock físico inválido para el producto '
+                            f'{item.producto_id}.'
+                        ),
+                    },
+                    status=400,
+                )
+            if product_has_variants(item.producto_id) and not item.variante_id:
+                return Response(
+                    {
+                        'error': (
+                            f'"{item.producto.name}" tiene variantes: '
+                            f'conteo por talla/color obligatorio.'
+                        ),
+                    },
                     status=400,
                 )
 
         items_ajustados = 0
-        with transaction.atomic():
-            for item in items_a_ajustar:
-                try:
-                    inv = Inventory.objects.select_for_update().get(
-                        product=item.producto,
-                        almacen=conteo.almacen
-                    )
-                except Inventory.DoesNotExist:
-                    inv = Inventory.objects.create(
+        try:
+            with transaction.atomic():
+                for item in items_a_ajustar:
+                    set_stock_absolute(
                         product=item.producto,
                         almacen=conteo.almacen,
-                        quantity=0,
-                        reserved_quantity=0,
-                        is_active=True,
+                        new_quantity=item.stock_fisico,
+                        variant=item.variante,
+                        usuario=user,
+                        motivo='ajuste_manual',
+                        documento_ref=f'CONTEO-{conteo.id}',
+                        notas=(
+                            f'Ajuste por conteo físico aprobado. '
+                            f'Contado: {item.stock_fisico}, '
+                            f'Sistema: {item.stock_sistema}'
+                        ),
                     )
-
-                stock_anterior = inv.quantity
-                inv.quantity = item.stock_fisico
-                inv.save(update_fields=['quantity'])
-
-                tipo = 'entrada' if item.diferencia > 0 else 'salida'
-                KardexMovimiento.objects.create(
-                    inventory=inv,
-                    almacen=conteo.almacen,
-                    variant=item.variante,
-                    tipo=tipo,
-                    motivo='ajuste_manual',
-                    cantidad=abs(item.diferencia),
-                    stock_anterior=stock_anterior,
-                    stock_actual=item.stock_fisico,
-                    documento_ref=f'CONTEO-{conteo.id}',
-                    usuario=user,
-                    notas=(
-                        f'Ajuste por conteo físico aprobado. '
-                        f'Contado: {item.stock_fisico}, '
-                        f'Sistema: {item.stock_sistema}'
-                    ),
-                )
-                items_ajustados += 1
-
-            conteo.estado = 'aprobado'
-            conteo.aprobado_por = user
-            conteo.save(update_fields=[
-                'estado', 'aprobado_por', 'updated_at'])
+                    items_ajustados += 1
+                conteo.estado = 'aprobado'
+                conteo.aprobado_por = user
+                conteo.save(update_fields=[
+                    'estado', 'aprobado_por', 'updated_at',
+                ])
+        except StockError as exc:
+            return Response({'error': str(exc)}, status=400)
 
         conteo_ref = self.get_queryset().get(pk=conteo.pk)
         return Response({
@@ -815,20 +823,40 @@ class TransferenciaAlmacenViewSet(viewsets.ModelViewSet):
                 {'error': 'Los almacenes deben pertenecer a su tienda'},
                 status=400)
 
+        from products.models import Product
+        from products.stock_service import product_has_variants
+
+        normalized_items = []
+        for item_data in items_data:
+            item = dict(item_data)
+            if 'producto' in item:
+                item['producto_id'] = item.pop('producto')
+            if 'variante' in item:
+                item['variante_id'] = item.pop('variante')
+            for campo in ['producto_nombre', 'variante_detalle', 'id']:
+                item.pop(campo, None)
+            pid = item.get('producto_id')
+            vid = item.get('variante_id')
+            if pid and product_has_variants(pid) and not vid:
+                prod = Product.objects.filter(pk=pid).first()
+                nombre = prod.name if prod else pid
+                return Response(
+                    {
+                        'error': (
+                            f'"{nombre}" tiene variantes: '
+                            f'indique talla/color en la transferencia.'
+                        ),
+                    },
+                    status=400,
+                )
+            normalized_items.append(item)
+
         with transaction.atomic():
             transferencia = serializer.save(
                 vendor=vendor,
                 creado_por=request.user
             )
-            for item_data in items_data:
-                item = dict(item_data)
-                if 'producto' in item:
-                    item['producto_id'] = item.pop('producto')
-                if 'variante' in item:
-                    item['variante_id'] = item.pop('variante')
-                for campo in ['producto_nombre',
-                              'variante_detalle', 'id']:
-                    item.pop(campo, None)
+            for item in normalized_items:
                 TransferenciaAlmacenItem.objects.create(
                     transferencia=transferencia, **item)
 
@@ -851,13 +879,23 @@ class TransferenciaAlmacenViewSet(viewsets.ModelViewSet):
                 status=400)
 
         from products.models import Inventory
-        from vendors.models import KardexMovimiento
+        from products.stock_service import product_has_variants
 
         items = list(
             transferencia.items.select_related(
                 'producto', 'variante').all())
 
         for item in items:
+            if product_has_variants(item.producto_id) and not item.variante_id:
+                return Response(
+                    {
+                        'error': (
+                            f'"{item.producto.name}" tiene variantes: '
+                            f'indique talla/color en la transferencia.'
+                        ),
+                    },
+                    status=400,
+                )
             try:
                 inv_chk = Inventory.objects.get(
                     product=item.producto,
@@ -893,63 +931,41 @@ class TransferenciaAlmacenViewSet(viewsets.ModelViewSet):
                             f'(concurrencia)'
                         )})
 
-                ant_origen = inv_origen.quantity
-                inv_origen.quantity -= item.cantidad
-                inv_origen.save(update_fields=['quantity'])
+                from products.stock_service import apply_stock_delta
 
-                KardexMovimiento.objects.create(
-                    inventory=inv_origen,
+                qty = int(item.cantidad)
+                apply_stock_delta(
+                    product=item.producto,
                     almacen=transferencia.almacen_origen,
+                    delta=-qty,
                     variant=item.variante,
-                    tipo='salida',
-                    motivo='transferencia',
-                    cantidad=item.cantidad,
-                    stock_anterior=ant_origen,
-                    stock_actual=inv_origen.quantity,
-                    documento_ref=f'TRANSF-{transferencia.id}',
                     usuario=request.user,
+                    motivo='transferencia',
+                    documento_ref=f'TRANSF-{transferencia.id}',
                     notas=(
                         f'Transferencia hacia '
                         f'{transferencia.almacen_destino.nombre}'
                     ),
+                    sync_variant_with_inventory=False,
                 )
-
-                inv_destino, _ = Inventory.objects.get_or_create(
+                apply_stock_delta(
                     product=item.producto,
                     almacen=transferencia.almacen_destino,
-                    defaults={
-                        'quantity': 0,
-                        'reserved_quantity': 0,
-                        'purchase_cost': inv_origen.purchase_cost,
-                        'is_active': True,
-                    }
-                )
-                ant_destino = inv_destino.quantity
-                inv_destino.quantity += item.cantidad
-                inv_destino.save(update_fields=['quantity'])
-
-                KardexMovimiento.objects.create(
-                    inventory=inv_destino,
-                    almacen=transferencia.almacen_destino,
+                    delta=qty,
                     variant=item.variante,
-                    tipo='entrada',
-                    motivo='transferencia',
-                    cantidad=item.cantidad,
-                    stock_anterior=ant_destino,
-                    stock_actual=inv_destino.quantity,
-                    documento_ref=f'TRANSF-{transferencia.id}',
                     usuario=request.user,
+                    motivo='transferencia',
+                    documento_ref=f'TRANSF-{transferencia.id}',
                     notas=(
                         f'Transferencia desde '
                         f'{transferencia.almacen_origen.nombre}'
                     ),
+                    sync_variant_with_inventory=False,
+                    update_purchase_cost=inv_origen.purchase_cost,
                 )
 
-                if item.variante:
-                    v = item.variante
-                    v.stock_extra = max(
-                        0, v.stock_extra - item.cantidad)
-                    v.save(update_fields=['stock_extra'])
+                # stock_extra no cambia: la transferencia mueve stock entre almacenes,
+                # el total por variante en la tienda se mantiene.
 
             transferencia.estado = 'completada'
             transferencia.completado_por = request.user

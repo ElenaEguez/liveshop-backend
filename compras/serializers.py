@@ -51,40 +51,32 @@ def _procesar_fila_devolucion(dev, vendor, user, row, documento_ref, notas):
             }
         )
 
-    stock_anterior = inv.quantity
-    inv.quantity = inv.quantity - cantidad
-    inv.save(update_fields=['quantity'])
+    from products.stock_service import StockError, apply_stock_delta, product_has_variants
 
-    KardexMovimiento.objects.create(
-        inventory=inv,
-        almacen=almacen,
-        variant=variante,
-        tipo='salida',
-        motivo='devolucion_compra',
-        cantidad=-cantidad,
-        stock_anterior=stock_anterior,
-        stock_actual=inv.quantity,
-        documento_ref=(
-            f'DCP-{dev.pk}'
-            + (f' ({documento_ref})' if documento_ref else '')
-        ),
-        usuario=user,
-        notas=notas or 'Devolución a proveedor',
-    )
+    if product_has_variants(producto.id) and not variante:
+        raise serializers.ValidationError(
+            {
+                'items': (
+                    f'"{producto.name}" tiene variantes: '
+                    f'indique la variante en la devolución.'
+                ),
+            },
+        )
 
-    if variante is not None:
-        ve = ProductVariant.objects.select_for_update().get(pk=variante.pk)
-        if ve.stock_extra < cantidad:
-            raise serializers.ValidationError(
-                {
-                    'items': (
-                        f'"{producto.name}" variante: stock variante insuficiente '
-                        f'({ve.stock_extra} uds.).'
-                    )
-                }
-            )
-        ve.stock_extra = ve.stock_extra - cantidad
-        ve.save(update_fields=['stock_extra'])
+    doc = f'DCP-{dev.pk}' + (f' ({documento_ref})' if documento_ref else '')
+    try:
+        apply_stock_delta(
+            product=producto,
+            almacen=almacen,
+            delta=-int(cantidad),
+            variant=variante,
+            usuario=user,
+            motivo='devolucion_compra',
+            documento_ref=doc,
+            notas=notas or 'Devolución a proveedor',
+        )
+    except StockError as exc:
+        raise serializers.ValidationError({'items': str(exc)}) from exc
 
     DevolucionCompraItem.objects.create(
         devolucion=dev,

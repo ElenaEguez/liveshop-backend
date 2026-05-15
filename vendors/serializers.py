@@ -306,11 +306,13 @@ class ComprobanteSerializer(serializers.ModelSerializer):
 class ConteoFisicoItemSerializer(serializers.ModelSerializer):
     producto_nombre = serializers.SerializerMethodField()
     variante_detalle = serializers.SerializerMethodField()
+    producto_requiere_variante = serializers.SerializerMethodField()
 
     class Meta:
         model = ConteoFisicoItem
         fields = ['id', 'producto', 'producto_nombre',
                   'variante', 'variante_detalle',
+                  'producto_requiere_variante',
                   'stock_sistema', 'stock_fisico',
                   'diferencia', 'notas', 'contado_por']
         read_only_fields = ['diferencia', 'contado_por']
@@ -326,6 +328,10 @@ class ConteoFisicoItemSerializer(serializers.ModelSerializer):
             'id': v.id, 'talla': v.talla,
             'color': v.color, 'color_hex': v.color_hex,
         }
+
+    def get_producto_requiere_variante(self, obj):
+        from products.stock_service import product_has_variants
+        return product_has_variants(obj.producto_id)
 
 
 class ConteoFisicoSerializer(serializers.ModelSerializer):

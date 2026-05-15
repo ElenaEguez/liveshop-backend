@@ -17,6 +17,13 @@ from asgiref.sync import async_to_sync
 
 from vendors.models import Vendor
 from products.models import Product, ProductVariant, Category
+from products.stock_service import (
+    StockError,
+    apply_stock_delta,
+    check_available_for_sale,
+    get_primary_inventory,
+    product_has_variants,
+)
 from vendors.permissions import IsVendorOrTeamMember, get_vendor_for_user
 from payments.models import Cupon
 from .models import CartOrder, CartOrderItem
@@ -180,6 +187,14 @@ class PublicCheckoutView(APIView):
 
                 variant = None
                 variant_id = item_data.get('variant_id')
+                qty = item_data['quantity']
+
+                if product_has_variants(product.id) and not variant_id:
+                    errors.append(
+                        f"Ítem {i + 1}: '{product.name}' tiene variantes. "
+                        f"Seleccione talla/color."
+                    )
+                    continue
 
                 if variant_id:
                     try:
@@ -188,19 +203,14 @@ class PublicCheckoutView(APIView):
                             product=product,
                             is_active=True,
                         )
-                        available = variant.stock_extra if variant.stock_extra > 0 else product.stock
                     except ProductVariant.DoesNotExist:
                         errors.append(f"Ítem {i + 1}: variante {variant_id} no encontrada.")
                         continue
-                else:
-                    available = product.stock
 
-                qty = item_data['quantity']
-                if available < qty:
-                    errors.append(
-                        f"Stock insuficiente para '{product.name}'. "
-                        f"Disponible: {available}, solicitado: {qty}."
-                    )
+                try:
+                    check_available_for_sale(product.id, qty, variant_id)
+                except StockError as exc:
+                    errors.append(f"Ítem {i + 1}: {exc}")
                     continue
 
                 unit_price = product.price
@@ -264,12 +274,23 @@ class PublicCheckoutView(APIView):
                     unit_price=item['unit_price'],
                     subtotal=item['subtotal'],
                 )
-                if item['variant'] and item['variant'].stock_extra > 0:
-                    item['variant'].stock_extra -= item['quantity']
-                    item['variant'].save(update_fields=['stock_extra'])
-                else:
-                    item['product'].stock -= item['quantity']
-                    item['product'].save(update_fields=['stock'])
+                inv = get_primary_inventory(item['product'].id)
+                if not inv or not inv.almacen:
+                    raise StockError(
+                        f"Sin almacén de inventario para '{item['product'].name}'."
+                    )
+                try:
+                    apply_stock_delta(
+                        product=item['product'],
+                        almacen=inv.almacen,
+                        delta=-int(item['quantity']),
+                        variant=item['variant'],
+                        motivo='venta_web',
+                        documento_ref=f'WEB-{order.id}',
+                        notas=f'Pedido web #{order.id}',
+                    )
+                except StockError as exc:
+                    return Response({'errors': [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
 
             if cupon:
                 cupon.usos_actuales += 1
@@ -350,22 +371,29 @@ class PublicOrderCancelView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Restaurar stock de cada ítem al cancelar.
-        for item in order.items.select_related('product').all():
-            if item.variant_id:
-                try:
-                    variant = ProductVariant.objects.get(pk=item.variant_id)
-                    variant.stock_extra += item.quantity
-                    variant.save(update_fields=['stock_extra'])
-                except ProductVariant.DoesNotExist:
-                    item.product.stock += item.quantity
-                    item.product.save(update_fields=['stock'])
-            else:
-                item.product.stock += item.quantity
-                item.product.save(update_fields=['stock'])
+        with transaction.atomic():
+            for item in order.items.select_related('product').all():
+                variant = None
+                if item.variant_id:
+                    try:
+                        variant = ProductVariant.objects.get(pk=item.variant_id)
+                    except ProductVariant.DoesNotExist:
+                        pass
+                inv = get_primary_inventory(item.product_id)
+                if inv and inv.almacen:
+                    apply_stock_delta(
+                        product=item.product,
+                        almacen=inv.almacen,
+                        delta=int(item.quantity),
+                        variant=variant,
+                        motivo='devolucion',
+                        documento_ref=f'WEB-CANCEL-{order.id}',
+                        notas=f'Cancelación pedido web #{order.id}',
+                    )
 
-        order.status = 'cancelled'
-        order.save(update_fields=['status'])
+            order.status = 'cancelled'
+            order.save(update_fields=['status'])
+
         _emit_vendor_update(
             vendor.id,
             'web_order_status_changed',
@@ -449,22 +477,29 @@ class VendorCartOrderCancelView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Restaurar stock de cada ítem al cancelar
-        for item in order.items.select_related('product').all():
-            if item.variant_id:
-                try:
-                    variant = ProductVariant.objects.get(pk=item.variant_id)
-                    variant.stock_extra += item.quantity
-                    variant.save(update_fields=['stock_extra'])
-                except ProductVariant.DoesNotExist:
-                    item.product.stock += item.quantity
-                    item.product.save(update_fields=['stock'])
-            else:
-                item.product.stock += item.quantity
-                item.product.save(update_fields=['stock'])
+        with transaction.atomic():
+            for item in order.items.select_related('product').all():
+                variant = None
+                if item.variant_id:
+                    try:
+                        variant = ProductVariant.objects.get(pk=item.variant_id)
+                    except ProductVariant.DoesNotExist:
+                        pass
+                inv = get_primary_inventory(item.product_id)
+                if inv and inv.almacen:
+                    apply_stock_delta(
+                        product=item.product,
+                        almacen=inv.almacen,
+                        delta=int(item.quantity),
+                        variant=variant,
+                        motivo='devolucion',
+                        documento_ref=f'WEB-CANCEL-{order.id}',
+                        notas=f'Cancelación pedido web #{order.id} (vendedor)',
+                    )
 
-        order.status = 'cancelled'
-        order.save(update_fields=['status'])
+            order.status = 'cancelled'
+            order.save(update_fields=['status'])
+
         _emit_vendor_update(
             vendor.id,
             'web_order_status_changed',

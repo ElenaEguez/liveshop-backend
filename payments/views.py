@@ -466,8 +466,7 @@ class DevolucionViewSet(viewsets.ModelViewSet):
                 >= total_items_venta
                 else 'parcial')
 
-        from products.models import Inventory
-        from vendors.models import KardexMovimiento
+        from products.stock_service import StockError, apply_stock_delta
 
         with transaction.atomic():
             devolucion = Devolucion.objects.create(
@@ -489,38 +488,27 @@ class DevolucionViewSet(viewsets.ModelViewSet):
                 )
 
                 if d['almacen']:
-                    inv, _ = Inventory.objects.get_or_create(
-                        product=d['venta_item'].product,
-                        almacen=d['almacen'],
-                        defaults={
-                            'quantity': 0,
-                            'reserved_quantity': 0,
-                            'is_active': True,
-                        }
-                    )
-                    stock_anterior = inv.quantity
-                    inv.quantity += d['cantidad']
-                    inv.save(update_fields=['quantity'])
-
-                    KardexMovimiento.objects.create(
-                        inventory=inv,
-                        almacen=d['almacen'],
-                        tipo='entrada',
-                        motivo='devolucion',
-                        cantidad=d['cantidad'],
-                        stock_anterior=stock_anterior,
-                        stock_actual=inv.quantity,
-                        documento_ref=(
-                            f'DEV-{devolucion.id}-'
-                            f'T{venta.numero_ticket}'
-                        ),
-                        usuario=request.user,
-                        notas=(
-                            f'Devolución de venta '
-                            f'#{venta.numero_ticket}. '
-                            f'Motivo: {motivo or "Sin motivo"}'
-                        ),
-                    )
+                    try:
+                        apply_stock_delta(
+                            product=d['venta_item'].product,
+                            almacen=d['almacen'],
+                            delta=int(d['cantidad']),
+                            variant=d['venta_item'].variant,
+                            usuario=request.user,
+                            motivo='devolucion',
+                            documento_ref=(
+                                f'DEV-{devolucion.id}-T{venta.numero_ticket}'
+                            ),
+                            notas=(
+                                f'Devolución de venta #{venta.numero_ticket}. '
+                                f'Motivo: {motivo or "Sin motivo"}'
+                            ),
+                        )
+                    except StockError as exc:
+                        return Response(
+                            {'error': str(exc)},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
 
             if tipo == 'total':
                 venta.status = 'devuelto'

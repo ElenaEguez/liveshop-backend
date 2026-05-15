@@ -33,7 +33,7 @@ class KardexListView(APIView):
         qs = KardexMovimiento.objects.filter(
             inventory__product__vendor=vendor
         ).select_related(
-            'inventory__product', 'almacen', 'usuario'
+            'inventory__product', 'almacen', 'usuario', 'variant',
         ).order_by('-created_at')
 
         p = request.query_params
@@ -91,37 +91,32 @@ class KardexAjusteView(APIView):
             product__vendor=vendor, is_active=True,
         )
 
-        with transaction.atomic():
-            inv = Inventory.objects.select_for_update().get(pk=inventory.pk)
-            stock_anterior = inv.quantity
-            nuevo_stock = inv.quantity + cantidad
+        from products.stock_service import StockError, apply_stock_delta, product_has_variants
 
-            if nuevo_stock < 0:
-                return Response(
-                    {'error': f'Ajuste resultaría en stock negativo ({nuevo_stock}).'},
-                    status=400,
-                )
-
-            inv.quantity = nuevo_stock
-            inv.save(update_fields=['quantity'])
-
-            if cantidad > 0:
-                tipo = 'entrada'
-            elif cantidad < 0:
-                tipo = 'salida'
-            else:
-                tipo = 'ajuste'
-
-            movimiento = KardexMovimiento.objects.create(
-                inventory=inv,
-                almacen=inv.almacen,
-                tipo=tipo,
-                motivo=motivo,
-                cantidad=cantidad,
-                stock_anterior=stock_anterior,
-                stock_actual=inv.quantity,
-                usuario=request.user,
-                notas=notas,
+        if product_has_variants(inventory.product_id):
+            return Response(
+                {
+                    'error': (
+                        'Producto con variantes: use ajuste por variante '
+                        'o conteo físico por talla/color.'
+                    ),
+                },
+                status=400,
             )
 
+        try:
+            result = apply_stock_delta(
+                product=inventory.product,
+                almacen=inventory.almacen,
+                delta=cantidad,
+                variant=None,
+                usuario=request.user,
+                motivo=motivo,
+                documento_ref=f'AJUSTE-KDX-{inventory.id}',
+                notas=notas,
+            )
+        except StockError as exc:
+            return Response({'error': str(exc)}, status=400)
+
+        movimiento = KardexMovimiento.objects.get(pk=result['movimiento_id'])
         return Response(KardexMovimientoSerializer(movimiento).data, status=201)
