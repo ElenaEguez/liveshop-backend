@@ -20,7 +20,7 @@ from asgiref.sync import async_to_sync
 
 from .models import Reservation
 from .serializers import ReservationSerializer, PublicReservationSerializer
-from products.models import ProductVariant
+from products.models import Inventory, ProductVariant
 from products.stock_service import (
     StockError,
     check_available_for_sale,
