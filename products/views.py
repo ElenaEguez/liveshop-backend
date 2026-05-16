@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q, Sum, Min
+from django.db.models.deletion import ProtectedError
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from vendors.permissions import get_vendor_for_user
 from vendors.models import Almacen
@@ -265,30 +266,95 @@ class ProductViewSet(viewsets.ModelViewSet):
         for image in request.FILES.getlist('images'):
             ProductImage.objects.create(product=product, image=image)
 
-    def _sync_variant_objects(self, product, variants):
-        ProductVariant.objects.filter(product=product).delete()
+    @staticmethod
+    def _variant_key(talla: str, color: str) -> tuple[str, str]:
+        return ((talla or '').strip().lower(), (color or '').strip().lower())
+
+    def _normalize_variant_row(self, raw) -> dict | None:
+        if not isinstance(raw, dict):
+            return None
+        talla = (raw.get('size') or raw.get('talla') or '').strip()
+        color = (raw.get('color') or '').strip()
+        if not talla and not color:
+            return None
+        color_hex = (raw.get('color_hex') or '').strip()
+        stock_raw = raw.get('stock', raw.get('stock_extra', 0))
+        try:
+            stock_int = max(int(stock_raw), 0)
+        except (TypeError, ValueError):
+            stock_int = 0
+        return {
+            'talla': talla,
+            'color': color,
+            'color_hex': color_hex,
+            'stock_int': stock_int,
+        }
+
+    def _sync_variant_objects(self, product, variants, *, is_create: bool = False):
         if not isinstance(variants, list):
+            variants = []
+
+        rows = []
+        for item in variants:
+            row = self._normalize_variant_row(item)
+            if row:
+                rows.append(row)
+
+        if is_create:
+            for row in rows:
+                ProductVariant.objects.create(
+                    product=product,
+                    talla=row['talla'],
+                    color=row['color'],
+                    color_hex=row['color_hex'],
+                    stock_extra=row['stock_int'],
+                    is_active=True,
+                )
             return
 
-        for v in variants:
-            if not isinstance(v, dict):
+        desired = {
+            self._variant_key(row['talla'], row['color']): row
+            for row in rows
+        }
+        existing = list(ProductVariant.objects.filter(product=product))
+        existing_by_key = {
+            self._variant_key(pv.talla, pv.color): pv for pv in existing
+        }
+
+        for key, row in desired.items():
+            pv = existing_by_key.get(key)
+            if pv:
+                pv.color_hex = row['color_hex']
+                pv.stock_extra = row['stock_int']
+                pv.is_active = True
+                pv.save(update_fields=['color_hex', 'stock_extra', 'is_active'])
+            else:
+                ProductVariant.objects.create(
+                    product=product,
+                    talla=row['talla'],
+                    color=row['color'],
+                    color_hex=row['color_hex'],
+                    stock_extra=row['stock_int'],
+                    is_active=True,
+                )
+
+        blocked_labels = []
+        for key, pv in existing_by_key.items():
+            if key in desired:
                 continue
-            talla = (v.get('size') or v.get('talla') or '').strip()
-            color = (v.get('color') or '').strip()
-            color_hex = (v.get('color_hex') or '').strip()
-            stock = v.get('stock', 0)
             try:
-                stock_int = int(stock)
-            except (TypeError, ValueError):
-                stock_int = 0
-            ProductVariant.objects.create(
-                product=product,
-                talla=talla,
-                color=color,
-                color_hex=color_hex,
-                stock_extra=max(stock_int, 0),
-                is_active=True,
-            )
+                pv.delete()
+            except ProtectedError:
+                label = ' / '.join(p for p in [pv.talla, pv.color] if p) or 'sin talla/color'
+                blocked_labels.append(label)
+
+        if blocked_labels:
+            raise ValidationError({
+                'variants': (
+                    'No se pueden quitar variantes usadas en compras, transferencias o conteos: '
+                    + ', '.join(blocked_labels)
+                ),
+            })
 
     def _parse_stock(self, request) -> int:
         raw = request.data.get('stock', 0)
@@ -312,7 +378,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             variants=variants,
         )
         self._save_images(product, self.request)
-        self._sync_variant_objects(product, variants)
+        self._sync_variant_objects(product, variants, is_create=True)
         self._sync_inventory_distribution(product, vendor, distribution)
 
     def perform_update(self, serializer):
@@ -326,7 +392,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         product = serializer.save(variants=variants)
         self._sync_existing_images_on_update(product, self.request)
         self._save_images(product, self.request)
-        self._sync_variant_objects(product, variants)
+        self._sync_variant_objects(product, variants, is_create=False)
         vendor = get_vendor_for_user(self.request.user)
         if has_distribution_payload:
             self._sync_inventory_distribution(product, vendor, distribution)
