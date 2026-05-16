@@ -1,3 +1,5 @@
+import json
+
 from rest_framework import serializers
 from django.utils.text import slugify
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
@@ -84,6 +86,22 @@ class ProductSerializer(serializers.ModelSerializer):
         if value == '':
             return None
         return value
+
+    def validate_sell_by(self, value):
+        """Multipart/form-data envía sell_by como JSON string."""
+        if value is None or value == '':
+            return []
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                raise serializers.ValidationError('Formato de "se vende por" inválido.')
+            if not isinstance(parsed, list):
+                raise serializers.ValidationError('sell_by debe ser una lista.')
+            return parsed
+        if isinstance(value, list):
+            return value
+        raise serializers.ValidationError('sell_by debe ser una lista.')
 
 
 class InventorySerializer(serializers.ModelSerializer):

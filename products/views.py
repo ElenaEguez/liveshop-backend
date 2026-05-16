@@ -20,6 +20,7 @@ from .serializers import (
 class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         vendor = get_vendor_for_user(self.request.user)
@@ -289,6 +290,13 @@ class ProductViewSet(viewsets.ModelViewSet):
                 is_active=True,
             )
 
+    def _parse_stock(self, request) -> int:
+        raw = request.data.get('stock', 0)
+        try:
+            return max(int(raw), 0)
+        except (TypeError, ValueError):
+            return 0
+
     def perform_create(self, serializer):
         vendor = get_vendor_for_user(self.request.user)
         if not vendor:
@@ -300,6 +308,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         product = serializer.save(
             vendor=vendor,
             price=0,
+            stock=self._parse_stock(self.request),
             variants=variants,
         )
         self._save_images(product, self.request)
