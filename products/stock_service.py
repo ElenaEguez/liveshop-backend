@@ -25,6 +25,31 @@ def product_has_variants(product_id: int) -> bool:
     ).exists()
 
 
+def product_has_variant_draft(product_id: int) -> bool:
+    """Variantes en JSON del producto aún sin variantes activas en BD."""
+    if product_has_variants(product_id):
+        return False
+    try:
+        raw = Product.objects.values_list('variants', flat=True).get(pk=product_id)
+    except Product.DoesNotExist:
+        return False
+    if not isinstance(raw, list) or not raw:
+        return False
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        talla = (row.get('size') or row.get('talla') or '').strip()
+        color = (row.get('color') or '').strip()
+        if talla or color:
+            return True
+    return len(raw) > 0
+
+
+def kardex_product_visible(product_id: int) -> bool:
+    """Ocultar kardex de productos en borrador de variantes (sin aprobar/sincronizar)."""
+    return not product_has_variant_draft(product_id)
+
+
 def get_or_create_inventory(
     product: Product,
     almacen,

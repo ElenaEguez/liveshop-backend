@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.shortcuts import get_object_or_404
 
 from rest_framework.pagination import PageNumberPagination
@@ -8,8 +9,9 @@ from rest_framework.views import APIView
 
 from vendors.models import KardexMovimiento
 from vendors.permissions import get_vendor_for_user
-from .models import Inventory
+from .models import Inventory, Product, ProductVariant
 from .serializers import KardexMovimientoSerializer
+from .stock_service import kardex_product_visible
 
 
 class KardexPagination(PageNumberPagination):
@@ -49,6 +51,24 @@ class KardexListView(APIView):
             qs = qs.filter(created_at__date__gte=p['fecha_desde'])
         if p.get('fecha_hasta'):
             qs = qs.filter(created_at__date__lte=p['fecha_hasta'])
+
+        # Productos con variantes activas: solo movimientos con variante.
+        has_active_variants = ProductVariant.objects.filter(
+            product_id=OuterRef('inventory__product_id'),
+            is_active=True,
+        )
+        qs = qs.exclude(
+            Exists(has_active_variants),
+            variant__isnull=True,
+        )
+
+        # Productos en borrador de variantes (JSON sin sincronizar): ocultar del kardex.
+        draft_product_ids = [
+            p.id for p in Product.objects.filter(vendor=vendor).only('id', 'variants')
+            if not kardex_product_visible(p.id)
+        ]
+        if draft_product_ids:
+            qs = qs.exclude(inventory__product_id__in=draft_product_ids)
 
         paginator = KardexPagination()
         page = paginator.paginate_queryset(qs, request)

@@ -21,7 +21,7 @@ DEV_VENDOR_EMAILS = (
 if not User.objects.filter(email=ADMIN_EMAIL).exists():
     User.objects.create_superuser(
         email=ADMIN_EMAIL,
-        password='admin',
+        password='Admin2026',
         nombre='admin',
         apellido='Liveshop',
     )

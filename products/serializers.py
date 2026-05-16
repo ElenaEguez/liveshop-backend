@@ -165,6 +165,7 @@ class KardexMovimientoSerializer(serializers.ModelSerializer):
     usuario_email = serializers.EmailField(source='usuario.email', read_only=True, allow_null=True)
     usuario_nombre = serializers.SerializerMethodField()
     variant_name = serializers.SerializerMethodField()
+    detalle_variantes = serializers.SerializerMethodField()
 
     def get_usuario_nombre(self, obj):
         if not obj.usuario:
@@ -178,17 +179,41 @@ class KardexMovimientoSerializer(serializers.ModelSerializer):
         parts = [p for p in [obj.variant.talla, obj.variant.color] if p]
         return ' / '.join(parts) if parts else None
 
+    def _variant_label(self, variant) -> str:
+        parts = [p for p in [variant.talla, variant.color] if p]
+        return ' / '.join(parts) if parts else '—'
+
+    def get_detalle_variantes(self, obj):
+        """Desglose por variante en el mismo documento y producto."""
+        ref = (obj.documento_ref or '').strip()
+        if not ref:
+            return []
+        qs = KardexMovimiento.objects.filter(
+            documento_ref=ref,
+            inventory__product_id=obj.inventory.product_id,
+            variant__isnull=False,
+        ).select_related('variant').order_by('variant__talla', 'variant__color', 'id')
+        lines = []
+        for mov in qs:
+            lines.append({
+                'variant_name': self._variant_label(mov.variant),
+                'cantidad': mov.cantidad,
+                'stock_anterior': mov.stock_anterior,
+                'stock_actual': mov.stock_actual,
+            })
+        return lines
+
     class Meta:
         model = KardexMovimiento
         fields = (
             'id', 'inventory', 'product_id', 'product_name', 'almacen', 'almacen_nombre',
             'tipo', 'motivo', 'cantidad', 'stock_anterior', 'stock_actual',
             'costo_promedio', 'documento_ref', 'usuario', 'usuario_email', 'usuario_nombre',
-            'notas', 'created_at', 'variant_name',
+            'notas', 'created_at', 'variant_name', 'detalle_variantes',
         )
         read_only_fields = (
             'id', 'created_at', 'product_id', 'product_name', 'almacen_nombre',
-            'usuario_email', 'usuario_nombre', 'variant_name',
+            'usuario_email', 'usuario_nombre', 'variant_name', 'detalle_variantes',
         )
 
 

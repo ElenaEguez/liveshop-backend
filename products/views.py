@@ -410,6 +410,7 @@ class InventoryViewSet(viewsets.ModelViewSet):
             return Inventory.objects.none()
         qs = Inventory.objects.filter(product__vendor=vendor)
         almacen_id = self.request.query_params.get('almacen_id')
+        product_id = self.request.query_params.get('product_id')
         category_id = self.request.query_params.get('category')
         search = self.request.query_params.get('search', '').strip()
         talla = self.request.query_params.get('talla', '').strip()
@@ -417,6 +418,8 @@ class InventoryViewSet(viewsets.ModelViewSet):
 
         if almacen_id:
             qs = qs.filter(almacen_id=almacen_id)
+        if product_id:
+            qs = qs.filter(product_id=product_id)
         if category_id:
             qs = qs.filter(product__category_id=category_id)
         if search:
@@ -486,6 +489,12 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 'variante': None,
             }
             enrich_inventory_row(item, almacen_id_int)
+            use_wh = (request.query_params.get('use_warehouse_stock') or '').lower()
+            if use_wh in ('true', '1', 'yes'):
+                item['available_quantity'] = item.get(
+                    'inventario_disponible',
+                    item['available_quantity'],
+                )
             rows.append(item)
 
         ser = InventoryAggregatedSerializer(rows, many=True)
