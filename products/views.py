@@ -18,16 +18,26 @@ from .serializers import (
 )
 
 
+class CategoryPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
 class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = CategoryPagination
 
     def get_queryset(self):
         vendor = get_vendor_for_user(self.request.user)
         if vendor is None:
             return Category.objects.none()
-        return Category.objects.filter(vendor=vendor)
+        qs = Category.objects.filter(vendor=vendor).order_by('-created_at')
+        search = (self.request.query_params.get('search') or '').strip()
+        if search:
+            qs = qs.filter(name__icontains=search)
+        return qs
 
     def perform_create(self, serializer):
         vendor = get_vendor_for_user(self.request.user)
@@ -35,11 +45,25 @@ class CategoryViewSet(viewsets.ModelViewSet):
             raise ValidationError({'vendor': 'Sin perfil de vendedor asociado.'})
         serializer.save(vendor=vendor)
 
+    def perform_destroy(self, instance):
+        if instance.products.exists():
+            raise ValidationError({
+                'detail': 'No se puede eliminar: la categoría tiene productos asociados.',
+            })
+        super().perform_destroy(instance)
+
+
+class ProductListPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 
 class ProductViewSet(viewsets.ModelViewSet):
     MAX_IMAGES = 3
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = ProductListPagination
     ordering = ['-created_at']
 
     def get_queryset(self):
@@ -396,6 +420,22 @@ class ProductViewSet(viewsets.ModelViewSet):
         vendor = get_vendor_for_user(self.request.user)
         if has_distribution_payload:
             self._sync_inventory_distribution(product, vendor, distribution)
+
+    def perform_destroy(self, instance):
+        from payments.models import VentaPOSItem
+        if VentaPOSItem.objects.filter(product=instance).exists():
+            raise ValidationError({
+                'detail': 'No se puede eliminar: el producto tiene ventas registradas.',
+            })
+        try:
+            super().perform_destroy(instance)
+        except ProtectedError:
+            raise ValidationError({
+                'detail': (
+                    'No se puede eliminar: el producto está vinculado a compras, '
+                    'transferencias, conteos u otros movimientos.'
+                ),
+            }) from None
 
     @action(detail=True, methods=['get'], url_path='variantes')
     def variantes(self, request, pk=None):

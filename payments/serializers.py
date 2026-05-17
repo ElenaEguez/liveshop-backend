@@ -95,6 +95,7 @@ class VentaPOSSerializer(serializers.ModelSerializer):
         source='sucursal.nombre', read_only=True, allow_null=True)
     usuario_nombre = serializers.SerializerMethodField()
     usuario_rol_nombre = serializers.SerializerMethodField()
+    caja_nombre = serializers.SerializerMethodField()
     monto_pagado = serializers.SerializerMethodField()
     saldo_pendiente = serializers.SerializerMethodField()
     monto_cobrado = serializers.SerializerMethodField()
@@ -103,7 +104,7 @@ class VentaPOSSerializer(serializers.ModelSerializer):
         model = VentaPOS
         fields = (
             'id', 'numero_ticket', 'vendor', 'sucursal', 'sucursal_nombre',
-            'caja', 'turno', 'cliente_nombre', 'cliente_telefono',
+            'caja', 'caja_nombre', 'turno', 'cliente_nombre', 'cliente_telefono',
             'metodo_pago', 'metodo_pago_nombre', 'subtotal', 'descuento',
             'discount_percentage', 'discount_type',
             'total', 'monto_recibido', 'vuelto', 'cupon', 'status',
@@ -127,6 +128,9 @@ class VentaPOSSerializer(serializers.ModelSerializer):
         if obj.vendor and obj.vendor.user_id == obj.usuario_id:
             return 'Propietario'
         return None
+
+    def get_caja_nombre(self, obj):
+        return obj.caja.nombre if obj.caja else None
 
     def get_monto_pagado(self, obj):
         from django.db.models import Sum

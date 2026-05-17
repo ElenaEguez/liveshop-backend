@@ -55,20 +55,25 @@ class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     vendor = serializers.PrimaryKeyRelatedField(read_only=True)
     variantes = serializers.SerializerMethodField()
+    stock_disponible = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
-            'id', 'name', 'description', 'price', 'stock', 'category',
+            'id', 'name', 'description', 'price', 'stock', 'stock_disponible', 'category',
             'is_active', 'variants', 'variantes', 'images', 'vendor',
             'barcode', 'internal_code', 'sell_by',
             'is_active_live', 'is_active_pos', 'is_active_web',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'vendor', 'images', 'variants', 'variantes',
+            'vendor', 'images', 'variants', 'variantes', 'stock_disponible',
             'price', 'stock', 'created_at', 'updated_at',
         ]
+
+    def get_stock_disponible(self, obj):
+        from .inventory_stock import variant_stock_breakdown
+        return variant_stock_breakdown(obj.id)['disponible_total']
 
     def get_variantes(self, obj):
         qs = obj.variant_objects.filter(is_active=True).order_by('id')

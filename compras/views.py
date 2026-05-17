@@ -1,7 +1,9 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
@@ -187,19 +189,40 @@ def _persist_items(orden, items_data, orden_almacen_id):
                 )
 
 
+class ProveedorPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
 class ProveedorViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = ProveedorSerializer
+    pagination_class = ProveedorPagination
 
     def get_queryset(self):
         vendor = _get_vendor(self.request)
         if not vendor:
             return Proveedor.objects.none()
-        return Proveedor.objects.filter(vendor=vendor)
+        qs = Proveedor.objects.filter(vendor=vendor).order_by('-created_at')
+        search = (self.request.query_params.get('search') or '').strip()
+        if search:
+            qs = qs.filter(nombre__icontains=search)
+        return qs
 
     def perform_create(self, serializer):
         vendor = _get_vendor(self.request)
         serializer.save(vendor=vendor)
+
+    def perform_destroy(self, instance):
+        if instance.ordencompra_set.exists():
+            raise ValidationError({
+                'detail': (
+                    'No se puede eliminar: el proveedor tiene órdenes de compra asociadas. '
+                    'Puede desactivarlo para ocultarlo en nuevas compras sin afectar el historial.'
+                ),
+            })
+        super().perform_destroy(instance)
 
 
 class OrdenCompraViewSet(viewsets.ModelViewSet):

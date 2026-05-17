@@ -18,7 +18,7 @@ class Proveedor(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['nombre']
+        ordering = ['-created_at']
         verbose_name = 'Proveedor'
         verbose_name_plural = 'Proveedores'
 
