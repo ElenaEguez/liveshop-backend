@@ -848,6 +848,11 @@ class OrdersDashboardView(APIView):
         ).aggregate(total=Sum('monto_cierre'))
         ingresos_contado_arqueo = ingresos_contado_agg['total'] or Decimal('0')
 
+        efectivo_esperado_agg = turnos_del_periodo.filter(
+            efectivo_esperado__isnull=False,
+        ).aggregate(total=Sum('efectivo_esperado'))
+        efectivo_esperado_arqueo = efectivo_esperado_agg['total'] or Decimal('0')
+
         if canal == 'tienda':
             canal_total_orders = pos_total_orders
             canal_total_revenue = pos_total_revenue
@@ -887,6 +892,9 @@ class OrdersDashboardView(APIView):
         response_data['total_retiros_caja'] = str(total_retiros_caja)
         response_data['ingresos_contado_arqueo'] = str(
             round(ingresos_contado_arqueo, 2)
+        )
+        response_data['efectivo_esperado_arqueo'] = str(
+            round(efectivo_esperado_arqueo, 2)
         )
         response_data['canal'] = canal
 

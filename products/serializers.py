@@ -177,10 +177,8 @@ class ProductPOSSerializer(serializers.ModelSerializer):
         )
 
     def get_stock_disponible(self, obj):
-        inv = obj.inventories.filter(is_active=True).first()
-        if inv:
-            return inv.quantity - inv.reserved_quantity
-        return obj.stock
+        from .inventory_stock import variant_stock_breakdown
+        return variant_stock_breakdown(obj.id)['disponible_total']
 
     def get_imagen_thumbnail(self, obj):
         request = self.context.get('request')

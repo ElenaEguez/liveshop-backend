@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 from rest_framework import serializers
+
+from config.request_utils import secure_absolute_uri
 from .models import (
     Vendor,
     TeamMember,
@@ -34,6 +36,13 @@ class VendorSerializer(serializers.ModelSerializer):
     def get_user_name(self, obj):
         return obj.user.get_full_name()
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        if data.get('logo'):
+            data['logo'] = secure_absolute_uri(request, data['logo'])
+        return data
+
 
 class VendorProfileSerializer(serializers.ModelSerializer):
     """Serializer for detailed vendor profile with user information"""
@@ -48,6 +57,14 @@ class VendorProfileSerializer(serializers.ModelSerializer):
                   'inventory_method',
                   'is_verified', 'created_at', 'updated_at')
         read_only_fields = ('id', 'user', 'user_id', 'slug', 'created_at', 'updated_at', 'is_verified')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        for field in ('logo', 'payment_qr_image'):
+            if data.get(field):
+                data[field] = secure_absolute_uri(request, data[field])
+        return data
 
 
 class CustomRoleSerializer(serializers.ModelSerializer):
@@ -294,8 +311,8 @@ class TicketConfigSerializer(serializers.ModelSerializer):
         if not logo:
             return None
         if request:
-            return request.build_absolute_uri(logo.url)
-        return logo.url
+            return secure_absolute_uri(request, logo.url)
+        return secure_absolute_uri(None, logo.url)
 
 
 class ComprobanteSerializer(serializers.ModelSerializer):

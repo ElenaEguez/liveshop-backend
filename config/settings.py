@@ -174,6 +174,9 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
     'http://srv1544228.hstgr.cloud',
 ])
 
+# Nginx / reverse proxy: Django must see HTTPS for build_absolute_uri (media logos, etc.)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # CORS settings - frontend runs on Angular dev server
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     'http://localhost:4200',

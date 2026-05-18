@@ -332,8 +332,12 @@ class TurnoCaja(models.Model):
 
     @property
     def total_ventas(self):
-        return self.ventas.aggregate(
-            total=models.Sum('total'))['total'] or 0
+        from django.db.models import Q
+        total = self.ventas.exclude(status='anulada').filter(
+            Q(status='completada')
+            | Q(es_credito=True, status__in=['credito', 'completada'])
+        ).aggregate(total=models.Sum('total'))['total']
+        return total or 0
 
     @property
     def total_ingresos_manuales(self):

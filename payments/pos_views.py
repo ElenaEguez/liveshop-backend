@@ -99,6 +99,62 @@ def _ventas_incluidas_arqueo_q():
     )
 
 
+def _calc_efectivo_esperado_turno(turno):
+    """
+    Efectivo que debería haber en caja al cerrar el turno.
+    Incluye ventas al contado en efectivo, abonos de crédito en efectivo
+    y créditos cobrados de una vez (sin abonos parciales), sin doble contar.
+    """
+    ventas_contado_ef = VentaPOS.objects.filter(
+        turno=turno,
+        status='completada',
+        es_credito=False,
+        metodo_pago__tipo='efectivo',
+    ).aggregate(t=Sum('total'))['t'] or Decimal('0')
+
+    pagos_ef = PagoCredito.objects.filter(
+        venta__turno=turno,
+        metodo_pago__tipo='efectivo',
+    ).aggregate(t=Sum('monto'))['t'] or Decimal('0')
+
+    ventas_credito_ef = VentaPOS.objects.filter(
+        turno=turno,
+        status='completada',
+        es_credito=True,
+        metodo_pago__tipo='efectivo',
+    ).annotate(n_pagos=Count('pagos_credito')).filter(n_pagos=0).aggregate(
+        t=Sum('total')
+    )['t'] or Decimal('0')
+
+    ingresos = MovimientoCaja.objects.filter(turno=turno, tipo='ingreso').aggregate(
+        t=Sum('monto')
+    )['t'] or Decimal('0')
+    retiros = MovimientoCaja.objects.filter(turno=turno, tipo='retiro').aggregate(
+        t=Sum('monto')
+    )['t'] or Decimal('0')
+
+    ventas_contado_ef = _to_decimal(ventas_contado_ef)
+    pagos_ef = _to_decimal(pagos_ef)
+    ventas_credito_ef = _to_decimal(ventas_credito_ef)
+    total_efectivo_ventas = ventas_contado_ef + pagos_ef + ventas_credito_ef
+    efectivo_esperado = (
+        _to_decimal(turno.monto_apertura)
+        + total_efectivo_ventas
+        + _to_decimal(ingresos)
+        - _to_decimal(retiros)
+    )
+
+    return {
+        'efectivo_esperado': efectivo_esperado,
+        'ventas_contado_efectivo': ventas_contado_ef,
+        'pagos_credito_efectivo': pagos_ef,
+        'creditos_cobrados_efectivo': ventas_credito_ef,
+        'total_efectivo_ventas': total_efectivo_ventas,
+        'total_ingresos': _to_decimal(ingresos),
+        'total_retiros': _to_decimal(retiros),
+    }
+
+
 def _metodo_venta_arqueo(venta):
     if venta.es_credito:
         return 'credito', 'Crédito'
@@ -906,13 +962,8 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
 
         with transaction.atomic():
             monto_cierre_dec = Decimal(str(monto_cierre))
-            # Calcular efectivo esperado antes de guardar
-            ventas_ef = VentaPOS.objects.filter(
-                turno=turno, status='completada', metodo_pago__tipo='efectivo'
-            ).aggregate(t=Sum('total'))['t'] or Decimal('0')
-            ingresos = MovimientoCaja.objects.filter(turno=turno, tipo='ingreso').aggregate(t=Sum('monto'))['t'] or Decimal('0')
-            retiros  = MovimientoCaja.objects.filter(turno=turno, tipo='retiro').aggregate(t=Sum('monto'))['t'] or Decimal('0')
-            efect_esp = turno.monto_apertura + ventas_ef + ingresos - retiros
+            arqueo = _calc_efectivo_esperado_turno(turno)
+            efect_esp = arqueo['efectivo_esperado']
 
             turno.status = 'cerrado'
             turno.monto_cierre = monto_cierre_dec
@@ -962,18 +1013,15 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         turno = get_object_or_404(self.get_queryset(), pk=pk)
 
         ventas = VentaPOS.objects.filter(
-            turno=turno, status='completada'
-        ).select_related('metodo_pago')
+            turno=turno,
+        ).filter(_ventas_incluidas_arqueo_q()).select_related('metodo_pago')
 
         agg = ventas.aggregate(total=Sum('total'), cantidad=Count('id'))
         total_ventas = agg['total'] or Decimal('0')
 
         # Ventas agrupadas por método de pago
         por_metodo: dict = {}
-        total_ventas_efectivo = Decimal('0')
-        cantidad_ventas_efectivo = 0
         for v in ventas:
-            tipo_mp = v.metodo_pago.tipo if v.metodo_pago else ''
             if v.metodo_pago:
                 nombre = v.metodo_pago.nombre
             elif v.es_credito:
@@ -984,23 +1032,20 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
                 por_metodo[nombre] = {'total': Decimal('0'), 'cantidad': 0}
             por_metodo[nombre]['total'] += v.total
             por_metodo[nombre]['cantidad'] += 1
-            if tipo_mp == 'efectivo':
-                total_ventas_efectivo += v.total
-                cantidad_ventas_efectivo += 1
 
-        # Movimientos manuales de caja
-        movs = MovimientoCaja.objects.filter(turno=turno)
-        total_ingresos = movs.filter(tipo='ingreso').aggregate(t=Sum('monto'))['t'] or Decimal('0')
-        total_retiros  = movs.filter(tipo='retiro').aggregate(t=Sum('monto'))['t'] or Decimal('0')
-
-        efectivo_esperado = turno.monto_apertura + total_ventas_efectivo + total_ingresos - total_retiros
+        arqueo = _calc_efectivo_esperado_turno(turno)
+        efectivo_esperado = arqueo['efectivo_esperado']
+        total_ingresos = arqueo['total_ingresos']
+        total_retiros = arqueo['total_retiros']
 
         return Response({
             'turno': TurnoCajaSerializer(turno).data,
             'total_ventas': str(total_ventas),
             'cantidad_ventas': agg['cantidad'] or 0,
-            'cantidad_ventas_efectivo': cantidad_ventas_efectivo,
-            'total_ventas_efectivo': str(total_ventas_efectivo),
+            'total_ventas_efectivo': str(arqueo['total_efectivo_ventas']),
+            'ventas_contado_efectivo': str(arqueo['ventas_contado_efectivo']),
+            'pagos_credito_efectivo': str(arqueo['pagos_credito_efectivo']),
+            'creditos_cobrados_efectivo': str(arqueo['creditos_cobrados_efectivo']),
             'total_ingresos': str(total_ingresos),
             'total_retiros': str(total_retiros),
             'efectivo_esperado': str(efectivo_esperado),
@@ -1527,6 +1572,27 @@ class MovimientosCajaView(APIView):
                 'usuario': usuario,
                 'detalle': m.concepto,
                 'monto': str(m.monto),
+            })
+
+        # ── Abonos de crédito ─────────────────────────────────────────────────
+        pagos_credito = apply_date(
+            PagoCredito.objects.filter(venta__vendor=vendor)
+            .select_related('venta__caja', 'metodo_pago', 'usuario'),
+            'created_at',
+        )
+        for p in pagos_credito:
+            usuario = p.usuario.get_full_name() if p.usuario else '—'
+            if not usuario.strip():
+                usuario = getattr(p.usuario, 'email', '—') if p.usuario else '—'
+            metodo = p.metodo_pago.nombre if p.metodo_pago else 'Sin método'
+            ticket = p.venta.numero_ticket if p.venta else '—'
+            rows.append({
+                'fecha': p.created_at.isoformat(),
+                'caja': str(p.venta.caja) if p.venta and p.venta.caja else '—',
+                'tipo': 'COBRO_CREDITO',
+                'usuario': usuario,
+                'detalle': f'Abono crédito ticket {ticket} ({metodo})',
+                'monto': str(p.monto),
             })
 
         # ── Ordenar por fecha desc ─────────────────────────────────────────────
