@@ -22,7 +22,10 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from vendors.models import Sucursal, Caja, TurnoCaja, MovimientoCaja, KardexMovimiento, Vendor, TeamMember
+from vendors.models import (
+    Sucursal, Caja, TurnoCaja, MovimientoCaja, KardexMovimiento,
+    Vendor, TeamMember, CustomRole,
+)
 from vendors.permissions import IsVendorOrTeamMember, get_vendor_for_user
 from vendors.serializers import TurnoCajaSerializer, MovimientoCajaSerializer
 from products.models import Inventory, ProductVariant
@@ -88,6 +91,85 @@ def _to_decimal(val):
         return Decimal('0')
 
 
+def _ventas_incluidas_arqueo_q():
+    """Ventas que cuentan en arqueos: completadas + crédito pendiente o cobrado."""
+    return (
+        Q(status='completada')
+        | Q(es_credito=True, status__in=['credito', 'completada'])
+    )
+
+
+def _metodo_venta_arqueo(venta):
+    if venta.es_credito:
+        return 'credito', 'Crédito'
+    if venta.metodo_pago:
+        return venta.metodo_pago.tipo or 'otro', venta.metodo_pago.nombre
+    return 'otro', 'Otro'
+
+
+def _aggregate_ventas_arqueo(ventas_qs):
+    """Totales por cajero y por método (incluye Crédito) para arqueos."""
+    cajero_map = {}
+    global_metodo = {}
+    for v in ventas_qs.select_related('metodo_pago', 'usuario'):
+        tipo, nombre = _metodo_venta_arqueo(v)
+        monto = _to_decimal(v.total)
+
+        uid = v.usuario_id
+        if uid is not None:
+            if uid not in cajero_map:
+                nom = (getattr(v.usuario, 'nombre', None) or '').strip()
+                ape = (getattr(v.usuario, 'apellido', None) or '').strip()
+                name = f'{nom} {ape}'.strip()
+                if not name:
+                    name = getattr(v.usuario, 'email', None) or '—'
+                cajero_map[uid] = {
+                    'id': uid, 'nombre': name,
+                    'total': Decimal('0'), 'por_metodo': {},
+                }
+            cajero_map[uid]['total'] += monto
+            pm = cajero_map[uid]['por_metodo'].setdefault(
+                tipo, {'nombre': nombre, 'total': Decimal('0'), 'cantidad': 0}
+            )
+            pm['total'] += monto
+            pm['cantidad'] += 1
+
+        gm = global_metodo.setdefault(
+            tipo, {'nombre': nombre, 'total': Decimal('0'), 'cantidad': 0}
+        )
+        gm['total'] += monto
+        gm['cantidad'] += 1
+
+    totales_por_cajero = [
+        {
+            'id': v['id'],
+            'nombre': v['nombre'],
+            'total': str(_to_decimal(v['total']).quantize(Decimal('0.01'))),
+            'por_metodo': [
+                {'tipo': k, 'nombre': m['nombre'],
+                 'total': str(_to_decimal(m['total']).quantize(Decimal('0.01'))),
+                 'cantidad': m['cantidad']}
+                for k, m in v['por_metodo'].items()
+            ],
+        }
+        for v in cajero_map.values()
+    ]
+    totales_por_metodo = sorted(
+        [
+            {
+                'tipo': tipo,
+                'nombre': m['nombre'],
+                'total': str(_to_decimal(m['total']).quantize(Decimal('0.01'))),
+                'cantidad': m['cantidad'],
+            }
+            for tipo, m in global_metodo.items()
+        ],
+        key=lambda x: Decimal(x['total']),
+        reverse=True,
+    )
+    return totales_por_cajero, totales_por_metodo
+
+
 def _emit_vendor_update(vendor_id, event_type, data):
     """Send a real-time event to the vendor's WebSocket group."""
     try:
@@ -116,6 +198,55 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
     def _get_vendor(self):
         return _vendor_or_403(self.request.user)
 
+    def _apply_periodo_filter(self, qs, p):
+        """Filtra por periodo (today/week/month/year) o por fecha explícita."""
+        periodo = p.get('periodo')
+        today = timezone.localdate()
+        if periodo == 'today':
+            return qs.filter(created_at__date=today)
+        if periodo == 'week':
+            week_start = today - timedelta(days=today.weekday())
+            return qs.filter(
+                created_at__date__gte=week_start,
+                created_at__date__lte=today,
+            )
+        if periodo == 'month':
+            return qs.filter(
+                created_at__year=today.year,
+                created_at__month=today.month,
+            )
+        if periodo == 'year':
+            return qs.filter(created_at__year=today.year)
+        fecha = (p.get('fecha') or '').strip()
+        if fecha:
+            try:
+                return qs.filter(created_at__date=date.fromisoformat(fecha))
+            except ValueError:
+                pass
+        return qs
+
+    def _apply_filtros_date_range(self, qs, p):
+        """Rango para /ventas/filtros/: fecha_desde/hasta o últimos 90 días."""
+        fecha_desde = (p.get('fecha_desde') or '').strip()
+        fecha_hasta = (p.get('fecha_hasta') or '').strip()
+        today = timezone.localdate()
+        if fecha_desde or fecha_hasta:
+            if fecha_desde:
+                try:
+                    qs = qs.filter(created_at__date__gte=date.fromisoformat(fecha_desde))
+                except ValueError:
+                    pass
+            if fecha_hasta:
+                try:
+                    qs = qs.filter(created_at__date__lte=date.fromisoformat(fecha_hasta))
+                except ValueError:
+                    pass
+            return qs
+        if p.get('periodo'):
+            return self._apply_periodo_filter(qs, p)
+        start = today - timedelta(days=90)
+        return qs.filter(created_at__date__gte=start, created_at__date__lte=today)
+
     def get_queryset(self):
         vendor = self._get_vendor()
         qs = VentaPOS.objects.filter(vendor=vendor).select_related(
@@ -125,45 +256,25 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         ).order_by('-created_at')
 
         p = self.request.query_params
-        periodo = p.get('periodo')
-        today = timezone.localdate()
-        if periodo == 'today':
-            qs = qs.filter(created_at__date=today)
-        elif periodo == 'week':
-            week_start = today - timedelta(days=today.weekday())
-            qs = qs.filter(created_at__date__gte=week_start, created_at__date__lte=today)
-        elif periodo == 'month':
-            qs = qs.filter(created_at__year=today.year, created_at__month=today.month)
-        elif periodo == 'year':
-            qs = qs.filter(created_at__year=today.year)
+        qs = self._apply_periodo_filter(qs, p)
         if p.get('sucursal_id'):
             qs = qs.filter(sucursal_id=p['sucursal_id'])
         if p.get('cajero_id'):
             qs = qs.filter(usuario_id=p['cajero_id'])
-        rol = (p.get('rol') or '').strip()
-        if rol:
-            if rol in ('owner', 'propietario'):
-                qs = qs.filter(usuario_id=vendor.user_id)
-            elif rol.startswith('role:') and rol.split(':', 1)[1].isdigit():
-                role_id = int(rol.split(':', 1)[1])
+        rol_id = p.get('rol_id')
+        if rol_id:
+            try:
+                rid = int(rol_id)
                 user_ids = TeamMember.objects.filter(
-                    vendor=vendor, is_active=True, custom_role_id=role_id
+                    vendor=vendor,
+                    is_active=True,
+                    custom_role_id=rid,
                 ).values_list('user_id', flat=True)
-                qs = qs.filter(usuario_id__in=user_ids)
-            elif rol.isdigit():
-                user_ids = TeamMember.objects.filter(
-                    vendor=vendor, is_active=True, custom_role_id=int(rol)
-                ).values_list('user_id', flat=True)
-                qs = qs.filter(usuario_id__in=user_ids)
-            else:
-                user_ids = TeamMember.objects.filter(
-                    vendor=vendor, is_active=True, custom_role__name__iexact=rol
-                ).values_list('user_id', flat=True)
-                qs = qs.filter(usuario_id__in=user_ids)
+                qs = qs.filter(usuario_id__in=list(user_ids))
+            except (TypeError, ValueError):
+                pass
         if p.get('metodo_pago_tipo'):
             qs = qs.filter(metodo_pago__tipo=p['metodo_pago_tipo'])
-        if p.get('fecha'):
-            qs = qs.filter(created_at__date=p['fecha'])
         if p.get('status'):
             qs = qs.filter(status=p['status'])
         if p.get('search'):
@@ -179,6 +290,62 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         if page is not None:
             return self.get_paginated_response(VentaPOSSerializer(page, many=True).data)
         return Response(VentaPOSSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=['get'], url_path='filtros')
+    def filtros(self, request):
+        """
+        GET /api/v1/pos/ventas/filtros/
+        Cajeros distintos en ventas del período; roles del vendor (CustomRole).
+        Query: periodo | fecha_desde | fecha_hasta (default últimos 90 días).
+        """
+        vendor = self._get_vendor()
+        p = request.query_params
+        qs = self._apply_filtros_date_range(
+            VentaPOS.objects.filter(vendor=vendor),
+            p,
+        )
+
+        cajeros_map = {}
+        rows = (
+            qs.exclude(usuario_id__isnull=True)
+            .values(
+                'usuario_id',
+                'usuario__nombre',
+                'usuario__apellido',
+                'usuario__email',
+            )
+            .distinct()
+        )
+        for row in rows:
+            uid = row['usuario_id']
+            if uid in cajeros_map:
+                continue
+            nom = (row.get('usuario__nombre') or '').strip()
+            ape = (row.get('usuario__apellido') or '').strip()
+            nombre = f'{nom} {ape}'.strip()
+            if not nombre:
+                nombre = row.get('usuario__email') or f'Usuario {uid}'
+            cajeros_map[uid] = nombre
+
+        cajeros = [
+            {'id': uid, 'nombre': nombre}
+            for uid, nombre in sorted(cajeros_map.items(), key=lambda x: x[1].lower())
+        ]
+
+        roles = list(
+            CustomRole.objects.filter(vendor=vendor)
+            .order_by('name')
+            .values('id', 'name')
+        )
+        roles_data = [
+            {'id': r['id'], 'nombre': r['name']}
+            for r in roles
+        ]
+
+        return Response({
+            'cajeros': cajeros,
+            'roles': roles_data,
+        })
 
     @action(detail=False, methods=['get'])
     def resumen(self, request):
@@ -937,7 +1104,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
     def arqueos(self, request):
         """
         GET /api/v1/pos/turnos/arqueos/
-        Params: periodo, page, page_size, semana, cajero_id, sucursal_id, metodo_pago_tipo, rol
+        Params: periodo, page, page_size, semana, cajero_id, sucursal_id, metodo_pago_tipo, rol_id
         Returns paginated turnos + totales_por_cajero + totales_por_metodo.
         """
         vendor = self._get_vendor()
@@ -996,26 +1163,18 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
         cajero_id = request.query_params.get('cajero_id')
         if cajero_id:
             qs = qs.filter(usuario_id=cajero_id)
-        rol = (request.query_params.get('rol') or '').strip()
-        if rol:
-            if rol in ('owner', 'propietario'):
-                qs = qs.filter(usuario_id=vendor.user_id)
-            elif rol.startswith('role:') and rol.split(':', 1)[1].isdigit():
-                role_id = int(rol.split(':', 1)[1])
+        rol_id = request.query_params.get('rol_id')
+        if rol_id:
+            try:
+                rid = int(rol_id)
                 user_ids = TeamMember.objects.filter(
-                    vendor=vendor, is_active=True, custom_role_id=role_id
+                    vendor=vendor,
+                    is_active=True,
+                    custom_role_id=rid,
                 ).values_list('user_id', flat=True)
-                qs = qs.filter(usuario_id__in=user_ids)
-            elif rol.isdigit():
-                user_ids = TeamMember.objects.filter(
-                    vendor=vendor, is_active=True, custom_role_id=int(rol)
-                ).values_list('user_id', flat=True)
-                qs = qs.filter(usuario_id__in=user_ids)
-            else:
-                user_ids = TeamMember.objects.filter(
-                    vendor=vendor, is_active=True, custom_role__name__iexact=rol
-                ).values_list('user_id', flat=True)
-                qs = qs.filter(usuario_id__in=user_ids)
+                qs = qs.filter(usuario_id__in=list(user_ids))
+            except (TypeError, ValueError):
+                pass
 
         sucursal_id = request.query_params.get('sucursal_id')
         if sucursal_id:
@@ -1030,74 +1189,20 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             totales_por_cajero = []
             totales_por_metodo = []
         else:
-            # Ventas agrupadas por cajero + método
-            ventas_filter = {'turno_id__in': turno_ids, 'status': 'completada'}
+            ventas_qs = VentaPOS.objects.filter(
+                turno_id__in=turno_ids,
+            ).filter(_ventas_incluidas_arqueo_q())
             if metodo_pago_tipo:
-                ventas_filter['metodo_pago__tipo'] = metodo_pago_tipo
-
-            ventas_cajero_qs = (
-                VentaPOS.objects.filter(**ventas_filter)
-                .values(
-                    'usuario__id', 'usuario__nombre',
-                    'usuario__apellido', 'usuario__email',
-                    'metodo_pago__tipo', 'metodo_pago__nombre',
-                )
-                .annotate(subtotal_venta=Sum('total'), cant=Count('id'))
-            )
-
-            cajero_map: dict = {}
-            for row in ventas_cajero_qs:
-                uid = row['usuario__id']
-                if uid not in cajero_map:
-                    nom = row['usuario__nombre'] or ''
-                    ape = row['usuario__apellido'] or ''
-                    name = f'{nom} {ape}'.strip() or row['usuario__email'] or '—'
-                    cajero_map[uid] = {
-                        'id': uid, 'nombre': name,
-                        'total': Decimal('0'), 'por_metodo': {},
-                    }
-                monto = _to_decimal(row['subtotal_venta'])
-                cajero_map[uid]['total'] += monto
-                tipo  = row['metodo_pago__tipo'] or 'otro'
-                mnombre = row['metodo_pago__nombre'] or 'Otro'
-                pm = cajero_map[uid]['por_metodo'].setdefault(
-                    tipo, {'nombre': mnombre, 'total': Decimal('0'), 'cantidad': 0}
-                )
-                pm['total'] += monto
-                pm['cantidad'] += row['cant'] or 0
-
-            totales_por_cajero = [
-                {
-                    'id': v['id'],
-                    'nombre': v['nombre'],
-                    'total': str(_to_decimal(v['total']).quantize(Decimal('0.01'))),
-                    'por_metodo': [
-                        {'tipo': k, 'nombre': m['nombre'],
-                         'total': str(_to_decimal(m['total']).quantize(Decimal('0.01'))),
-                         'cantidad': m['cantidad']}
-                        for k, m in v['por_metodo'].items()
-                    ],
-                }
-                for v in cajero_map.values()
-            ]
-
-            # Totales globales por método
-            # No usar alias "total" (colisiona con el campo VentaPOS.total en ORDER BY en SQLite).
-            ventas_metodo_qs = (
-                VentaPOS.objects.filter(**ventas_filter)
-                .values('metodo_pago__tipo', 'metodo_pago__nombre')
-                .annotate(sum_total=Sum('total'), cantidad=Count('id'))
-                .order_by('-sum_total')
-            )
-            totales_por_metodo = [
-                {
-                    'tipo': r['metodo_pago__tipo'] or 'otro',
-                    'nombre': r['metodo_pago__nombre'] or 'Otro',
-                    'total': str(_to_decimal(r['sum_total']).quantize(Decimal('0.01'))),
-                    'cantidad': r['cantidad'],
-                }
-                for r in ventas_metodo_qs
-            ]
+                if metodo_pago_tipo == 'credito':
+                    ventas_qs = ventas_qs.filter(
+                        Q(es_credito=True) | Q(metodo_pago__tipo='credito')
+                    )
+                else:
+                    ventas_qs = ventas_qs.filter(
+                        metodo_pago__tipo=metodo_pago_tipo,
+                        es_credito=False,
+                    )
+            totales_por_cajero, totales_por_metodo = _aggregate_ventas_arqueo(ventas_qs)
 
         # ── Paginación ────────────────────────────────────────────────────────
         page_size = _safe_int(request.query_params.get('page_size', 20), default=20, min_value=1, max_value=100)

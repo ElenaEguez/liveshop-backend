@@ -2,6 +2,7 @@ from django.db import models as django_models
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -38,6 +39,11 @@ from .permissions import (
     IsVendorOrWarehouseTeamMember,
     get_role_for_user,
 )
+from .role_permissions import (
+    GRANULAR_MODULE_KEYS,
+    LEGACY_MODULE_ALIASES,
+    build_permisos_modulos,
+)
 
 User = get_user_model()
 
@@ -56,6 +62,16 @@ def _user_has_inventory_perm(user):
         return True
     role = get_role_for_user(user)
     return bool(role and getattr(role, 'perm_inventory', False))
+
+
+def _is_vendor_owner(user, vendor):
+    """True si el usuario es el propietario (cuenta vendor) de la tienda."""
+    if not vendor:
+        return False
+    return (
+        hasattr(user, 'vendor_profile')
+        and user.vendor_profile.pk == vendor.pk
+    )
 
 
 class VendorProfileView(APIView):
@@ -420,11 +436,8 @@ class MisPermisosView(APIView):
 
         # Superadmin → acceso total
         if user.is_staff or user.is_superuser:
-            todos = {
-                m: {'ver': True, 'operar': True}
-                for m in ['pos', 'inventario', 'almacen', 'compras', 'reportes',
-                          'livestream', 'productos', 'configuracion', 'pedidos', 'pagos']
-            }
+            mod_keys = list(GRANULAR_MODULE_KEYS) + list(LEGACY_MODULE_ALIASES.keys())
+            todos = {m: {'ver': True, 'operar': True} for m in mod_keys}
             return Response({
                 'rol': 'superadmin',
                 'vendor_id': None,
@@ -439,11 +452,8 @@ class MisPermisosView(APIView):
         # Propietario del vendor
         if hasattr(user, 'vendor_profile'):
             vendor = user.vendor_profile
-            todos = {
-                m: {'ver': True, 'operar': True}
-                for m in ['pos', 'inventario', 'almacen', 'compras', 'reportes',
-                          'livestream', 'productos', 'configuracion', 'pedidos', 'pagos']
-            }
+            mod_keys = list(GRANULAR_MODULE_KEYS) + list(LEGACY_MODULE_ALIASES.keys())
+            todos = {m: {'ver': True, 'operar': True} for m in mod_keys}
             return Response({
                 'rol': 'propietario',
                 'vendor_id': vendor.id,
@@ -461,24 +471,10 @@ class MisPermisosView(APIView):
             vendor = tm.vendor
             role = tm.custom_role
 
-            # Mapeo de perm_* a estructura {ver, operar}
-            # 'operar' = mismo booleano que 'ver' (el sistema actual no diferencia)
-            MODULO_MAP = {
-                'pos':           getattr(role, 'perm_pos',           False) if role else False,
-                'inventario':    getattr(role, 'perm_inventory',      False) if role else False,
-                'almacen':       getattr(role, 'perm_warehouse',      False) if role else False,
-                'compras':       getattr(role, 'perm_compras',        False) if role else False,
-                'reportes':      getattr(role, 'perm_dashboard',      False) if role else False,
-                'livestream':    getattr(role, 'perm_live_sessions',  False) if role else False,
-                'productos':     getattr(role, 'perm_products',       False) if role else False,
-                'configuracion': getattr(role, 'perm_team',           False) if role else False,
-                'pedidos':       getattr(role, 'perm_orders',         False) if role else False,
-                'pagos':         getattr(role, 'perm_payments',       False) if role else False,
-            }
-
+            mod_bools = build_permisos_modulos(role)
             permisos = {
                 modulo: {'ver': tiene, 'operar': tiene}
-                for modulo, tiene in MODULO_MAP.items()
+                for modulo, tiene in mod_bools.items()
             }
 
             return Response({
@@ -495,10 +491,17 @@ class MisPermisosView(APIView):
         return Response({'error': 'Usuario sin vendor asignado'}, status=400)
 
 
+class ConteoFisicoPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class ConteoFisicoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsVendorOrWarehouseTeamMember]
     serializer_class = ConteoFisicoSerializer
-    http_method_names = ['get', 'post', 'head', 'options']
+    pagination_class = ConteoFisicoPagination
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
 
     def get_queryset(self):
         vendor = get_vendor_for_user(self.request.user)
@@ -511,7 +514,33 @@ class ConteoFisicoViewSet(viewsets.ModelViewSet):
         )
         estado = (self.request.query_params.get('estado') or '').strip()
         if estado:
-            qs = qs.filter(estado=estado)
+            if ',' in estado:
+                estados = [e.strip() for e in estado.split(',') if e.strip()]
+                qs = qs.filter(estado__in=estados)
+            else:
+                qs = qs.filter(estado=estado)
+
+        almacen_id = self.request.query_params.get('almacen_id')
+        if almacen_id:
+            try:
+                qs = qs.filter(almacen_id=int(almacen_id))
+            except (TypeError, ValueError):
+                pass
+
+        fecha_desde = (self.request.query_params.get('fecha_desde') or '').strip()
+        if fecha_desde:
+            try:
+                qs = qs.filter(created_at__date__gte=datetime.date.fromisoformat(fecha_desde))
+            except ValueError:
+                pass
+
+        fecha_hasta = (self.request.query_params.get('fecha_hasta') or '').strip()
+        if fecha_hasta:
+            try:
+                qs = qs.filter(created_at__date__lte=datetime.date.fromisoformat(fecha_hasta))
+            except ValueError:
+                pass
+
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -552,30 +581,16 @@ class ConteoFisicoViewSet(viewsets.ModelViewSet):
         Calcula stock_sistema desde Inventory automáticamente.
         """
         conteo = self.get_object()
-        estado = conteo.estado
-        if estado in ('aprobado', 'cancelado'):
+        if conteo.estado != 'abierto':
             return Response(
-                {'error': 'No se pueden modificar conteos aprobados o cancelados'},
+                {'error': 'Solo se pueden agregar ítems a conteos abiertos.'},
                 status=400,
             )
-        if estado == 'abierto':
-            if not _user_has_inventory_perm(request.user):
-                return Response(
-                    {'error': 'Solo el propietario o un usuario con permiso de inventario '
-                              'puede registrar ítems de conteo'},
-                    status=403,
-                )
-        elif estado == 'cerrado':
-            if not _user_has_warehouse_perm(request.user):
-                return Response(
-                    {'error': 'Solo el propietario o un usuario con permiso de almacén '
-                              'puede corregir un conteo cerrado antes de aprobarlo'},
-                    status=403,
-                )
-        else:
+        if not _user_has_inventory_perm(request.user):
             return Response(
-                {'error': 'Estado de conteo no válido para registrar ítems'},
-                status=400,
+                {'error': 'Solo el propietario o un usuario con permiso de inventario '
+                          'puede registrar ítems de conteo'},
+                status=403,
             )
 
         from products.models import Inventory, Product, ProductVariant
@@ -633,10 +648,71 @@ class ConteoFisicoViewSet(viewsets.ModelViewSet):
                 'notas': notas,
             }
         )
+        item.diferencia = item.stock_fisico - item.stock_sistema
+        item.save(update_fields=['diferencia'])
 
         data = ConteoFisicoItemSerializer(item).data
         stat = status.HTTP_201_CREATED if created else status.HTTP_200_OK
         return Response(data, status=stat)
+
+    @action(
+        methods=['patch'],
+        detail=True,
+        url_path=r'editar-item/(?P<item_id>[0-9]+)',
+    )
+    def editar_item(self, request, pk=None, item_id=None):
+        """
+        Corrige stock_fisico y notas de un ítem en conteo cerrado (antes de aprobar).
+        """
+        user = request.user
+        vendor = get_vendor_for_user(user)
+        if not (_is_vendor_owner(user, vendor) or _user_has_warehouse_perm(user)):
+            return Response(
+                {'error': 'Sin permiso para editar ítems del conteo.'},
+                status=403,
+            )
+
+        conteo = self.get_object()
+        if conteo.estado != 'cerrado':
+            return Response(
+                {'error': 'Solo se pueden editar ítems de conteos cerrados.'},
+                status=400,
+            )
+
+        item = get_object_or_404(
+            ConteoFisicoItem,
+            pk=item_id,
+            conteo=conteo,
+        )
+
+        update_fields = []
+
+        if 'stock_fisico' in request.data:
+            try:
+                stock_fisico = int(request.data.get('stock_fisico'))
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'stock_fisico inválido'},
+                    status=400,
+                )
+            item.stock_fisico = stock_fisico
+            update_fields.append('stock_fisico')
+
+        if 'notas' in request.data:
+            item.notas = str(request.data.get('notas', '') or '')[:300]
+            update_fields.append('notas')
+
+        if not update_fields:
+            return Response(
+                {'error': 'Debe enviar stock_fisico y/o notas'},
+                status=400,
+            )
+
+        item.diferencia = item.stock_fisico - item.stock_sistema
+        update_fields.append('diferencia')
+        item.save(update_fields=update_fields)
+
+        return Response(ConteoFisicoItemSerializer(item).data)
 
     @action(methods=['post'], detail=True,
             url_path='cerrar')
@@ -674,12 +750,12 @@ class ConteoFisicoViewSet(viewsets.ModelViewSet):
           - Crea KardexMovimiento de ajuste
         """
         user = request.user
-        if not _user_has_warehouse_perm(user):
+        vendor = get_vendor_for_user(user)
+        if not _is_vendor_owner(user, vendor):
             return Response(
-                {'error': 'Solo el propietario o '
-                          'usuario con permiso de almacén '
-                          'puede aprobar conteos'},
-                status=403)
+                {'error': 'Solo el propietario puede aprobar conteos.'},
+                status=403,
+            )
 
         conteo = self.get_object()
         if conteo.estado != 'cerrado':
@@ -775,21 +851,96 @@ class ConteoFisicoViewSet(viewsets.ModelViewSet):
         return Response(ConteoFisicoSerializer(conteo).data)
 
 
+class TransferenciaPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
 class TransferenciaAlmacenViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated,
                           IsVendorOrWarehouseTeamMember]
     serializer_class = TransferenciaAlmacenSerializer
-    http_method_names = ['get', 'post', 'head', 'options']
+    pagination_class = TransferenciaPagination
+    http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
 
     def get_queryset(self):
         vendor = get_vendor_for_user(self.request.user)
         if not vendor:
             return TransferenciaAlmacen.objects.none()
-        return TransferenciaAlmacen.objects.filter(
+        qs = TransferenciaAlmacen.objects.filter(
             vendor=vendor
         ).prefetch_related(
             'items__producto', 'items__variante'
         )
+        estado = self.request.query_params.get('estado')
+        if estado:
+            qs = qs.filter(estado=estado)
+        return qs.order_by('-created_at')
+
+    def update(self, request, *args, **kwargs):
+        transferencia = self.get_object()
+        if transferencia.estado != 'pendiente':
+            raise ValidationError(
+                'Solo se pueden editar transferencias en estado pendiente.'
+            )
+
+        items_data = request.data.get('items')
+        if items_data is None:
+            return Response(
+                {'error': 'Debe enviar la lista de ítems (items).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not items_data:
+            return Response(
+                {'error': 'Debe incluir al menos un ítem'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from products.models import Product
+        from products.stock_service import product_has_variants
+
+        vendor = get_vendor_for_user(request.user)
+        normalized_items = []
+        for item_data in items_data:
+            item = dict(item_data)
+            if 'producto' in item:
+                item['producto_id'] = item.pop('producto')
+            if 'variante' in item:
+                item['variante_id'] = item.pop('variante')
+            for campo in ['producto_nombre', 'variante_detalle', 'id', 'stock_actual']:
+                item.pop(campo, None)
+            pid = item.get('producto_id')
+            vid = item.get('variante_id')
+            if pid and product_has_variants(pid) and not vid:
+                prod = Product.objects.filter(pk=pid).first()
+                nombre = prod.name if prod else pid
+                return Response(
+                    {
+                        'error': (
+                            f'"{nombre}" tiene variantes: '
+                            f'indique talla/color en la transferencia.'
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            normalized_items.append(item)
+
+        with transaction.atomic():
+            if 'notas' in request.data:
+                transferencia.notas = request.data.get('notas') or ''
+                transferencia.save(update_fields=['notas', 'updated_at'])
+            transferencia.items.all().delete()
+            for item in normalized_items:
+                TransferenciaAlmacenItem.objects.create(
+                    transferencia=transferencia,
+                    **item,
+                )
+
+        refresh = TransferenciaAlmacen.objects.prefetch_related(
+            'items__producto', 'items__variante',
+        ).get(pk=transferencia.pk)
+        return Response(TransferenciaAlmacenSerializer(refresh).data)
 
     def create(self, request, *args, **kwargs):
         vendor = get_vendor_for_user(request.user)

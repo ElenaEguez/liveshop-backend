@@ -1,9 +1,12 @@
+from django.db.models import Q
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.views import APIView
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
@@ -17,11 +20,16 @@ from compras.models import (
     OrdenCompraItemDistribucion,
     DevolucionCompra,
 )
+from vendors.models import Almacen
+from vendors.permissions import SuscripcionActivaPermission
 from compras.serializers import (
     ProveedorSerializer,
     OrdenCompraSerializer,
     DevolucionCompraSerializer,
     DevolucionCompraCreateSerializer,
+    _tiene_ventas_registradas,
+    _cantidad_ya_devuelta_en_orden,
+    _variante_descripcion,
 )
 from vendors.permissions import get_vendor_for_user
 
@@ -195,6 +203,12 @@ class ProveedorPagination(PageNumberPagination):
     max_page_size = 50
 
 
+class OrdenCompraPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
 class ProveedorViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = ProveedorSerializer
@@ -228,6 +242,7 @@ class ProveedorViewSet(viewsets.ModelViewSet):
 class OrdenCompraViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = OrdenCompraSerializer
+    pagination_class = OrdenCompraPagination
 
     def get_queryset(self):
         vendor = _get_vendor(self.request)
@@ -243,7 +258,20 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         estado = self.request.query_params.get('estado')
         if estado:
             qs = qs.filter(estado=estado)
-        return qs
+        proveedor_id = self.request.query_params.get('proveedor_id')
+        if proveedor_id:
+            try:
+                qs = qs.filter(proveedor_id=int(proveedor_id))
+            except (TypeError, ValueError):
+                pass
+        return qs.order_by('-fecha', '-created_at')
+
+    def perform_destroy(self, instance):
+        if instance.estado not in ('borrador', 'pendiente'):
+            raise ValidationError(
+                'Solo se pueden eliminar órdenes en borrador o pendiente.'
+            )
+        super().perform_destroy(instance)
 
     def create(self, request, *args, **kwargs):
         vendor = _get_vendor(request)
@@ -359,6 +387,149 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         orden.estado = 'cancelada'
         orden.save()
         return Response(OrdenCompraSerializer(orden).data)
+
+
+class BuscarDevolucionView(APIView):
+    """
+    GET /compras/buscar-devolucion/
+    Órdenes recibidas con líneas/variantes y flag puede_devolver.
+    """
+    permission_classes = [IsAuthenticated, SuscripcionActivaPermission]
+
+    def get(self, request):
+        vendor = _get_vendor(request)
+        if not vendor:
+            return Response([])
+
+        proveedor_id = request.query_params.get('proveedor_id')
+        producto_id = request.query_params.get('producto_id')
+        orden_id = request.query_params.get('orden_id')
+        q = (request.query_params.get('q') or '').strip()
+
+        qs = OrdenCompra.objects.filter(
+            vendor=vendor,
+            estado='recibida',
+        ).select_related(
+            'proveedor', 'almacen',
+        ).prefetch_related(
+            'items__producto',
+            'items__variante',
+            'items__distribuciones__variante',
+        )
+
+        if proveedor_id:
+            try:
+                qs = qs.filter(proveedor_id=int(proveedor_id))
+            except (TypeError, ValueError):
+                pass
+
+        if producto_id:
+            try:
+                qs = qs.filter(items__producto_id=int(producto_id)).distinct()
+            except (TypeError, ValueError):
+                pass
+
+        if orden_id:
+            try:
+                qs = qs.filter(pk=int(orden_id))
+            except (TypeError, ValueError):
+                pass
+
+        if q:
+            qs = qs.filter(
+                Q(proveedor__nombre__icontains=q)
+                | Q(items__producto__name__icontains=q)
+                | Q(numero__icontains=q),
+            ).distinct()
+
+        qs = qs.order_by('-fecha', '-created_at')[:50]
+
+        payload = []
+        for orden in qs:
+            almacen = orden.almacen
+            almacen_nombre = almacen.nombre if almacen else ''
+            almacen_id = almacen.id if almacen else None
+            items_out = []
+
+            for oi in orden.items.all():
+                alm_id = oi.almacen_id or almacen_id
+                if not alm_id:
+                    continue
+                try:
+                    alm = Almacen.objects.get(pk=alm_id, sucursal__vendor=vendor)
+                except Almacen.DoesNotExist:
+                    continue
+
+                dists = list(oi.distribuciones.all())
+                if dists:
+                    for dist in dists:
+                        variante = dist.variante
+                        var_id = variante.id if variante else None
+                        ya_dev = _cantidad_ya_devuelta_en_orden(
+                            orden, oi.producto_id, alm_id, var_id,
+                        )
+                        puede = not _tiene_ventas_registradas(
+                            oi.producto,
+                            alm,
+                            variante,
+                            desde_fecha=orden.fecha,
+                        )
+                        items_out.append({
+                            'item_id': dist.id,
+                            'orden_item_id': oi.id,
+                            'orden_distribucion_id': dist.id,
+                            'producto_id': oi.producto_id,
+                            'producto_nombre': oi.producto.name if oi.producto else '',
+                            'variante_id': var_id,
+                            'variante_descripcion': _variante_descripcion(variante),
+                            'cantidad_comprada': dist.cantidad,
+                            'cantidad_ya_devuelta': ya_dev,
+                            'puede_devolver': puede,
+                            'almacen_id': alm_id,
+                        })
+                else:
+                    variante = oi.variante
+                    var_id = variante.id if variante else None
+                    ya_dev = _cantidad_ya_devuelta_en_orden(
+                        orden, oi.producto_id, alm_id, var_id,
+                    )
+                    puede = not _tiene_ventas_registradas(
+                        oi.producto,
+                        alm,
+                        variante,
+                        desde_fecha=orden.fecha,
+                    )
+                    items_out.append({
+                        'item_id': oi.id,
+                        'orden_item_id': oi.id,
+                        'orden_distribucion_id': None,
+                        'producto_id': oi.producto_id,
+                        'producto_nombre': oi.producto.name if oi.producto else '',
+                        'variante_id': var_id,
+                        'variante_descripcion': _variante_descripcion(variante),
+                        'cantidad_comprada': oi.cantidad,
+                        'cantidad_ya_devuelta': ya_dev,
+                        'puede_devolver': puede,
+                        'almacen_id': alm_id,
+                    })
+
+            if not items_out:
+                continue
+
+            payload.append({
+                'orden_id': orden.id,
+                'numero_orden': orden.numero,
+                'proveedor_id': orden.proveedor_id,
+                'proveedor_nombre': (
+                    orden.proveedor.nombre if orden.proveedor else ''
+                ),
+                'fecha': orden.fecha.isoformat() if orden.fecha else None,
+                'almacen': almacen_nombre,
+                'almacen_id': almacen_id,
+                'items': items_out,
+            })
+
+        return Response(payload)
 
 
 class DevolucionCompraViewSet(viewsets.ModelViewSet):

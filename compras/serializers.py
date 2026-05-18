@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Q, Sum
 
 from rest_framework import serializers
 
@@ -12,6 +13,59 @@ from compras.models import (
 )
 from products.models import Inventory, Product, ProductVariant
 from vendors.models import Almacen, KardexMovimiento
+
+# Motivos de kardex que representan ventas (salida de stock).
+MOTIVOS_VENTA_KARDEX = ('venta', 'venta_live')
+
+
+def _variante_descripcion(variante):
+    if not variante:
+        return ''
+    partes = [getattr(variante, 'talla', ''), getattr(variante, 'color', '')]
+    texto = ' / '.join(p for p in partes if p)
+    return texto or f'ID {variante.id}'
+
+
+def _tiene_ventas_registradas(producto, almacen, variante=None, desde_fecha=None):
+    """True si hubo al menos una salida por venta en el almacén (opc. desde fecha de compra)."""
+    qs = KardexMovimiento.objects.filter(
+        tipo='salida',
+        motivo__in=MOTIVOS_VENTA_KARDEX,
+        inventory__product=producto,
+        almacen=almacen,
+    )
+    if variante:
+        qs = qs.filter(variant=variante)
+    else:
+        qs = qs.filter(variant__isnull=True)
+    if desde_fecha is not None:
+        qs = qs.filter(created_at__date__gte=desde_fecha)
+    return qs.exists()
+
+
+def _assert_sin_ventas_para_devolucion(producto, almacen, variante=None, desde_fecha=None):
+    if not _tiene_ventas_registradas(producto, almacen, variante, desde_fecha):
+        return
+    var_txt = _variante_descripcion(variante) or 'sin variante'
+    raise serializers.ValidationError({
+        'items': (
+            f'No se puede devolver: el producto "{producto.name}" ({var_txt}) '
+            f'ya tiene ventas registradas en este almacén.'
+        ),
+    })
+
+
+def _cantidad_ya_devuelta_en_orden(orden, producto_id, almacen_id, variante_id=None):
+    qs = DevolucionCompraItem.objects.filter(
+        devolucion__orden_compra=orden,
+        producto_id=producto_id,
+        almacen_id=almacen_id,
+    )
+    if variante_id:
+        qs = qs.filter(variante_id=variante_id)
+    else:
+        qs = qs.filter(variante__isnull=True)
+    return qs.aggregate(total=Sum('cantidad'))['total'] or 0
 
 
 def _procesar_fila_devolucion(dev, vendor, user, row, documento_ref, notas):
@@ -31,6 +85,11 @@ def _procesar_fila_devolucion(dev, vendor, user, row, documento_ref, notas):
             product=producto,
         )
     cantidad = row['cantidad']
+
+    desde_fecha = row.get('desde_fecha')
+    _assert_sin_ventas_para_devolucion(
+        producto, almacen, variante, desde_fecha=desde_fecha,
+    )
 
     inv = Inventory.objects.select_for_update().filter(
         product=producto,
@@ -289,6 +348,7 @@ class DevolucionCompraCreateSerializer(serializers.Serializer):
                         'almacen': almacen_id,
                         'cantidad': cant,
                         'variante': dist.variante_id,
+                        'desde_fecha': orden.fecha,
                     })
                     continue
 
@@ -357,6 +417,7 @@ class DevolucionCompraCreateSerializer(serializers.Serializer):
                 }
                 if oi.variante_id:
                     row['variante'] = oi.variante_id
+                row['desde_fecha'] = orden.fecha
                 resolved.append(row)
             if not resolved:
                 raise serializers.ValidationError(

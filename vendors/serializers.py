@@ -59,6 +59,10 @@ class CustomRoleSerializer(serializers.ModelSerializer):
             'perm_live_sessions', 'perm_my_store',
             'perm_orders', 'perm_payments', 'perm_team', 'perm_dashboard',
             'perm_pos', 'perm_warehouse', 'perm_expenses',
+            'perm_arqueos', 'perm_ventas_pos', 'perm_devoluciones',
+            'perm_conteos', 'perm_conteos_control', 'perm_transferencias',
+            'perm_almacen', 'perm_proveedores', 'perm_configuracion',
+            'perm_ecommerce_orders',
             'created_at',
         )
         read_only_fields = ('id', 'created_at')
@@ -247,26 +251,26 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
             return '0.00'
 
     def get_metodos_pago(self, obj):
-        from django.db.models import Count, Sum
+        from django.db.models import Q
         try:
-            ventas = (
-                obj.ventas
-                .filter(status='completada')
-                .values('metodo_pago__nombre')
-                .annotate(monto_total=Sum('total'), cantidad=Count('id'))
-            )
             resultado = {}
+            ventas = obj.ventas.filter(
+                Q(status='completada')
+                | Q(es_credito=True, status__in=['credito', 'completada'])
+            ).select_related('metodo_pago')
             for v in ventas:
-                nombre = v['metodo_pago__nombre'] or 'Sin método'
-                mt = v['monto_total']
+                if v.es_credito:
+                    nombre = 'Crédito'
+                else:
+                    nombre = v.metodo_pago.nombre if v.metodo_pago else 'Sin método'
                 try:
-                    monto_f = float(mt) if mt is not None else 0.0
+                    monto_f = float(v.total) if v.total is not None else 0.0
                 except (TypeError, ValueError):
                     monto_f = 0.0
-                resultado[nombre] = {
-                    'monto': monto_f,
-                    'cantidad': v['cantidad'],
-                }
+                if nombre not in resultado:
+                    resultado[nombre] = {'monto': 0.0, 'cantidad': 0}
+                resultado[nombre]['monto'] += monto_f
+                resultado[nombre]['cantidad'] += 1
             return resultado
         except Exception:
             return {}

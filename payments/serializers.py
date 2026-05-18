@@ -238,6 +238,11 @@ class DevolucionSerializer(serializers.ModelSerializer):
     venta_ticket = serializers.SerializerMethodField()
     venta_total = serializers.SerializerMethodField()
     procesado_por_nombre = serializers.SerializerMethodField()
+    metodo_pago_devolucion_nombre = serializers.CharField(
+        source='metodo_pago_devolucion.nombre',
+        read_only=True,
+        default='',
+    )
 
     class Meta:
         model = Devolucion
@@ -245,10 +250,40 @@ class DevolucionSerializer(serializers.ModelSerializer):
                   'venta_total', 'tipo',
                   'tipo_resolucion', 'motivo',
                   'monto_devuelto', 'items',
+                  'metodo_pago_devolucion',
+                  'metodo_pago_devolucion_nombre',
                   'procesado_por',
                   'procesado_por_nombre', 'created_at']
         read_only_fields = ['tipo', 'monto_devuelto',
                             'procesado_por', 'created_at']
+        extra_kwargs = {
+            'metodo_pago_devolucion': {'required': True},
+        }
+
+    def validate_tipo_resolucion(self, value):
+        if value != 'devolucion_dinero':
+            raise serializers.ValidationError(
+                'Solo se permite devolución de dinero.',
+            )
+        return value
+
+    def validate_metodo_pago_devolucion(self, value):
+        request = self.context.get('request')
+        if not request or not value:
+            return value
+        vendor = getattr(request.user, 'vendor_profile', None)
+        if vendor is None:
+            from vendors.permissions import get_vendor_for_user
+            vendor = get_vendor_for_user(request.user)
+        if vendor and value.vendor_id != vendor.id:
+            raise serializers.ValidationError(
+                'El método de pago no pertenece a su tienda.',
+            )
+        if not value.activo:
+            raise serializers.ValidationError(
+                'El método de pago no está activo.',
+            )
+        return value
 
     def get_venta_ticket(self, obj):
         return obj.venta.numero_ticket \

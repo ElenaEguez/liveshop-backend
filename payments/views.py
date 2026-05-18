@@ -1,3 +1,5 @@
+import datetime
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -11,7 +13,7 @@ from django.shortcuts import get_object_or_404
 from django.db import transaction
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
-from .models import Payment, Devolucion, DevolucionItem, VentaPOS, VentaPOSItem
+from .models import Payment, Devolucion, DevolucionItem, VentaPOS, VentaPOSItem, MetodoPago
 from .serializers import (
     PaymentSerializer,
     PaymentConfirmSerializer,
@@ -315,6 +317,12 @@ class BuscarVentaParaDevolucionView(APIView):
         return Response(VentaPOSSimpleSerializer(venta).data)
 
 
+class DevolucionPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class DevolucionViewSet(viewsets.ModelViewSet):
     """
     CRUD de devoluciones.
@@ -323,6 +331,7 @@ class DevolucionViewSet(viewsets.ModelViewSet):
     """
     permission_classes = [IsAuthenticated]
     serializer_class = DevolucionSerializer
+    pagination_class = DevolucionPagination
     http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
@@ -332,7 +341,7 @@ class DevolucionViewSet(viewsets.ModelViewSet):
         qs = Devolucion.objects.filter(
             vendor=vendor
         ).select_related(
-            'venta', 'procesado_por'
+            'venta', 'procesado_por', 'metodo_pago_devolucion',
         ).prefetch_related(
             'items__venta_item__product',
             'items__venta_item__variant',
@@ -340,6 +349,25 @@ class DevolucionViewSet(viewsets.ModelViewSet):
         venta_id = self.request.query_params.get('venta')
         if venta_id:
             qs = qs.filter(venta_id=venta_id)
+
+        fecha_desde = (self.request.query_params.get('fecha_desde') or '').strip()
+        if fecha_desde:
+            try:
+                qs = qs.filter(
+                    created_at__date__gte=datetime.date.fromisoformat(fecha_desde),
+                )
+            except ValueError:
+                pass
+
+        fecha_hasta = (self.request.query_params.get('fecha_hasta') or '').strip()
+        if fecha_hasta:
+            try:
+                qs = qs.filter(
+                    created_at__date__lte=datetime.date.fromisoformat(fecha_hasta),
+                )
+            except ValueError:
+                pass
+
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -350,7 +378,8 @@ class DevolucionViewSet(viewsets.ModelViewSet):
                 status=400)
 
         venta_id = request.data.get('venta')
-        tipo_resolucion = request.data.get('tipo_resolucion')
+        tipo_resolucion = request.data.get('tipo_resolucion') or 'devolucion_dinero'
+        metodo_pago_id = request.data.get('metodo_pago_devolucion')
         motivo = request.data.get('motivo', '')
         items_data = request.data.get('items', [])
 
@@ -358,13 +387,13 @@ class DevolucionViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': 'venta es requerida'},
                 status=400)
-        if not tipo_resolucion:
+        if tipo_resolucion != 'devolucion_dinero':
             return Response(
-                {'error': 'tipo_resolucion es requerido'},
+                {'error': 'Solo se permite devolución de dinero'},
                 status=400)
-        if tipo_resolucion not in ('cambio', 'devolucion_dinero'):
+        if not metodo_pago_id:
             return Response(
-                {'error': 'tipo_resolucion inválido'},
+                {'error': 'metodo_pago_devolucion es requerido'},
                 status=400)
         if not items_data:
             return Response(
@@ -387,6 +416,15 @@ class DevolucionViewSet(viewsets.ModelViewSet):
                 {'error': 'Esta venta ya fue devuelta '
                           'completamente'},
                 status=400)
+
+        metodo_pago = MetodoPago.objects.filter(
+            pk=metodo_pago_id, vendor=vendor, activo=True,
+        ).first()
+        if not metodo_pago:
+            return Response(
+                {'error': 'Método de pago de devolución inválido'},
+                status=400,
+            )
 
         almacen = None
         if venta.caja and venta.caja.sucursal:
@@ -474,6 +512,7 @@ class DevolucionViewSet(viewsets.ModelViewSet):
                 vendor=vendor,
                 tipo=tipo,
                 tipo_resolucion=tipo_resolucion,
+                metodo_pago_devolucion=metodo_pago,
                 motivo=motivo,
                 monto_devuelto=monto_total,
                 procesado_por=request.user,
@@ -520,7 +559,7 @@ class DevolucionViewSet(viewsets.ModelViewSet):
             'items__venta_item__product',
             'items__venta_item__variant'
         ).select_related(
-            'venta', 'procesado_por'
+            'venta', 'procesado_por', 'metodo_pago_devolucion',
         ).get(pk=devolucion.pk)
 
         return Response(

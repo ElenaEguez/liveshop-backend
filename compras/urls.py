@@ -1,9 +1,11 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from compras.views import (
     ProveedorViewSet,
     OrdenCompraViewSet,
     DevolucionCompraViewSet,
+    BuscarDevolucionView,
 )
 
 router = DefaultRouter()
@@ -15,4 +17,10 @@ router.register(
     basename='devolucion-compra',
 )
 
-urlpatterns = router.urls
+urlpatterns = [
+    path(
+        'buscar-devolucion/',
+        BuscarDevolucionView.as_view(),
+        name='buscar-devolucion',
+    ),
+] + router.urls

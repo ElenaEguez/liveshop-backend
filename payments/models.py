@@ -289,7 +289,6 @@ class PagoCredito(models.Model):
 
 class Devolucion(models.Model):
     TIPO_RESOLUCION_CHOICES = [
-        ('cambio', 'Cambio de producto'),
         ('devolucion_dinero', 'Devolución de dinero'),
     ]
     TIPO_CHOICES = [
@@ -311,7 +310,16 @@ class Devolucion(models.Model):
         default='parcial')
     tipo_resolucion = models.CharField(
         max_length=20,
-        choices=TIPO_RESOLUCION_CHOICES)
+        choices=TIPO_RESOLUCION_CHOICES,
+        default='devolucion_dinero',
+    )
+    metodo_pago_devolucion = models.ForeignKey(
+        MetodoPago,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=False,
+        related_name='devoluciones',
+    )
     motivo = models.TextField(
         blank=True, default='',
         help_text='Motivo de la devolución')

@@ -525,6 +525,7 @@ class InventoryViewSet(viewsets.ModelViewSet):
             return Inventory.objects.none()
         qs = Inventory.objects.filter(product__vendor=vendor)
         almacen_id = self.request.query_params.get('almacen_id')
+        sucursal_id = self.request.query_params.get('sucursal_id')
         product_id = self.request.query_params.get('product_id')
         category_id = self.request.query_params.get('category')
         search = self.request.query_params.get('search', '').strip()
@@ -533,6 +534,11 @@ class InventoryViewSet(viewsets.ModelViewSet):
 
         if almacen_id:
             qs = qs.filter(almacen_id=almacen_id)
+        if sucursal_id:
+            try:
+                qs = qs.filter(almacen__sucursal_id=int(sucursal_id))
+            except (TypeError, ValueError):
+                pass
         if product_id:
             qs = qs.filter(product_id=product_id)
         if category_id:
@@ -610,6 +616,18 @@ class InventoryViewSet(viewsets.ModelViewSet):
                     'inventario_disponible',
                     item['available_quantity'],
                 )
+            variante_id = request.query_params.get('variante_id')
+            if variante_id:
+                try:
+                    vid = int(variante_id)
+                    for v in item.get('variantes') or []:
+                        if v.get('id') == vid:
+                            disp = int(v.get('disponible') or 0)
+                            item['available_quantity'] = disp
+                            item['inventario_disponible'] = disp
+                            break
+                except (TypeError, ValueError):
+                    pass
             rows.append(item)
 
         ser = InventoryAggregatedSerializer(rows, many=True)

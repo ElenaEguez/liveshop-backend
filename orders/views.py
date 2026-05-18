@@ -841,7 +841,12 @@ class OrdersDashboardView(APIView):
             missing_cost_data = live_missing_cost_data
 
         total_gastos_operativos_final = total_gastos_operativos_base + total_retiros_caja
-        utilidad_neta = gross_margin - total_gastos_operativos_final
+        utilidad_neta = gross_margin - total_gastos_operativos_base
+
+        ingresos_contado_agg = turnos_del_periodo.filter(
+            monto_cierre__isnull=False,
+        ).aggregate(total=Sum('monto_cierre'))
+        ingresos_contado_arqueo = ingresos_contado_agg['total'] or Decimal('0')
 
         if canal == 'tienda':
             canal_total_orders = pos_total_orders
@@ -880,6 +885,9 @@ class OrdersDashboardView(APIView):
         response_data['gastos_por_categoria'] = gastos_por_categoria
         response_data['total_ingresos_caja'] = str(total_ingresos_caja)
         response_data['total_retiros_caja'] = str(total_retiros_caja)
+        response_data['ingresos_contado_arqueo'] = str(
+            round(ingresos_contado_arqueo, 2)
+        )
         response_data['canal'] = canal
 
         return Response(response_data)

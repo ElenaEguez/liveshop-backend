@@ -56,24 +56,37 @@ class ProductSerializer(serializers.ModelSerializer):
     vendor = serializers.PrimaryKeyRelatedField(read_only=True)
     variantes = serializers.SerializerMethodField()
     stock_disponible = serializers.SerializerMethodField()
+    stock_real = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
-            'id', 'name', 'description', 'price', 'stock', 'stock_disponible', 'category',
+            'id', 'name', 'description', 'price', 'stock', 'stock_disponible', 'stock_real', 'category',
             'is_active', 'variants', 'variantes', 'images', 'vendor',
             'barcode', 'internal_code', 'sell_by',
             'is_active_live', 'is_active_pos', 'is_active_web',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'vendor', 'images', 'variants', 'variantes', 'stock_disponible',
+            'vendor', 'images', 'variants', 'variantes', 'stock_disponible', 'stock_real',
             'price', 'stock', 'created_at', 'updated_at',
         ]
 
     def get_stock_disponible(self, obj):
         from .inventory_stock import variant_stock_breakdown
         return variant_stock_breakdown(obj.id)['disponible_total']
+
+    def get_stock_real(self, obj):
+        from django.db.models import Sum
+        from .models import Inventory
+
+        agg = Inventory.objects.filter(
+            product=obj,
+            is_active=True,
+        ).aggregate(
+            total=Sum('quantity'),
+        )
+        return int(agg['total'] or 0)
 
     def get_variantes(self, obj):
         qs = obj.variant_objects.filter(is_active=True).order_by('id')

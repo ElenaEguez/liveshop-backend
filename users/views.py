@@ -71,9 +71,13 @@ def _get_tokens_for_user(user):
                 'live_sessions': True, 'my_store': True,
                 'orders': True, 'payments': True, 'team': True, 'dashboard': True,
                 'pos': True, 'warehouse': True, 'expenses': True,
-                'compras': True,
-                'pedidos': True,
-                'pagos': True,
+                'compras': True, 'proveedores': True,
+                'pedidos': True, 'pagos': True,
+                'arqueos': True, 'ventas_pos': True, 'devoluciones': True,
+                'conteos': True, 'conteos_control': True,
+                'transferencias': True, 'almacen': True,
+                'configuracion': True, 'ecommerce_orders': True,
+                'livestream': True,
             },
         }
     else:
@@ -87,27 +91,12 @@ def _get_tokens_for_user(user):
             }
             cr = tm.custom_role
             if cr:
+                from vendors.role_permissions import build_jwt_perms_dict
                 claims = {
                     **base,
                     'role': str(cr.id),
                     'role_name': cr.name,
-                    'perms': {
-                        'products':      cr.perm_products,
-                        'categories':    cr.perm_categories,
-                        'inventory':     cr.perm_inventory,
-                        'live_sessions': cr.perm_live_sessions,
-                        'my_store':      cr.perm_my_store,
-                        'orders':        cr.perm_orders,
-                        'payments':      cr.perm_payments,
-                        'pedidos':       getattr(cr, 'perm_orders', False),
-                        'pagos':         getattr(cr, 'perm_payments', False),
-                        'team':          cr.perm_team,
-                        'dashboard':     cr.perm_dashboard,
-                        'pos':           cr.perm_pos,
-                        'warehouse':     cr.perm_warehouse,
-                        'expenses':      cr.perm_expenses,
-                        'compras':       getattr(cr, 'perm_compras', False),
-                    },
+                    'perms': build_jwt_perms_dict(cr),
                 }
             else:
                 # No role assigned — minimal access

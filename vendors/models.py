@@ -132,6 +132,17 @@ class CustomRole(models.Model):
     perm_pos           = models.BooleanField(default=False, verbose_name='Punto de Venta (POS)')
     perm_warehouse     = models.BooleanField(default=False, verbose_name='Almacén/Transferencias')
     perm_expenses      = models.BooleanField(default=False, verbose_name='Gastos')
+    # Permisos granulares (22 módulos de menú)
+    perm_arqueos           = models.BooleanField(default=False, verbose_name='Arqueos de caja')
+    perm_ventas_pos        = models.BooleanField(default=False, verbose_name='Ventas POS')
+    perm_devoluciones      = models.BooleanField(default=False, verbose_name='Devoluciones POS')
+    perm_conteos           = models.BooleanField(default=False, verbose_name='Conteo físico')
+    perm_conteos_control   = models.BooleanField(default=False, verbose_name='Control de conteos')
+    perm_transferencias    = models.BooleanField(default=False, verbose_name='Transferencias')
+    perm_almacen           = models.BooleanField(default=False, verbose_name='Almacén / Kardex')
+    perm_proveedores       = models.BooleanField(default=False, verbose_name='Proveedores')
+    perm_configuracion     = models.BooleanField(default=False, verbose_name='Configuración')
+    perm_ecommerce_orders  = models.BooleanField(default=False, verbose_name='Pedidos Web')
     created_at         = models.DateTimeField(auto_now_add=True)
 
     class Meta:
