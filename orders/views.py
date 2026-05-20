@@ -866,6 +866,23 @@ class OrdersDashboardView(APIView):
             canal_total_orders = total_orders
             canal_total_revenue = live_total_revenue
 
+        # ── Ventas por método de pago (POS del período, mismo filtro que tarjetas) ──
+        ventas_por_metodo_pago = {}
+        if canal in ('todos', 'tienda'):
+            for item in (
+                pos_qs.values('metodo_pago__nombre')
+                .annotate(
+                    total=Coalesce(Sum('total'), Decimal('0')),
+                    cantidad=Count('id'),
+                )
+                .order_by('metodo_pago__nombre')
+            ):
+                nombre = item['metodo_pago__nombre'] or 'Sin método'
+                ventas_por_metodo_pago[nombre] = {
+                    'total': float(item['total']),
+                    'cantidad': item['cantidad'],
+                }
+
         # ── Response ────────────────────────────────────────────────────────
         response_data = {
             'period_label': period_label,
@@ -876,6 +893,8 @@ class OrdersDashboardView(APIView):
             'web_total_orders': web_total_orders,
             'web_total_revenue': str(web_total_revenue),
             'pending_payment_confirmation': pending_payment_confirmation,
+            'pending_payment_scope': 'actual',
+            'ventas_por_metodo_pago': ventas_por_metodo_pago,
             'sales_by_product': sales_by_product,
             'sales_by_period': sales_by_period,
         }

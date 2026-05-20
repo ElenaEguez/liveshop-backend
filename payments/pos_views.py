@@ -1528,26 +1528,48 @@ class MovimientosCajaView(APIView):
         page_size = _safe_int(request.query_params.get('page_size', 10), default=10, min_value=1, max_value=10000)
 
         today = timezone.localdate()
+        date_str = request.query_params.get('date')
+        try:
+            year = int(request.query_params.get('year', today.year))
+        except (TypeError, ValueError):
+            year = today.year
+        try:
+            month = int(request.query_params.get('month', today.month))
+        except (TypeError, ValueError):
+            month = today.month
 
-        if period == 'today':
-            date_filter = {'date': today}
+        if period in ('today', 'day'):
+            if date_str:
+                try:
+                    day_date = date.fromisoformat(date_str)
+                except ValueError:
+                    day_date = today
+            else:
+                day_date = today
+
+            def apply_date(qs, field):
+                return qs.filter(**{f'{field}__date': day_date})
+
         elif period == 'week':
-            date_filter = {'gte': today - timedelta(days=7)}
-        elif period == 'month':
-            date_filter = {'gte': today.replace(day=1)}
-        elif period == 'year':
-            date_filter = {'year': today.year}
-        else:
-            date_filter = {'date': today}
+            week_start = today - timedelta(days=today.weekday())
+            week_end = week_start + timedelta(days=7)
 
-        def apply_date(qs, field):
-            if 'date' in date_filter:
-                return qs.filter(**{f'{field}__date': date_filter['date']})
-            if 'gte' in date_filter:
-                return qs.filter(**{f'{field}__date__gte': date_filter['gte']})
-            if 'year' in date_filter:
-                return qs.filter(**{f'{field}__year': date_filter['year']})
-            return qs
+            def apply_date(qs, field):
+                return qs.filter(
+                    **{f'{field}__date__gte': week_start, f'{field}__date__lt': week_end},
+                )
+
+        elif period == 'year':
+            def apply_date(qs, field):
+                return qs.filter(**{f'{field}__year': year})
+
+        elif period == 'month':
+            def apply_date(qs, field):
+                return qs.filter(**{f'{field}__year': year, f'{field}__month': month})
+
+        else:
+            def apply_date(qs, field):
+                return qs.filter(**{f'{field}__date': today})
 
         rows = []
 
