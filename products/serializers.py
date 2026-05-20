@@ -2,6 +2,7 @@ import json
 
 from rest_framework import serializers
 from django.utils.text import slugify
+from config.request_utils import secure_absolute_uri
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from vendors.models import KardexMovimiento
 
@@ -96,7 +97,7 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_images(self, obj):
         request = self.context.get('request')
         return [
-            request.build_absolute_uri(img.image.url) if request else img.image.url
+            secure_absolute_uri(request, img.image.url) if request else img.image.url
             for img in obj.images.all()
         ]
 
@@ -189,7 +190,7 @@ class ProductPOSSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         img = obj.images.first()
         if img:
-            return request.build_absolute_uri(img.image.url) if request else img.image.url
+            return secure_absolute_uri(request, img.image.url) if request else img.image.url
         return None
 
     def get_variantes(self, obj):
@@ -275,7 +276,7 @@ class POSScanProductSerializer(serializers.ModelSerializer):
         img = obj.images.first()
         if img:
             request = self.context.get('request')
-            return request.build_absolute_uri(img.image.url) if request else img.image.url
+            return secure_absolute_uri(request, img.image.url) if request else img.image.url
         return None
 
     def get_categoria(self, obj):
@@ -320,6 +321,6 @@ class PublicProductSerializer(serializers.ModelSerializer):
     def get_images(self, obj):
         request = self.context.get('request')
         return [
-            request.build_absolute_uri(img.image.url) if request else img.image.url
+            secure_absolute_uri(request, img.image.url) if request else img.image.url
             for img in obj.images.all()
         ]

@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.db.models import (
     Count, DecimalField, ExpressionWrapper, F, OuterRef, Subquery, Sum,
 )
+from django.db.models.functions import Coalesce
 from django.db.models.functions import TruncDay, TruncHour, TruncMonth, TruncWeek
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
