@@ -112,6 +112,12 @@ class PublicCatalogView(ListAPIView):
             qs = qs.filter(
                 Q(name__icontains=search) | Q(description__icontains=search)
             )
+
+        if self.request.query_params.get('bestseller') in ('1', 'true', 'yes'):
+            qs = qs.filter(web_is_bestseller=True)
+        if self.request.query_params.get('new') in ('1', 'true', 'yes'):
+            qs = qs.filter(web_is_new=True)
+
         return qs
 
 

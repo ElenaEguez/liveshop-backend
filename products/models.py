@@ -73,6 +73,20 @@ class Product(models.Model):
     is_active_live = models.BooleanField(default=True)
     is_active_pos = models.BooleanField(default=True)
     is_active_web = models.BooleanField(default=True)
+    web_is_bestseller = models.BooleanField(
+        default=False,
+        verbose_name='Destacar en más vendidos (web)',
+    )
+    web_is_new = models.BooleanField(
+        default=False,
+        verbose_name='Destacar en nuevos ingresos (web)',
+    )
+    compare_at_price = models.DecimalField(
+        max_digits=10, decimal_places=2,
+        null=True, blank=True,
+        verbose_name='Precio anterior (web)',
+        help_text='Opcional. Si es mayor al precio actual, se muestra % de descuento en la tienda.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

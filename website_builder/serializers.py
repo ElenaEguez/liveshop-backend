@@ -1,3 +1,5 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from rest_framework import serializers
 from django.utils.text import slugify
 
@@ -46,13 +48,39 @@ class PublicProductSerializer(serializers.ModelSerializer):
         source='variant_objects', many=True, read_only=True
     )
     category = PublicCategoryInlineSerializer(read_only=True)
+    stock_available = serializers.SerializerMethodField()
+    discount_percent = serializers.SerializerMethodField()
+    transfer_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
-            'id', 'name', 'description', 'price',
+            'id', 'name', 'description', 'price', 'compare_at_price',
+            'web_is_bestseller', 'web_is_new',
+            'stock_available', 'discount_percent', 'transfer_price',
             'images', 'variants', 'category', 'is_active',
         ]
+
+    def get_stock_available(self, obj):
+        from products.inventory_stock import variant_stock_breakdown
+        return variant_stock_breakdown(obj.id)['disponible_total'] > 0
+
+    def get_discount_percent(self, obj):
+        compare = obj.compare_at_price
+        price = obj.price
+        if not compare or not price or compare <= price:
+            return None
+        pct = ((compare - price) / compare) * 100
+        return int(pct.quantize(Decimal('1')))
+
+    def get_transfer_price(self, obj):
+        """Precio con 10% de descuento por transferencia (convención tienda)."""
+        if not obj.price:
+            return None
+        discounted = (obj.price * Decimal('0.90')).quantize(
+            Decimal('0.01'), rounding=ROUND_HALF_UP,
+        )
+        return str(discounted)
 
 
 class PublicCategorySerializer(serializers.ModelSerializer):

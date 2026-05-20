@@ -333,6 +333,10 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             qs = qs.filter(metodo_pago__tipo=p['metodo_pago_tipo'])
         if p.get('status'):
             qs = qs.filter(status=p['status'])
+        elif p.get('excluir_inactivas', '').lower() in ('1', 'true', 'yes'):
+            qs = qs.exclude(
+                status__in=['anulada', 'devuelto', 'parcialmente_devuelto'],
+            )
         if p.get('search'):
             term = p['search']
             qs = qs.filter(

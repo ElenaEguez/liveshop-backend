@@ -65,6 +65,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'is_active', 'variants', 'variantes', 'images', 'vendor',
             'barcode', 'internal_code', 'sell_by',
             'is_active_live', 'is_active_pos', 'is_active_web',
+            'web_is_bestseller', 'web_is_new', 'compare_at_price',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
