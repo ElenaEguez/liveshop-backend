@@ -110,45 +110,56 @@ class AlmacenSerializer(serializers.ModelSerializer):
 
     def get_stock_por_variante(self, obj):
         from products.models import Inventory, ProductVariant
+        from products.stock_service import product_has_variants
 
         inventarios = Inventory.objects.filter(
-            almacen=obj, is_active=True
+            almacen=obj, is_active=True,
         ).select_related('product').order_by('product__name')
 
         resultado = []
         for inv in inventarios:
-            entry = {
-                'inventory_id': inv.id,
-                'producto_id': inv.product.id,
-                'producto_nombre': inv.product.name,
-                'quantity': inv.quantity,
-                'reserved': inv.reserved_quantity,
-                'disponible': inv.quantity - inv.reserved_quantity,
-                'variante': None,
-            }
-            resultado.append(entry)
-
-        for inv in Inventory.objects.filter(
-            almacen=obj, is_active=True
-        ).select_related('product'):
-            variantes = ProductVariant.objects.filter(
-                product=inv.product, is_active=True
-            )
-            for v in variantes:
+            disp = max(0, int(inv.quantity or 0) - int(inv.reserved_quantity or 0))
+            pid = inv.product_id
+            if product_has_variants(pid):
+                variantes = ProductVariant.objects.filter(
+                    product_id=pid, is_active=True,
+                ).order_by('talla', 'color', 'id')
+                if not variantes.exists():
+                    resultado.append({
+                        'inventory_id': inv.id,
+                        'producto_id': pid,
+                        'producto_nombre': inv.product.name,
+                        'quantity': inv.quantity,
+                        'reserved': inv.reserved_quantity,
+                        'disponible': disp,
+                        'variante': None,
+                    })
+                    continue
+                for v in variantes:
+                    resultado.append({
+                        'inventory_id': inv.id,
+                        'producto_id': pid,
+                        'producto_nombre': inv.product.name,
+                        'quantity': inv.quantity,
+                        'reserved': inv.reserved_quantity,
+                        'disponible': max(0, int(v.stock_extra or 0)),
+                        'variante': {
+                            'id': v.id,
+                            'talla': v.talla,
+                            'color': v.color,
+                            'color_hex': v.color_hex,
+                            'sku': v.sku,
+                        },
+                    })
+            else:
                 resultado.append({
                     'inventory_id': inv.id,
-                    'producto_id': inv.product.id,
+                    'producto_id': pid,
                     'producto_nombre': inv.product.name,
-                    'quantity': v.stock_extra,
-                    'reserved': 0,
-                    'disponible': v.stock_extra,
-                    'variante': {
-                        'id': v.id,
-                        'talla': v.talla,
-                        'color': v.color,
-                        'color_hex': v.color_hex,
-                        'sku': v.sku,
-                    },
+                    'quantity': inv.quantity,
+                    'reserved': inv.reserved_quantity,
+                    'disponible': disp,
+                    'variante': None,
                 })
 
         return resultado

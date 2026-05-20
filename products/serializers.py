@@ -156,6 +156,10 @@ class InventoryAggregatedSerializer(serializers.Serializer):
     vendido = serializers.IntegerField(required=False, default=0)
     variantes = serializers.ListField(child=serializers.DictField(), required=False)
     sin_asignar_variante = serializers.IntegerField(required=False, default=0)
+    inventario_disponible = serializers.IntegerField(required=False)
+    almacen_nombre = serializers.CharField(allow_null=True, required=False)
+    sucursal_nombre = serializers.CharField(allow_null=True, required=False)
+    stock_scope = serializers.CharField(required=False)
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):

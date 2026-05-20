@@ -7,7 +7,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
-from django.db.models import Q, Sum, Min
+from django.db.models import Q, Sum, Min, Count
 from django.db.models.deletion import ProtectedError
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from vendors.permissions import get_vendor_for_user
@@ -578,6 +578,9 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 id=Min('id'),
                 purchase_cost=Min('purchase_cost'),
                 almacen=Min('almacen_id'),
+                almacen_nombre=Min('almacen__nombre'),
+                sucursal_nombre=Min('almacen__sucursal__nombre'),
+                num_almacenes=Count('almacen_id', distinct=True),
                 product_name=Min('product__name'),
                 product_price=Min('product__price'),
                 low_stock_alert=Min('low_stock_alert'),
@@ -603,6 +606,16 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 'available_quantity': max(0, q - r),
                 'purchase_cost': row['purchase_cost'],
                 'almacen': almacen_id_int if almacen_id_int else row['almacen'],
+                'almacen_nombre': (
+                    row.get('almacen_nombre')
+                    if almacen_id_int or int(row.get('num_almacenes') or 0) <= 1
+                    else None
+                ),
+                'sucursal_nombre': (
+                    row.get('sucursal_nombre')
+                    if almacen_id_int or int(row.get('num_almacenes') or 0) <= 1
+                    else None
+                ),
                 'is_active': True,
                 'low_stock_alert': low_alert,
                 'created_at': None,
@@ -610,12 +623,6 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 'variante': None,
             }
             enrich_inventory_row(item, almacen_id_int)
-            use_wh = (request.query_params.get('use_warehouse_stock') or '').lower()
-            if use_wh in ('true', '1', 'yes'):
-                item['available_quantity'] = item.get(
-                    'inventario_disponible',
-                    item['available_quantity'],
-                )
             variante_id = request.query_params.get('variante_id')
             if variante_id:
                 try:

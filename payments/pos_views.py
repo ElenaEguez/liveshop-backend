@@ -23,7 +23,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from vendors.models import (
-    Sucursal, Caja, TurnoCaja, MovimientoCaja, KardexMovimiento,
+    Sucursal, Caja, TurnoCaja, MovimientoCaja, KardexMovimiento, Almacen,
     Vendor, TeamMember, CustomRole,
 )
 from vendors.permissions import IsVendorOrTeamMember, get_vendor_for_user
@@ -245,7 +245,7 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
     POST   /api/v1/pos/ventas/          → crear venta (valida stock, aplica cupón, genera ticket)
     GET    /api/v1/pos/ventas/          → listar ventas del vendor
     GET    /api/v1/pos/ventas/{pk}/     → detalle de venta
-    PATCH  /api/v1/pos/ventas/{pk}/anular/ → anular venta del día (restaura stock)
+    PATCH  /api/v1/pos/ventas/{pk}/anular/ → anular venta (restaura stock en sucursal)
     """
     permission_classes = [IsAuthenticated, IsVendorOrTeamMember]
     serializer_class = VentaPOSSerializer
@@ -447,6 +447,9 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         with transaction.atomic():
             # ── Sucursal ─────────────────────────────────────────────────────
             sucursal = get_object_or_404(Sucursal, id=data['sucursal_id'], vendor=vendor)
+            almacen_ids_sucursal = list(
+                Almacen.objects.filter(sucursal=sucursal, activo=True).values_list('id', flat=True)
+            )
 
             # Método de inventario configurado por el vendor (PEPS/UEPS/promedio)
             inv_method = vendor.inventory_method  # 'peps', 'ueps', 'promedio'
@@ -457,14 +460,15 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             inventories_by_product: dict[int, list[Inventory]] = {}
             for item in items_data:
                 pid = item['product_id']
-                # Ordenar lotes según método de inventario
+                # Ordenar lotes según método de inventario (solo almacenes de la sucursal)
                 order = 'created_at' if inv_method == 'peps' else '-created_at'
-                lotes = list(
-                    Inventory.objects.select_for_update().filter(
-                        product_id=pid, product__vendor=vendor,
-                        is_active=True, quantity__gt=0,
-                    ).order_by(order)
+                lotes_qs = Inventory.objects.select_for_update().filter(
+                    product_id=pid, product__vendor=vendor,
+                    is_active=True, quantity__gt=0,
                 )
+                if almacen_ids_sucursal:
+                    lotes_qs = lotes_qs.filter(almacen_id__in=almacen_ids_sucursal)
+                lotes = list(lotes_qs.order_by(order))
                 total_avail = sum(
                     max(0, l.quantity - l.reserved_quantity) for l in lotes
                 )
@@ -674,18 +678,39 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         )
         return Response(VentaPOSSerializer(venta).data, status=status.HTTP_201_CREATED)
 
+    def _almacen_devolucion_pos(self, venta):
+        """Almacén de la sucursal donde se vendió (devolución de stock)."""
+        if not venta.sucursal_id:
+            return None
+        return (
+            Almacen.objects.filter(sucursal_id=venta.sucursal_id, activo=True)
+            .order_by('id')
+            .first()
+        )
+
     @action(detail=True, methods=['patch', 'post'])
     def anular(self, request, pk=None):
-        venta = get_object_or_404(VentaPOS, pk=pk, vendor=self._get_vendor())
+        venta = get_object_or_404(
+            VentaPOS.objects.select_related('sucursal'),
+            pk=pk,
+            vendor=self._get_vendor(),
+        )
 
         if venta.status == 'anulada':
             return Response(
                 {'error': 'La venta ya está anulada.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if timezone.localtime(venta.created_at).date() != timezone.localdate():
+        if venta.status in ('devuelto', 'parcialmente_devuelto'):
             return Response(
-                {'error': 'Solo se pueden anular ventas del día actual.'},
+                {'error': 'Use el módulo de devoluciones para ventas ya devueltas.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        almacen = self._almacen_devolucion_pos(venta)
+        if not almacen:
+            return Response(
+                {'error': 'La venta no tiene sucursal/almacén asociado; no se puede restaurar stock.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -693,21 +718,28 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             for item in venta.items.select_related('product', 'variant').all():
                 if not item.product:
                     continue
-                inv = Inventory.objects.select_for_update().filter(
-                    product=item.product, is_active=True,
-                ).first()
-                if not inv:
-                    continue
-                apply_stock_delta(
-                    product=item.product,
-                    almacen=inv.almacen,
-                    delta=int(item.cantidad),
-                    variant=item.variant,
-                    usuario=request.user,
-                    motivo='devolucion',
-                    documento_ref=venta.numero_ticket,
-                    notas=f'Anulación venta POS {venta.numero_ticket}',
-                )
+                qty = int(item.cantidad)
+                if item.variant_id:
+                    try:
+                        apply_variant_stock_delta(item.variant, qty)
+                    except StockError as exc:
+                        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    apply_inventory_kardex_delta(
+                        product=item.product,
+                        almacen=almacen,
+                        delta=qty,
+                        variant=item.variant,
+                        usuario=request.user,
+                        motivo='devolucion',
+                        documento_ref=venta.numero_ticket,
+                        notas=(
+                            f'Anulación venta POS {venta.numero_ticket} '
+                            f'→ {almacen.nombre} ({venta.sucursal.nombre})'
+                        ),
+                    )
+                except StockError as exc:
+                    return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
             if venta.cupon_id:
                 Cupon.objects.filter(pk=venta.cupon_id).update(
@@ -717,6 +749,16 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             venta.save(update_fields=['status'])
 
         venta.refresh_from_db()
+        _emit_vendor_update(
+            venta.vendor_id,
+            'venta_pos',
+            {
+                'venta_id': venta.id,
+                'total': str(venta.total),
+                'status': venta.status,
+                'canal_venta': venta.canal_venta,
+            },
+        )
         return Response(VentaPOSSerializer(venta).data)
 
     @action(detail=True, methods=['patch', 'post'], url_path='cobrar-credito')
