@@ -302,11 +302,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         if not talla and not color:
             return None
         color_hex = (raw.get('color_hex') or '').strip()
-        stock_raw = raw.get('stock', raw.get('stock_extra', 0))
-        try:
-            stock_int = max(int(stock_raw), 0)
-        except (TypeError, ValueError):
-            stock_int = 0
+        stock_int = None
+        if 'stock' in raw or 'stock_extra' in raw:
+            stock_raw = raw.get('stock', raw.get('stock_extra', 0))
+            try:
+                stock_int = max(int(stock_raw), 0)
+            except (TypeError, ValueError):
+                stock_int = 0
         return {
             'talla': talla,
             'color': color,
@@ -331,7 +333,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                     talla=row['talla'],
                     color=row['color'],
                     color_hex=row['color_hex'],
-                    stock_extra=row['stock_int'],
+                    stock_extra=row['stock_int'] if row['stock_int'] is not None else 0,
                     is_active=True,
                 )
             return
@@ -349,16 +351,19 @@ class ProductViewSet(viewsets.ModelViewSet):
             pv = existing_by_key.get(key)
             if pv:
                 pv.color_hex = row['color_hex']
-                pv.stock_extra = row['stock_int']
                 pv.is_active = True
-                pv.save(update_fields=['color_hex', 'stock_extra', 'is_active'])
+                update_fields = ['color_hex', 'is_active']
+                if row['stock_int'] is not None:
+                    pv.stock_extra = row['stock_int']
+                    update_fields.append('stock_extra')
+                pv.save(update_fields=update_fields)
             else:
                 ProductVariant.objects.create(
                     product=product,
                     talla=row['talla'],
                     color=row['color'],
                     color_hex=row['color_hex'],
-                    stock_extra=row['stock_int'],
+                    stock_extra=row['stock_int'] if row['stock_int'] is not None else 0,
                     is_active=True,
                 )
 

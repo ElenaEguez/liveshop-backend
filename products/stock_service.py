@@ -422,3 +422,26 @@ def reconcile_product_variant_stock(product_id: int) -> int:
     if not inv:
         return 0
     return reconcile_inventory_to_variants(product_id, inv.almacen)
+
+
+def rebuild_variant_stock_from_kardex(product_id: int) -> dict[int, int]:
+    """
+    Recalcula stock_extra de cada variante activa según la suma de cantidades en kardex.
+    Útil cuando el catálogo quedó en 0 pero el almacén/kardex reflejan compras y ventas.
+    """
+    if not product_has_variants(product_id):
+        return {}
+
+    from vendors.models import KardexMovimiento
+
+    updated: dict[int, int] = {}
+    for v in ProductVariant.objects.filter(product_id=product_id, is_active=True):
+        agg = KardexMovimiento.objects.filter(variant_id=v.id).aggregate(
+            total=Sum('cantidad'),
+        )
+        nuevo = max(0, int(agg['total'] or 0))
+        if int(v.stock_extra or 0) != nuevo:
+            v.stock_extra = nuevo
+            v.save(update_fields=['stock_extra'])
+        updated[v.id] = nuevo
+    return updated

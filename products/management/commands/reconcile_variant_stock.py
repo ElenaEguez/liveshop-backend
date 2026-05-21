@@ -1,77 +1,119 @@
-"""
-Alinea Inventory.quantity con la suma de stock_extra por producto (con variantes).
-
-Solo ajusta el almacén con mayor stock por producto (evita duplicar el total en cada almacén).
-
-Uso:
-  python manage.py reconcile_variant_stock --vendor-id=1
-  python manage.py reconcile_variant_stock --dry-run
-"""
-from django.core.management.base import BaseCommand
-from django.db import transaction
-
-from products.models import Inventory, Product
-from products.stock_service import (
-    product_has_variants,
-    reconcile_product_variant_stock,
-    sum_variant_stock,
-)
-from vendors.models import Vendor
-
-
-class Command(BaseCommand):
-    help = 'Alinea inventario (un almacén por producto) con la suma de stock por variante.'
-
-    def add_arguments(self, parser):
-        parser.add_argument('--vendor-id', type=int, default=None)
-        parser.add_argument('--dry-run', action='store_true')
-
-    def handle(self, *args, **options):
-        vendor_id = options['vendor_id']
-        dry_run = options['dry_run']
-
-        products = Product.objects.filter(is_active=True)
-        if vendor_id:
-            products = products.filter(vendor_id=vendor_id)
-            if not Vendor.objects.filter(pk=vendor_id).exists():
-                self.stderr.write(f'Vendor {vendor_id} no existe.')
-                return
-
-        updated = 0
-        for product in products.iterator():
-            if not product_has_variants(product.id):
-                continue
-
-            inv = (
-                Inventory.objects.filter(product=product, is_active=True)
-                .select_related('almacen')
-                .order_by('-quantity', 'id')
-                .first()
-            )
-            if not inv:
-                continue
-
-            old = inv.quantity
-            new = sum_variant_stock(product.id)
-            if old == new:
-                continue
-
-            if dry_run:
-                self.stdout.write(
-                    f'[dry-run] {product.name} @ almacén {inv.almacen_id}: '
-                    f'{old} -> {new}'
-                )
-            else:
-                with transaction.atomic():
-                    reconcile_product_variant_stock(product.id)
-                self.stdout.write(
-                    f'{product.name} @ almacén {inv.almacen_id}: {old} -> {new}'
-                )
-            updated += 1
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                f'{"Simulación" if dry_run else "Listo"}: {updated} producto(s) ajustados.'
-            )
-        )
-
+"""
+Alinea stock de variantes con inventario o reconstruye stock_extra desde kardex.
+
+Uso:
+  python manage.py reconcile_variant_stock --vendor-id=1
+  python manage.py reconcile_variant_stock --dry-run
+  python manage.py reconcile_variant_stock --rebuild-from-kardex --vendor-id=1
+"""
+from django.core.management.base import BaseCommand
+from django.db import transaction
+
+from products.models import Inventory, Product
+from products.stock_service import (
+    product_has_variants,
+    rebuild_variant_stock_from_kardex,
+    reconcile_product_variant_stock,
+    sum_variant_stock,
+)
+from vendors.models import Vendor
+
+
+class Command(BaseCommand):
+    help = (
+        'Alinea inventario con variantes o reconstruye stock_extra desde movimientos kardex.'
+    )
+
+    def add_arguments(self, parser):
+        parser.add_argument('--vendor-id', type=int, default=None)
+        parser.add_argument('--product-id', type=int, default=None)
+        parser.add_argument('--dry-run', action='store_true')
+        parser.add_argument(
+            '--rebuild-from-kardex',
+            action='store_true',
+            help='Recalcula stock_extra por variante sumando cantidades del kardex.',
+        )
+
+    def handle(self, *args, **options):
+        vendor_id = options['vendor_id']
+        product_id = options['product_id']
+        dry_run = options['dry_run']
+        rebuild = options['rebuild_from_kardex']
+
+        products = Product.objects.filter(is_active=True)
+        if vendor_id:
+            products = products.filter(vendor_id=vendor_id)
+            if not Vendor.objects.filter(pk=vendor_id).exists():
+                self.stderr.write(f'Vendor {vendor_id} no existe.')
+                return
+        if product_id:
+            products = products.filter(pk=product_id)
+
+        updated = 0
+        for product in products.iterator():
+            if not product_has_variants(product.id):
+                continue
+
+            if rebuild:
+                if dry_run:
+                    from vendors.models import KardexMovimiento
+                    from django.db.models import Sum
+                    from products.models import ProductVariant
+
+                    for v in ProductVariant.objects.filter(
+                        product_id=product.id, is_active=True,
+                    ):
+                        total = KardexMovimiento.objects.filter(
+                            variant_id=v.id,
+                        ).aggregate(t=Sum('cantidad'))['t'] or 0
+                        nuevo = max(0, int(total))
+                        if nuevo != int(v.stock_extra or 0):
+                            self.stdout.write(
+                                f'[dry-run] {product.name} {v.talla}/{v.color}: '
+                                f'stock_extra {v.stock_extra} -> {nuevo}'
+                            )
+                            updated += 1
+                else:
+                    with transaction.atomic():
+                        cambios = rebuild_variant_stock_from_kardex(product.id)
+                    for vid, qty in cambios.items():
+                        self.stdout.write(
+                            f'{product.name} variante #{vid}: stock_extra = {qty}'
+                        )
+                    if cambios:
+                        updated += 1
+                continue
+
+            inv = (
+                Inventory.objects.filter(product=product, is_active=True)
+                .select_related('almacen')
+                .order_by('-quantity', 'id')
+                .first()
+            )
+            if not inv:
+                continue
+
+            old = inv.quantity
+            new = sum_variant_stock(product.id)
+            if old == new:
+                continue
+
+            if dry_run:
+                self.stdout.write(
+                    f'[dry-run] {product.name} @ almacén {inv.almacen_id}: '
+                    f'{old} -> {new}'
+                )
+            else:
+                with transaction.atomic():
+                    reconcile_product_variant_stock(product.id)
+                self.stdout.write(
+                    f'{product.name} @ almacén {inv.almacen_id}: {old} -> {new}'
+                )
+            updated += 1
+
+        accion = 'reconstruidos' if rebuild else 'ajustados'
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'{"Simulación" if dry_run else "Listo"}: {updated} producto(s) {accion}.'
+            )
+        )

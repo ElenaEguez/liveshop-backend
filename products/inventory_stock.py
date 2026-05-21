@@ -24,43 +24,35 @@ def _variant_list_global(product_id: int):
 
 def variant_stock_breakdown(product_id: int, almacen_id=None):
     """
-    Devuelve disponible_total, lista de variantes y unidades sin asignar.
+    Devuelve disponible vendible, lista de variantes y unidades físicas sin asignar al catálogo.
 
     - Sin variantes: disponible_total = inventario (qty - reservado) en el alcance.
-    - Con variantes y almacén: disponible_total = inventario físico de ese almacén
-      (alineado con módulo Almacén); variantes muestran stock global de catálogo.
-    - Con variantes sin almacén: total físico en todos los almacenes + desglose global.
+    - Con variantes: disponible_total = suma stock_extra (vendible en POS);
+      inventario_disponible = físico en almacén(es); sin_asignar = físico − catálogo (no vendible).
     """
     inv_disponible = inventory_disponible(product_id, almacen_id)
     has_var = product_has_variants(product_id)
+    scope = 'almacen' if almacen_id is not None else 'global'
 
-    if almacen_id is not None:
-        variantes = _variant_list_global(product_id) if has_var else []
+    if not has_var:
         return {
             'disponible_total': inv_disponible,
-            'variantes': variantes,
+            'variantes': [],
             'sin_asignar_variante': 0,
             'inventario_disponible': inv_disponible,
-            'stock_scope': 'almacen',
+            'stock_scope': scope,
         }
 
-    variantes = []
-    variant_sum = 0
-    if has_var:
-        variantes = _variant_list_global(product_id)
-        variant_sum = sum(v['disponible'] for v in variantes)
-        disponible_total = inv_disponible
-        sin_asignar = max(0, inv_disponible - variant_sum)
-    else:
-        disponible_total = inv_disponible
-        sin_asignar = 0
+    variantes = _variant_list_global(product_id)
+    variant_sum = sum(v['disponible'] for v in variantes)
+    sin_asignar = max(0, inv_disponible - variant_sum)
 
     return {
-        'disponible_total': disponible_total,
+        'disponible_total': variant_sum,
         'variantes': variantes,
         'sin_asignar_variante': sin_asignar,
         'inventario_disponible': inv_disponible,
-        'stock_scope': 'global',
+        'stock_scope': scope,
     }
 
 
