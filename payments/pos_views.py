@@ -886,8 +886,9 @@ class ProductoPOSSearchView(APIView):
 
 class POSScanView(APIView):
     """
-    GET /api/v1/pos/scan/?code={valor}
+    GET /api/v1/pos/scan/?code={valor}&sucursal_id={id}
     Busca producto por código de barras con prioridad exacta.
+    Stock y variantes según almacenes de la sucursal (opcional sucursal_id).
     """
     permission_classes = [IsAuthenticated]
 

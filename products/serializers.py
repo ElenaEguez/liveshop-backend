@@ -182,9 +182,21 @@ class ProductPOSSerializer(serializers.ModelSerializer):
             'stock_disponible', 'sell_by', 'variantes', 'imagen_thumbnail',
         )
 
+    def _pos_sucursal_id(self):
+        request = self.context.get('request')
+        if not request:
+            return None
+        raw = request.query_params.get('sucursal_id')
+        if raw in (None, ''):
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
     def get_stock_disponible(self, obj):
-        from .inventory_stock import variant_stock_breakdown
-        return variant_stock_breakdown(obj.id)['disponible_total']
+        from .inventory_stock import variant_stock_breakdown_sucursal
+        return variant_stock_breakdown_sucursal(obj.id, self._pos_sucursal_id())['disponible_total']
 
     def get_imagen_thumbnail(self, obj):
         request = self.context.get('request')
@@ -194,8 +206,20 @@ class ProductPOSSerializer(serializers.ModelSerializer):
         return None
 
     def get_variantes(self, obj):
-        variants = obj.variant_objects.filter(is_active=True).order_by('id')
-        return ProductVariantSerializer(variants, many=True).data
+        from .inventory_stock import variant_stock_breakdown_sucursal
+        breakdown = variant_stock_breakdown_sucursal(obj.id, self._pos_sucursal_id())
+        return [
+            {
+                'id': v['id'],
+                'talla': v['talla'],
+                'color': v['color'],
+                'color_hex': v['color_hex'],
+                'sku': v['sku'],
+                'stock_extra': v['disponible'],
+                'is_active': True,
+            }
+            for v in breakdown['variantes']
+        ]
 
 
 class KardexMovimientoSerializer(serializers.ModelSerializer):

@@ -22,6 +22,63 @@ def _variant_list_global(product_id: int):
     return variantes
 
 
+def inventory_disponible_sucursal(product_id: int, sucursal_id: int | None) -> int:
+    """Inventario disponible (qty - reservado) en almacenes activos de la sucursal."""
+    if sucursal_id is None:
+        return inventory_disponible(product_id, None)
+    from vendors.models import Almacen
+
+    alm_ids = list(
+        Almacen.objects.filter(sucursal_id=sucursal_id, activo=True).values_list('id', flat=True)
+    )
+    if not alm_ids:
+        return 0
+    inv_qs = Inventory.objects.filter(
+        product_id=product_id, is_active=True, almacen_id__in=alm_ids,
+    )
+    agg = inv_qs.aggregate(q=Sum('quantity'), r=Sum('reserved_quantity'))
+    q = int(agg['q'] or 0)
+    r = int(agg['r'] or 0)
+    return max(0, q - r)
+
+
+def variant_stock_breakdown_sucursal(product_id: int, sucursal_id: int | None = None):
+    """
+    Stock POS alineado con venta: inventario en almacenes de la sucursal.
+    Con variantes, si no hay inventario en sucursal todas quedan en 0 (no vendible).
+    """
+    if sucursal_id is None:
+        return variant_stock_breakdown(product_id, None)
+
+    inv_disponible = inventory_disponible_sucursal(product_id, sucursal_id)
+    has_var = product_has_variants(product_id)
+
+    if not has_var:
+        return {
+            'disponible_total': inv_disponible,
+            'variantes': [],
+            'sin_asignar_variante': 0,
+            'inventario_disponible': inv_disponible,
+            'stock_scope': 'sucursal',
+        }
+
+    variantes = _variant_list_global(product_id)
+    if inv_disponible <= 0:
+        for v in variantes:
+            v['disponible'] = 0
+        variant_sum = 0
+    else:
+        variant_sum = sum(v['disponible'] for v in variantes)
+
+    return {
+        'disponible_total': variant_sum,
+        'variantes': variantes,
+        'sin_asignar_variante': max(0, inv_disponible - variant_sum),
+        'inventario_disponible': inv_disponible,
+        'stock_scope': 'sucursal',
+    }
+
+
 def variant_stock_breakdown(product_id: int, almacen_id=None):
     """
     Devuelve disponible vendible, lista de variantes y unidades físicas sin asignar al catálogo.

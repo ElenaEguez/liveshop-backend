@@ -2,9 +2,9 @@
 Alinea stock de variantes con inventario o reconstruye stock_extra desde kardex.
 
 Uso:
-  python manage.py reconcile_variant_stock --vendor-id=1
-  python manage.py reconcile_variant_stock --dry-run
-  python manage.py reconcile_variant_stock --rebuild-from-kardex --vendor-id=1
+  python manage.py reconcile_variant_stock --list-vendors
+  python manage.py reconcile_variant_stock --product-name "PRUEBA 6" --dry-run --rebuild-from-kardex
+  python manage.py reconcile_variant_stock --rebuild-from-kardex --vendor-id=2
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -27,6 +27,17 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--vendor-id', type=int, default=None)
         parser.add_argument('--product-id', type=int, default=None)
+        parser.add_argument(
+            '--product-name',
+            type=str,
+            default=None,
+            help='Nombre del producto (búsqueda parcial, sin distinguir mayúsculas).',
+        )
+        parser.add_argument(
+            '--list-vendors',
+            action='store_true',
+            help='Lista vendors (id, tienda) y sale.',
+        )
         parser.add_argument('--dry-run', action='store_true')
         parser.add_argument(
             '--rebuild-from-kardex',
@@ -35,8 +46,14 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if options['list_vendors']:
+            for v in Vendor.objects.order_by('id'):
+                self.stdout.write(f'  id={v.id}  {v.nombre_tienda}  slug={v.slug}')
+            return
+
         vendor_id = options['vendor_id']
         product_id = options['product_id']
+        product_name = (options['product_name'] or '').strip()
         dry_run = options['dry_run']
         rebuild = options['rebuild_from_kardex']
 
@@ -45,9 +62,25 @@ class Command(BaseCommand):
             products = products.filter(vendor_id=vendor_id)
             if not Vendor.objects.filter(pk=vendor_id).exists():
                 self.stderr.write(f'Vendor {vendor_id} no existe.')
+                self.stderr.write('Use: python manage.py reconcile_variant_stock --list-vendors')
                 return
         if product_id:
             products = products.filter(pk=product_id)
+            if not products.exists():
+                self.stderr.write(f'Producto id={product_id} no encontrado.')
+                return
+        if product_name:
+            products = products.filter(name__icontains=product_name)
+            count = products.count()
+            if count == 0:
+                self.stderr.write(f'Ningún producto coincide con "{product_name}".')
+                return
+            if count > 1:
+                self.stdout.write(f'Varios productos ({count}); se procesan todos:')
+                for p in products[:20]:
+                    self.stdout.write(f'  id={p.id}  {p.name}  vendor_id={p.vendor_id}')
+                if count > 20:
+                    self.stdout.write(f'  ... y {count - 20} más')
 
         updated = 0
         for product in products.iterator():
