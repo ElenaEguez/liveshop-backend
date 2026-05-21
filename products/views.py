@@ -577,7 +577,7 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 reserved_quantity=Sum('reserved_quantity'),
                 id=Min('id'),
                 purchase_cost=Min('purchase_cost'),
-                almacen=Min('almacen_id'),
+                almacen_id_agg=Min('almacen_id'),
                 almacen_nombre=Min('almacen__nombre'),
                 sucursal_nombre=Min('almacen__sucursal__nombre'),
                 num_almacenes=Count('almacen_id', distinct=True),
@@ -605,7 +605,7 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 'reserved_quantity': r,
                 'available_quantity': max(0, q - r),
                 'purchase_cost': row['purchase_cost'],
-                'almacen': almacen_id_int if almacen_id_int else row['almacen'],
+                'almacen': almacen_id_int if almacen_id_int else row['almacen_id_agg'],
                 'almacen_nombre': (
                     row.get('almacen_nombre')
                     if almacen_id_int or int(row.get('num_almacenes') or 0) <= 1
