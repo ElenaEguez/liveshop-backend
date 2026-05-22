@@ -6,6 +6,7 @@ from rest_framework import serializers
 logger = logging.getLogger(__name__)
 from django.utils.text import slugify
 from config.request_utils import secure_absolute_uri
+from .barcode_utils import is_valid_ean13, normalize_barcode_value
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from vendors.models import KardexMovimiento
 
@@ -105,10 +106,35 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
 
     def validate_barcode(self, value):
-        """Convert empty string to None to avoid unique constraint violations."""
-        if value == '':
+        """Vacío -> None; EAN-13 inválido o SKU se normaliza en create/update."""
+        if value == '' or value is None:
             return None
-        return value
+        return str(value).strip()
+
+    def _ensure_scannable_barcode(self, value, *, exclude_pk=None):
+        qs = Product.objects.all()
+        if exclude_pk is not None:
+            qs = qs.exclude(pk=exclude_pk)
+        return normalize_barcode_value(value, existing_products=qs)
+
+    def create(self, validated_data):
+        validated_data['barcode'] = self._ensure_scannable_barcode(
+            validated_data.get('barcode'),
+        )
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if 'barcode' in validated_data:
+            validated_data['barcode'] = self._ensure_scannable_barcode(
+                validated_data.get('barcode'),
+                exclude_pk=instance.pk,
+            )
+        elif not is_valid_ean13(instance.barcode):
+            validated_data['barcode'] = self._ensure_scannable_barcode(
+                instance.barcode,
+                exclude_pk=instance.pk,
+            )
+        return super().update(instance, validated_data)
 
     def validate_sell_by(self, value):
         """Multipart/form-data envía sell_by como JSON string."""
