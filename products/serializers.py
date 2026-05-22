@@ -1,6 +1,9 @@
 import json
+import logging
 
 from rest_framework import serializers
+
+logger = logging.getLogger(__name__)
 from django.utils.text import slugify
 from config.request_utils import secure_absolute_uri
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
@@ -194,8 +197,27 @@ class ProductPOSSerializer(serializers.ModelSerializer):
         except (TypeError, ValueError):
             return None
 
+    def _log_pos_legacy_mismatch(self, obj):
+        from .inventory_stock import inventory_disponible_sucursal
+        from .stock_service import product_has_variants, sum_variant_stock
+
+        sucursal_id = self._pos_sucursal_id()
+        if sucursal_id is None or not product_has_variants(obj.id):
+            return
+        suma_stock_extra = sum_variant_stock(obj.id)
+        if suma_stock_extra <= 0:
+            return
+        total_inventory = inventory_disponible_sucursal(obj.id, sucursal_id)
+        if total_inventory <= 0:
+            logger.warning(
+                f'[POS-SYNC] Producto {obj.id} \'{obj.name}\': '
+                f'stock_extra={suma_stock_extra} pero Inventory en sucursal '
+                f'\'{sucursal_id}\'={total_inventory}. Posible dato legacy sin sync.'
+            )
+
     def get_stock_disponible(self, obj):
         from .inventory_stock import variant_stock_breakdown_sucursal
+        self._log_pos_legacy_mismatch(obj)
         return variant_stock_breakdown_sucursal(obj.id, self._pos_sucursal_id())['disponible_total']
 
     def get_imagen_thumbnail(self, obj):

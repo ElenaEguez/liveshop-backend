@@ -1,5 +1,8 @@
 import json
+import logging
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 from rest_framework import generics, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -328,12 +331,20 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         if is_create:
             for row in rows:
+                stock_val = row['stock_int'] if row['stock_int'] is not None else 0
+                if stock_val > 0:
+                    logger.warning(
+                        f'[STOCK] Variante {row["talla"]}/{row["color"]} '
+                        f'producto_id={product.id}: '
+                        f'stock_extra={stock_val} seteado desde formulario '
+                        f'sin Inventory. Ejecutar sync_legacy_stock para sincronizar.'
+                    )
                 ProductVariant.objects.create(
                     product=product,
                     talla=row['talla'],
                     color=row['color'],
                     color_hex=row['color_hex'],
-                    stock_extra=row['stock_int'] if row['stock_int'] is not None else 0,
+                    stock_extra=stock_val,
                     is_active=True,
                 )
             return
@@ -356,14 +367,29 @@ class ProductViewSet(viewsets.ModelViewSet):
                 if row['stock_int'] is not None:
                     pv.stock_extra = row['stock_int']
                     update_fields.append('stock_extra')
+                    if pv.stock_extra > 0:
+                        logger.warning(
+                            f'[STOCK] Variante {pv.talla}/{pv.color} '
+                            f'producto_id={pv.product_id}: '
+                            f'stock_extra={pv.stock_extra} seteado desde formulario '
+                            f'sin Inventory. Ejecutar sync_legacy_stock para sincronizar.'
+                        )
                 pv.save(update_fields=update_fields)
             else:
+                stock_val = row['stock_int'] if row['stock_int'] is not None else 0
+                if stock_val > 0:
+                    logger.warning(
+                        f'[STOCK] Variante {row["talla"]}/{row["color"]} '
+                        f'producto_id={product.id}: '
+                        f'stock_extra={stock_val} seteado desde formulario '
+                        f'sin Inventory. Ejecutar sync_legacy_stock para sincronizar.'
+                    )
                 ProductVariant.objects.create(
                     product=product,
                     talla=row['talla'],
                     color=row['color'],
                     color_hex=row['color_hex'],
-                    stock_extra=row['stock_int'] if row['stock_int'] is not None else 0,
+                    stock_extra=stock_val,
                     is_active=True,
                 )
 
