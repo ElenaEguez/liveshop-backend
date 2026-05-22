@@ -13,6 +13,7 @@ from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import Coalesce
 
 import datetime
+from collections import defaultdict
 from decimal import Decimal
 from .models import (
     Vendor,
@@ -1047,40 +1048,79 @@ class TransferenciaAlmacenViewSet(viewsets.ModelViewSet):
                     },
                     status=400,
                 )
-            try:
-                inv_chk = Inventory.objects.get(
-                    product=item.producto,
-                    almacen=transferencia.almacen_origen)
-            except Inventory.DoesNotExist:
+
+        demanda_por_producto = defaultdict(int)
+        for item in items:
+            demanda_por_producto[item.producto_id] += int(item.cantidad)
+
+        for producto_id, cantidad_total in demanda_por_producto.items():
+            inv_qs = Inventory.objects.filter(
+                product_id=producto_id,
+                almacen=transferencia.almacen_origen,
+                is_active=True,
+            ).select_related('product').order_by('-quantity')
+            inv_chk = inv_qs.first()
+            if not inv_chk:
+                nombre = next(
+                    (i.producto.name for i in items if i.producto_id == producto_id),
+                    producto_id,
+                )
                 return Response(
                     {'error': (
-                        f'Sin inventario de '
-                        f'"{item.producto.name}" '
-                        f'en almacén origen'
-                    )}, status=400)
-            if inv_chk.quantity < item.cantidad:
+                        f'Sin inventario de "{nombre}" en almacén origen'
+                    )},
+                    status=400,
+                )
+            disponible = max(
+                0,
+                int(inv_chk.quantity or 0) - int(inv_chk.reserved_quantity or 0),
+            )
+            if disponible < cantidad_total:
                 return Response(
                     {'error': (
-                        f'Stock insuficiente de '
-                        f'"{item.producto.name}". '
-                        f'Disponible: {inv_chk.quantity}, '
-                        f'requerido: {item.cantidad}'
-                    )}, status=400)
+                        f'Stock insuficiente para '
+                        f'"{inv_chk.product.name}". '
+                        f'Disponible: {disponible}, '
+                        f'requerido en esta transferencia: {cantidad_total}.'
+                    )},
+                    status=400,
+                )
 
         with transaction.atomic():
             for item in items:
 
-                inv_origen = Inventory.objects.select_for_update().get(
-                    product=item.producto,
-                    almacen=transferencia.almacen_origen)
+                inv_origen = (
+                    Inventory.objects.select_for_update()
+                    .filter(
+                        product=item.producto,
+                        almacen=transferencia.almacen_origen,
+                        is_active=True,
+                    )
+                    .order_by('-quantity')
+                    .first()
+                )
+                if not inv_origen:
+                    raise ValidationError({
+                        'error': (
+                            f'Sin inventario de "{item.producto.name}" '
+                            f'en almacén origen'
+                        ),
+                    })
 
-                if inv_origen.quantity < item.cantidad:
+                disponible_origen = max(
+                    0,
+                    int(inv_origen.quantity or 0)
+                    - int(inv_origen.reserved_quantity or 0),
+                )
+                if disponible_origen < item.cantidad:
                     raise ValidationError({
                         'error': (
                             f'Stock insuficiente en origen para '
                             f'"{item.producto.name}" tras bloqueo '
-                            f'(concurrencia)'
-                        )})
+                            f'(disponible: {disponible_origen}, '
+                            f'requerido: {item.cantidad})'
+                        ),
+                    })
 
                 from products.stock_service import apply_stock_delta
 

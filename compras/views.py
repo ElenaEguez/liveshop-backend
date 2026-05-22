@@ -280,6 +280,16 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
 
         items_data = request.data.get('items', [])
         estado = request.data.get('estado')
+        if estado == 'recibida':
+            return Response(
+                {
+                    'error': (
+                        'No se puede crear una orden ya recibida. '
+                        'Use borrador o pendiente y confirme con el botón Recibir.'
+                    ),
+                },
+                status=400,
+            )
         orden_almacen_id = _optional_int(request.data.get('almacen'))
 
         prepared = [_prepare_orden_item_row(x) for x in items_data]
@@ -355,25 +365,35 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
 
     @action(methods=['post'], detail=True, url_path='confirmar')
     def confirmar(self, request, pk=None):
-        orden = self.get_object()
-        if orden.estado != 'pendiente':
-            return Response(
-                {'error': 'Solo se pueden confirmar órdenes pendientes'},
-                status=400
+        vendor = _get_vendor(request)
+        if not vendor:
+            return Response({'error': 'Sin vendor asignado'}, status=400)
+
+        with transaction.atomic():
+            orden = OrdenCompra.objects.select_for_update().get(
+                pk=pk,
+                vendor=vendor,
             )
-        for it in orden.items.all():
-            if not it.almacen_id and not orden.almacen_id:
+            if orden.estado != 'pendiente':
                 return Response(
-                    {
-                        'error': (
-                            'Indique almacén destino en la cabecera de la orden '
-                            'o en cada línea antes de confirmar.'
-                        )
-                    },
-                    status=400
+                    {'error': 'Solo se pueden confirmar órdenes pendientes'},
+                    status=400,
                 )
-        orden.estado = 'recibida'
-        orden.save()  # dispara la señal pre_save
+            for it in orden.items.all():
+                if not it.almacen_id and not orden.almacen_id:
+                    return Response(
+                        {
+                            'error': (
+                                'Indique almacén destino en la cabecera de la orden '
+                                'o en cada línea antes de confirmar.'
+                            ),
+                        },
+                        status=400,
+                    )
+            orden.estado = 'recibida'
+            orden.save()  # dispara la señal pre_save
+
+        orden.refresh_from_db()
         return Response(OrdenCompraSerializer(orden).data)
 
     @action(methods=['post'], detail=True, url_path='cancelar')
