@@ -2,6 +2,7 @@
 Mapeo de los 22 módulos de navegación → campos perm_* en CustomRole.
 Conserva los 13 permisos originales; los 9 nuevos desglosan rutas agrupadas.
 """
+from django.conf import settings
 
 # Claves usadas en JWT (perms), MisPermisos (permisos) y layout (permission).
 GRANULAR_MODULE_KEYS = [
@@ -73,6 +74,9 @@ _WAREHOUSE_LEGACY_KEYS = frozenset({
 })
 # Módulos POS que heredan perm_pos.
 _POS_LEGACY_KEYS = frozenset({'arqueos', 'ventas_pos', 'devoluciones'})
+_LEGACY_GRANULAR_FALLBACK = bool(
+    getattr(settings, 'PERMISSIONS_LEGACY_GRANULAR_FALLBACK', False)
+)
 
 
 def role_perm_value(role, module_key: str) -> bool:
@@ -82,9 +86,11 @@ def role_perm_value(role, module_key: str) -> bool:
     if not field:
         return False
     val = bool(getattr(role, field, False))
-    if not val and module_key in _WAREHOUSE_LEGACY_KEYS:
+    if not val and module_key == 'team':
+        val = bool(getattr(role, 'perm_manage_roles', False))
+    if _LEGACY_GRANULAR_FALLBACK and not val and module_key in _WAREHOUSE_LEGACY_KEYS:
         val = bool(getattr(role, 'perm_warehouse', False))
-    if not val and module_key in _POS_LEGACY_KEYS:
+    if _LEGACY_GRANULAR_FALLBACK and not val and module_key in _POS_LEGACY_KEYS:
         val = bool(getattr(role, 'perm_pos', False))
     if not val and module_key == 'proveedores':
         val = bool(getattr(role, 'perm_compras', False))
@@ -115,6 +121,7 @@ def build_jwt_perms_dict(role) -> dict:
         'pedidos': mod['pedidos'],
         'pagos': mod['pagos'],
         'team': mod['team'],
+        'manage_roles': bool(getattr(role, 'perm_manage_roles', False)),
         'dashboard': mod['dashboard'],
         'pos': mod['pos'],
         'warehouse': (

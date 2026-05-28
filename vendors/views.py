@@ -1,7 +1,7 @@
 from django.db import models as django_models
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -35,7 +35,6 @@ from .serializers import (
     TransferenciaAlmacenSerializer,
 )
 from .permissions import (
-    IsVendorOwner,
     get_vendor_for_user,
     IsVendorOrWarehouseTeamMember,
     get_role_for_user,
@@ -43,6 +42,7 @@ from .permissions import (
 from .role_permissions import (
     GRANULAR_MODULE_KEYS,
     LEGACY_MODULE_ALIASES,
+    MODULE_TO_ROLE_FIELD,
     build_permisos_modulos,
 )
 
@@ -140,44 +140,118 @@ class VendorDetailView(APIView):
 
 
 
-class CustomRoleViewSet(viewsets.ModelViewSet):
-    """CRUD for vendor-defined custom roles. Only vendor owner can manage."""
-    serializer_class = CustomRoleSerializer
-    permission_classes = [IsAuthenticated, IsVendorOwner]
+ROLE_PERMISSION_FIELDS = tuple(sorted(set(MODULE_TO_ROLE_FIELD.values()) | {'perm_manage_roles'}))
 
+
+def _role_permissions_dict(role):
+    if role is None:
+        return {field: False for field in ROLE_PERMISSION_FIELDS}
+    return {field: bool(getattr(role, field, False)) for field in ROLE_PERMISSION_FIELDS}
+
+
+def _is_subset_role(candidate_role, max_allowed_role) -> bool:
+    candidate = _role_permissions_dict(candidate_role)
+    ceiling = _role_permissions_dict(max_allowed_role)
+    return all((not candidate[field]) or ceiling[field] for field in ROLE_PERMISSION_FIELDS)
+
+
+class _RoleManagementMixin:
     def _get_vendor(self):
-        try:
-            return self.request.user.vendor_profile
-        except Vendor.DoesNotExist:
-            raise ValidationError("El usuario no tiene un perfil de vendedor.")
+        vendor = get_vendor_for_user(self.request.user)
+        if not vendor:
+            raise ValidationError("El usuario no tiene un vendor asignado.")
+        return vendor
+
+    def _is_owner(self, vendor):
+        return hasattr(self.request.user, 'vendor_profile') and self.request.user.vendor_profile_id == vendor.id
+
+    def _actor_role(self):
+        role = get_role_for_user(self.request.user)
+        if role and getattr(role, 'vendor_id', None) != self._get_vendor().id:
+            return None
+        return role
+
+    def _can_manage_roles(self, vendor):
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            return True
+        if self._is_owner(vendor):
+            return True
+        role = self._actor_role()
+        return bool(role and role.perm_manage_roles)
+
+    def _require_role_management_access(self):
+        vendor = self._get_vendor()
+        if not self._can_manage_roles(vendor):
+            raise PermissionDenied("No tienes permiso para administrar roles/equipo.")
+        return vendor
+
+    def _actor_ceiling_role(self, vendor):
+        if self._is_owner(vendor) or self.request.user.is_staff or self.request.user.is_superuser:
+            class _AllPerms:
+                pass
+            role = _AllPerms()
+            for field in ROLE_PERMISSION_FIELDS:
+                setattr(role, field, True)
+            return role
+        return self._actor_role()
+
+    def _assert_role_within_ceiling(self, role_obj):
+        vendor = self._require_role_management_access()
+        ceiling = self._actor_ceiling_role(vendor)
+        if not _is_subset_role(role_obj, ceiling):
+            raise PermissionDenied("No puedes otorgar permisos por encima de tu nivel.")
+
+
+class CustomRoleViewSet(_RoleManagementMixin, viewsets.ModelViewSet):
+    """CRUD de roles personalizados: owner o admin delegado con techo estricto."""
+    serializer_class = CustomRoleSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return CustomRole.objects.filter(vendor=self._get_vendor())
+        vendor = self._require_role_management_access()
+        return CustomRole.objects.filter(vendor=vendor)
 
     def perform_create(self, serializer):
-        serializer.save(vendor=self._get_vendor())
+        vendor = self._require_role_management_access()
+        role = CustomRole(vendor=vendor, **serializer.validated_data)
+        self._assert_role_within_ceiling(role)
+        serializer.save(vendor=vendor)
+
+    def perform_update(self, serializer):
+        role = serializer.instance
+        self._assert_role_within_ceiling(role)
+        role_after = CustomRole(vendor=role.vendor, **{**_role_permissions_dict(role), **serializer.validated_data, 'name': serializer.validated_data.get('name', role.name)})
+        self._assert_role_within_ceiling(role_after)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._assert_role_within_ceiling(instance)
+        instance.delete()
 
 
-class TeamMemberViewSet(viewsets.ModelViewSet):
+class TeamMemberViewSet(_RoleManagementMixin, viewsets.ModelViewSet):
     """
-    CRUD for TeamMembers.
-    Only the VendorProfile owner can create/update/delete.
+    CRUD de miembros de equipo para owner o admin delegado.
+    Aplicando techo de permisos para asignación/edición de roles.
     """
     serializer_class = TeamMemberSerializer
-    permission_classes = [IsAuthenticated, IsVendorOwner]
-
-    def _get_vendor(self):
-        try:
-            return self.request.user.vendor_profile
-        except Vendor.DoesNotExist:
-            raise ValidationError("El usuario no tiene un perfil de vendedor.")
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        vendor = self._get_vendor()
+        vendor = self._require_role_management_access()
         return TeamMember.objects.filter(vendor=vendor).select_related('custom_role', 'user')
 
+    def _assert_assignable_role(self, role):
+        if role is None:
+            return
+        self._assert_role_within_ceiling(role)
+
+    def _assert_manageable_member(self, member):
+        # No puede administrar miembros con un rol superior al actor
+        self._assert_assignable_role(member.custom_role)
+
     def create(self, request, *args, **kwargs):
-        vendor = self._get_vendor()
+        vendor = self._require_role_management_access()
         limite = getattr(vendor, 'max_usuarios', 3)
         if vendor.team_members.filter(is_active=True).count() >= limite:
             raise ValidationError(f"Límite de {limite} miembros de equipo alcanzado.")
@@ -195,6 +269,7 @@ class TeamMemberViewSet(viewsets.ModelViewSet):
         custom_role = None
         if custom_role_id:
             custom_role = get_object_or_404(CustomRole, id=custom_role_id, vendor=vendor)
+            self._assert_assignable_role(custom_role)
 
         user, created = User.objects.get_or_create(
             email=email,
@@ -214,6 +289,7 @@ class TeamMemberViewSet(viewsets.ModelViewSet):
             existing = user.team_member_profile
             if existing.vendor != vendor:
                 raise ValidationError("Este usuario ya es miembro del equipo de otro vendedor.")
+            self._assert_manageable_member(existing)
             existing.custom_role = custom_role
             existing.is_active = True
             existing.save()
@@ -230,6 +306,28 @@ class TeamMemberViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         pass
+
+    def partial_update(self, request, *args, **kwargs):
+        member = self.get_object()
+        self._assert_manageable_member(member)
+        role_id = request.data.get('custom_role', None)
+        if role_id not in (None, ''):
+            role = get_object_or_404(CustomRole, id=role_id, vendor=member.vendor)
+            self._assert_assignable_role(role)
+        return super().partial_update(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        member = self.get_object()
+        self._assert_manageable_member(member)
+        role_id = request.data.get('custom_role', None)
+        if role_id not in (None, ''):
+            role = get_object_or_404(CustomRole, id=role_id, vendor=member.vendor)
+            self._assert_assignable_role(role)
+        return super().update(request, *args, **kwargs)
+
+    def perform_destroy(self, instance):
+        self._assert_manageable_member(instance)
+        instance.delete()
 
 
 class VendorDashboardView(APIView):
@@ -437,7 +535,7 @@ class MisPermisosView(APIView):
 
         # Superadmin → acceso total
         if user.is_staff or user.is_superuser:
-            mod_keys = list(GRANULAR_MODULE_KEYS) + list(LEGACY_MODULE_ALIASES.keys())
+            mod_keys = list(GRANULAR_MODULE_KEYS) + list(LEGACY_MODULE_ALIASES.keys()) + ['manage_roles']
             todos = {m: {'ver': True, 'operar': True} for m in mod_keys}
             return Response({
                 'rol': 'superadmin',
@@ -453,7 +551,7 @@ class MisPermisosView(APIView):
         # Propietario del vendor
         if hasattr(user, 'vendor_profile'):
             vendor = user.vendor_profile
-            mod_keys = list(GRANULAR_MODULE_KEYS) + list(LEGACY_MODULE_ALIASES.keys())
+            mod_keys = list(GRANULAR_MODULE_KEYS) + list(LEGACY_MODULE_ALIASES.keys()) + ['manage_roles']
             todos = {m: {'ver': True, 'operar': True} for m in mod_keys}
             return Response({
                 'rol': 'propietario',
@@ -473,6 +571,7 @@ class MisPermisosView(APIView):
             role = tm.custom_role
 
             mod_bools = build_permisos_modulos(role)
+            mod_bools['manage_roles'] = bool(role and role.perm_manage_roles)
             permisos = {
                 modulo: {'ver': tiene, 'operar': tiene}
                 for modulo, tiene in mod_bools.items()

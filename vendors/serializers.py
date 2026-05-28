@@ -74,7 +74,7 @@ class CustomRoleSerializer(serializers.ModelSerializer):
             'id', 'name',
             'perm_products', 'perm_categories', 'perm_compras', 'perm_inventory',
             'perm_live_sessions', 'perm_my_store',
-            'perm_orders', 'perm_payments', 'perm_team', 'perm_dashboard',
+            'perm_orders', 'perm_payments', 'perm_team', 'perm_manage_roles', 'perm_dashboard',
             'perm_pos', 'perm_warehouse', 'perm_expenses',
             'perm_arqueos', 'perm_ventas_pos', 'perm_devoluciones',
             'perm_conteos', 'perm_conteos_control', 'perm_transferencias',

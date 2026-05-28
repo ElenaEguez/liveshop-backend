@@ -435,6 +435,20 @@ class DevolucionViewSet(viewsets.ModelViewSet):
         devolucion_items = []
         monto_total = 0
 
+        # ── Validación previa: detectar venta_item_id duplicados ──────────
+        ids_vistos = {}
+        for item_data in items_data:
+            vid = item_data.get('venta_item')
+            try:
+                cant = int(item_data.get('cantidad', 1))
+            except (TypeError, ValueError):
+                cant = 0
+            if vid in ids_vistos:
+                ids_vistos[vid] += cant
+            else:
+                ids_vistos[vid] = cant
+        # ─────────────────────────────────────────────────────────────────
+
         for item_data in items_data:
             venta_item_id = item_data.get('venta_item')
             try:
@@ -468,7 +482,14 @@ class DevolucionViewSet(viewsets.ModelViewSet):
                 di.cantidad
                 for di in venta_item.devoluciones.all()
             )
-            disponible = venta_item.cantidad - ya_devuelto
+            # Sumar lo que ya se pidió devolver en ESTE mismo request
+            # para el mismo venta_item (otros items_data anteriores en el loop)
+            ya_en_este_request = sum(
+                d['cantidad']
+                for d in devolucion_items
+                if d['venta_item'].id == venta_item.id
+            )
+            disponible = venta_item.cantidad - ya_devuelto - ya_en_este_request
 
             if cantidad > disponible:
                 return Response(

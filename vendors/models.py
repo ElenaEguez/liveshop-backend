@@ -128,6 +128,11 @@ class CustomRole(models.Model):
         verbose_name='Pagos',
     )
     perm_team          = models.BooleanField(default=False, verbose_name='Equipo')
+    perm_manage_roles  = models.BooleanField(
+        default=False,
+        verbose_name='Administrar roles/equipo',
+        help_text='Permite crear/editar roles y gestionar miembros del equipo',
+    )
     perm_dashboard     = models.BooleanField(default=False, verbose_name='Dashboard')
     perm_pos           = models.BooleanField(default=False, verbose_name='Punto de Venta (POS)')
     perm_warehouse     = models.BooleanField(default=False, verbose_name='Almacén/Transferencias')

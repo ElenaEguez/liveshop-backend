@@ -73,6 +73,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'pedidos':       cr.perm_orders,
             'pagos':         cr.perm_payments,
             'team':          cr.perm_team,
+            'manage_roles':  getattr(cr, 'perm_manage_roles', False),
             'dashboard':     cr.perm_dashboard,
             'pos':           cr.perm_pos,
             'warehouse':     cr.perm_warehouse,
