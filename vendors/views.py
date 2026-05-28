@@ -163,7 +163,8 @@ class _RoleManagementMixin:
         return vendor
 
     def _is_owner(self, vendor):
-        return hasattr(self.request.user, 'vendor_profile') and self.request.user.vendor_profile_id == vendor.id
+        vp = getattr(self.request.user, 'vendor_profile', None)
+        return bool(vp and vp.id == vendor.id)
 
     def _actor_role(self):
         role = get_role_for_user(self.request.user)
