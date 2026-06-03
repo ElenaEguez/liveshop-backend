@@ -9,6 +9,8 @@ Reglas:
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.db import transaction
 from django.db.models import Sum
 
@@ -263,6 +265,22 @@ def get_primary_inventory(product_id: int, almacen_id=None):
     if almacen_id is not None:
         return qs.filter(almacen_id=almacen_id).select_related('almacen', 'product').first()
     return qs.select_related('almacen', 'product').order_by('-quantity', 'id').first()
+
+
+def get_precio_venta_lote(product_id: int, almacen_id=None) -> Decimal | None:
+    """
+    Retorna precio_venta del inventory más antiguo con stock > 0 (PEPS).
+    Fallback: None (el caller usa Product.price).
+    """
+    qs = Inventory.objects.filter(
+        product_id=product_id,
+        is_active=True,
+        quantity__gt=0,
+    )
+    if almacen_id:
+        qs = qs.filter(almacen_id=almacen_id)
+    inv = qs.order_by('created_at', 'id').first()
+    return inv.precio_venta if inv else None
 
 
 def check_available_for_sale(product_id: int, quantity: int, variant_id=None) -> None:

@@ -33,7 +33,7 @@ class ProductImageAdmin(admin.ModelAdmin):
 
 @admin.register(Inventory)
 class InventoryAdmin(admin.ModelAdmin):
-    list_display = ['product', 'almacen', 'quantity', 'reserved_quantity', 'available_quantity', 'is_low_stock', 'is_active', 'updated_at']
+    list_display = ['product', 'almacen', 'quantity', 'reserved_quantity', 'precio_venta', 'purchase_cost', 'available_quantity', 'is_low_stock', 'is_active', 'updated_at']
     list_filter = ['is_active', 'almacen__sucursal__vendor']
     search_fields = ['product__name']
     readonly_fields = ['available_quantity', 'is_low_stock']

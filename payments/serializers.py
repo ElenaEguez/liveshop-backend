@@ -1,7 +1,10 @@
+from datetime import date
+from decimal import Decimal
+
 from rest_framework import serializers
 from .models import (
     Payment, MetodoPago, Cupon, CategoriaGasto,
-    VentaPOS, VentaPOSItem, GastoOperativo, PagoCredito,
+    VentaPOS, VentaPOSItem, VentaPOSPago, GastoOperativo, PagoCredito,
     Devolucion, DevolucionItem,
 )
 from vendors.models import TeamMember
@@ -70,6 +73,22 @@ class VentaPOSItemSerializer(serializers.ModelSerializer):
         return ' / '.join(parts)
 
 
+class VentaPOSPagoSerializer(serializers.ModelSerializer):
+    metodo_pago_nombre = serializers.CharField(
+        source='metodo_pago.nombre', read_only=True, allow_null=True)
+    metodo_pago_tipo = serializers.CharField(
+        source='metodo_pago.tipo', read_only=True, allow_null=True)
+
+    class Meta:
+        model = VentaPOSPago
+        fields = ('id', 'metodo_pago', 'metodo_pago_nombre', 'metodo_pago_tipo',
+                  'monto', 'orden')
+        read_only_fields = (
+            'id', 'metodo_pago', 'metodo_pago_nombre', 'metodo_pago_tipo',
+            'monto', 'orden',
+        )
+
+
 class PagoCreditoSerializer(serializers.ModelSerializer):
     metodo_pago_nombre = serializers.CharField(
         source='metodo_pago.nombre', read_only=True, allow_null=True)
@@ -89,6 +108,7 @@ class PagoCreditoSerializer(serializers.ModelSerializer):
 
 class VentaPOSSerializer(serializers.ModelSerializer):
     items = VentaPOSItemSerializer(many=True, read_only=True)
+    pagos = VentaPOSPagoSerializer(many=True, read_only=True)
     metodo_pago_nombre = serializers.CharField(
         source='metodo_pago.nombre', read_only=True, allow_null=True)
     sucursal_nombre = serializers.CharField(
@@ -110,7 +130,8 @@ class VentaPOSSerializer(serializers.ModelSerializer):
             'total', 'monto_recibido', 'vuelto', 'cupon', 'status',
             'canal_venta', 'direccion_envio',
             'usuario', 'usuario_nombre', 'usuario_rol_nombre', 'es_credito', 'plazo_dias', 'fecha_vencimiento_credito',
-            'notas', 'created_at', 'items', 'monto_pagado', 'saldo_pendiente', 'monto_cobrado',
+            'notas', 'created_at', 'items', 'pagos',
+            'monto_pagado', 'saldo_pendiente', 'monto_cobrado',
         )
         read_only_fields = ('id', 'numero_ticket', 'vendor', 'created_at')
 
@@ -157,7 +178,14 @@ class VentaPOSItemInputSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     variant_id = serializers.IntegerField(required=False, allow_null=True)
     cantidad = serializers.IntegerField(min_value=1)
-    precio_unitario = serializers.DecimalField(max_digits=10, decimal_places=2)
+    precio_unitario = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True,
+    )
+
+
+class VentaPOSPagoInputSerializer(serializers.Serializer):
+    metodo_pago_id = serializers.IntegerField()
+    monto = serializers.DecimalField(max_digits=10, decimal_places=2)
 
 
 class VentaPOSCreateSerializer(serializers.Serializer):
@@ -169,6 +197,7 @@ class VentaPOSCreateSerializer(serializers.Serializer):
     cliente_telefono = serializers.CharField(
         required=False, allow_blank=True, default='')
     metodo_pago_id = serializers.IntegerField(required=False, allow_null=True)
+    pagos = VentaPOSPagoInputSerializer(many=True, required=False)
     items = VentaPOSItemInputSerializer(many=True)
     descuento = serializers.DecimalField(
         max_digits=10, decimal_places=2, required=False, default=0)
@@ -188,6 +217,108 @@ class VentaPOSCreateSerializer(serializers.Serializer):
         required=False, default='TIENDA')
     direccion_envio = serializers.CharField(
         required=False, allow_blank=True, allow_null=True, default=None)
+
+    def _resolver_precio_item(self, item, vendor, sucursal_id):
+        """Precio PEPS del lote o Product.price si el ítem no trae precio_unitario."""
+        if item.get('precio_unitario') is not None or not vendor:
+            return
+        from products.models import Product
+        from products.stock_service import get_precio_venta_lote
+        from vendors.models import Almacen
+
+        product = Product.objects.get(pk=item['product_id'], vendor=vendor)
+        almacen_id = None
+        if sucursal_id:
+            alm = Almacen.objects.filter(
+                sucursal_id=sucursal_id, activo=True,
+            ).order_by('id').first()
+            almacen_id = alm.id if alm else None
+        precio_lote = get_precio_venta_lote(product.id, almacen_id)
+        item['precio_unitario'] = precio_lote or product.price
+
+    def _calcular_total(self, attrs, vendor):
+        """Replica el cálculo de total de VentaPOSViewSet.create (sin tocar stock)."""
+        items = attrs.get('items') or []
+        sucursal_id = attrs.get('sucursal_id')
+        for item in items:
+            self._resolver_precio_item(item, vendor, sucursal_id)
+        subtotal = sum(
+            item['precio_unitario'] * item['cantidad'] for item in items
+        )
+        discount_pct = attrs.get('discount_percentage')
+        if discount_pct and discount_pct > 0:
+            descuento_manual = (subtotal * discount_pct / 100).quantize(Decimal('0.01'))
+        else:
+            descuento_manual = attrs.get('descuento') or Decimal('0')
+        base = max(subtotal - descuento_manual, Decimal('0'))
+
+        descuento_cupon = Decimal('0')
+        cupon_codigo = attrs.get('cupon_codigo')
+        if cupon_codigo and vendor:
+            try:
+                cupon = Cupon.objects.get(
+                    codigo=cupon_codigo, vendor=vendor, activo=True)
+            except Cupon.DoesNotExist:
+                raise serializers.ValidationError(
+                    {'cupon_codigo': 'Cupón inválido o inactivo.'})
+            if cupon.usos_maximos and cupon.usos_actuales >= cupon.usos_maximos:
+                raise serializers.ValidationError({'cupon_codigo': 'Cupón agotado.'})
+            if cupon.fecha_vencimiento and cupon.fecha_vencimiento < date.today():
+                raise serializers.ValidationError({'cupon_codigo': 'Cupón vencido.'})
+            if not cupon.aplica_pos:
+                raise serializers.ValidationError(
+                    {'cupon_codigo': 'Este cupón no aplica para ventas POS.'})
+            if cupon.tipo == 'porcentaje':
+                descuento_cupon = (base * cupon.valor / 100).quantize(Decimal('0.01'))
+            else:
+                descuento_cupon = min(cupon.valor, base)
+
+        return max(base - descuento_cupon, Decimal('0'))
+
+    def validate(self, attrs):
+        vendor = self.context.get('vendor')
+        pagos = attrs.get('pagos') or []
+        sucursal_id = attrs.get('sucursal_id')
+        for item in attrs.get('items') or []:
+            self._resolver_precio_item(item, vendor, sucursal_id)
+
+        if pagos:
+            if not vendor:
+                raise serializers.ValidationError(
+                    {'pagos': 'No se pudo validar el vendedor.'})
+
+            total = self._calcular_total(attrs, vendor)
+            suma_pagos = sum(p['monto'] for p in pagos)
+            if suma_pagos != total:
+                raise serializers.ValidationError({
+                    'pagos': (
+                        f'La suma de pagos ({suma_pagos}) debe igualar '
+                        f'el total de la venta ({total}).'
+                    ),
+                })
+
+            for p in pagos:
+                mp_id = p['metodo_pago_id']
+                if p['monto'] <= 0:
+                    raise serializers.ValidationError({
+                        'pagos': 'Cada monto de pago debe ser mayor a 0.',
+                    })
+                if not MetodoPago.objects.filter(
+                    pk=mp_id, vendor=vendor, activo=True,
+                ).exists():
+                    raise serializers.ValidationError({
+                        'pagos': f'Método de pago {mp_id} inválido o inactivo.',
+                    })
+
+        elif attrs.get('metodo_pago_id') and vendor:
+            if not MetodoPago.objects.filter(
+                pk=attrs['metodo_pago_id'], vendor=vendor, activo=True,
+            ).exists():
+                raise serializers.ValidationError({
+                    'metodo_pago_id': 'Método de pago inválido o inactivo.',
+                })
+
+        return attrs
 
 
 class GastoOperativoSerializer(serializers.ModelSerializer):

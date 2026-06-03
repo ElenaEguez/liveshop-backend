@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Payment, MetodoPago, Cupon, CategoriaGasto,
-    VentaPOS, VentaPOSItem, GastoOperativo,
+    VentaPOS, VentaPOSItem, VentaPOSPago, GastoOperativo,
     Devolucion, DevolucionItem,
 )
 
@@ -42,9 +42,15 @@ class VentaPOSItemInline(admin.TabularInline):
     readonly_fields = ['subtotal']
 
 
+class VentaPOSPagoInline(admin.TabularInline):
+    model = VentaPOSPago
+    extra = 0
+    fields = ['metodo_pago', 'monto', 'orden']
+
+
 @admin.register(VentaPOS)
 class VentaPOSAdmin(admin.ModelAdmin):
-    inlines = [VentaPOSItemInline]
+    inlines = [VentaPOSItemInline, VentaPOSPagoInline]
     list_display = ['numero_ticket', 'vendor', 'sucursal', 'caja', 'turno', 'cliente_nombre', 'total', 'metodo_pago', 'status', 'created_at']
     list_filter = ['status', 'vendor', 'sucursal', 'es_credito', 'created_at']
     search_fields = ['numero_ticket', 'cliente_nombre', 'cliente_telefono']

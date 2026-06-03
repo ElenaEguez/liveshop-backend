@@ -867,22 +867,49 @@ class OrdersDashboardView(APIView):
             canal_total_orders = total_orders
             canal_total_revenue = live_total_revenue
 
-        # ── Ventas por método de pago (POS del período, mismo filtro que tarjetas) ──
+        # ── Ventas por método de pago (POS del período, líneas VentaPOSPago + legacy) ──
         ventas_por_metodo_pago = {}
         if canal in ('todos', 'tienda'):
-            for item in (
-                pos_qs.values('metodo_pago__nombre')
+            from payments.models import VentaPOSPago
+
+            pagos_por_metodo_qs = (
+                VentaPOSPago.objects.filter(
+                    venta__in=pos_qs,
+                )
+                .values('metodo_pago__nombre')
                 .annotate(
-                    total=Coalesce(Sum('total'), Decimal('0')),
-                    cantidad=Count('id'),
+                    total=Coalesce(Sum('monto'), Decimal('0')),
+                    cantidad=Count('venta', distinct=True),
                 )
                 .order_by('metodo_pago__nombre')
-            ):
+            )
+            for item in pagos_por_metodo_qs:
                 nombre = item['metodo_pago__nombre'] or 'Sin método'
                 ventas_por_metodo_pago[nombre] = {
                     'total': float(item['total']),
                     'cantidad': item['cantidad'],
                 }
+
+            ventas_sin_pagos_qs = (
+                pos_qs.annotate(n_pagos=Count('pagos'))
+                .filter(n_pagos=0)
+                .values('metodo_pago__nombre')
+                .annotate(
+                    total=Coalesce(Sum('total'), Decimal('0')),
+                    cantidad=Count('id'),
+                )
+                .order_by('metodo_pago__nombre')
+            )
+            for item in ventas_sin_pagos_qs:
+                nombre = item['metodo_pago__nombre'] or 'Sin método'
+                if nombre not in ventas_por_metodo_pago:
+                    ventas_por_metodo_pago[nombre] = {
+                        'total': float(item['total']),
+                        'cantidad': item['cantidad'],
+                    }
+                else:
+                    ventas_por_metodo_pago[nombre]['total'] += float(item['total'])
+                    ventas_por_metodo_pago[nombre]['cantidad'] += item['cantidad']
 
         # ── Response ────────────────────────────────────────────────────────
         response_data = {

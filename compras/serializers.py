@@ -187,7 +187,7 @@ class OrdenCompraItemSerializer(serializers.ModelSerializer):
             'porcentaje_ganancia', 'precio_venta_sugerido', 'precio_venta_es_manual',
             'precio_unitario', 'subtotal'
         ]
-        read_only_fields = ['subtotal', 'costo_unitario_total', 'precio_venta_sugerido']
+        read_only_fields = ['subtotal', 'costo_unitario_total']
 
     def get_producto_nombre(self, obj):
         return obj.producto.name if obj.producto else ''

@@ -123,6 +123,12 @@ class Inventory(models.Model):
         max_digits=10, decimal_places=2, null=True, blank=True,
         verbose_name="Costo de compra por unidad"
     )
+    precio_venta = models.DecimalField(
+        max_digits=10, decimal_places=2,
+        null=True, blank=True,
+        verbose_name="Precio de venta del lote",
+        help_text="Si es null, usa Product.price como fallback",
+    )
     almacen = models.ForeignKey(
         'vendors.Almacen', on_delete=models.SET_NULL,
         null=True, blank=True, related_name='inventarios'

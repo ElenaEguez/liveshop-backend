@@ -223,6 +223,27 @@ class VentaPOSItem(models.Model):
         return f"{self.product} x{self.cantidad} — {self.venta.numero_ticket}"
 
 
+class VentaPOSPago(models.Model):
+    venta = models.ForeignKey(
+        VentaPOS, on_delete=models.CASCADE,
+        related_name='pagos'
+    )
+    metodo_pago = models.ForeignKey(
+        MetodoPago, on_delete=models.SET_NULL,
+        null=True
+    )
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    orden = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['orden']
+        verbose_name = 'Pago de Venta'
+        verbose_name_plural = 'Pagos de Venta'
+
+    def __str__(self):
+        return f"Pago {self.monto} — {self.venta.numero_ticket}"
+
+
 class GastoOperativo(models.Model):
     STATUS_CHOICES = [
         ('activo', 'Activo'),

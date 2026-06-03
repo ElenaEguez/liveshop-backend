@@ -11,7 +11,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 
-from products.models import Product, ProductVariant
+from products.models import Product, ProductVariant, Inventory
 
 from compras.models import (
     Proveedor,
@@ -197,6 +197,91 @@ def _persist_items(orden, items_data, orden_almacen_id):
                 )
 
 
+def _procesar_recepcion_inventario(orden):
+    """
+    Incrementa stock al recibir una orden.
+    Idempotente por instancia en memoria (confirmar + señal pre_save).
+    """
+    if getattr(orden, '_inventario_recepcion_aplicado', False):
+        return
+
+    from products.stock_service import (
+        StockError,
+        apply_stock_delta,
+        product_has_variants,
+    )
+
+    qs_items = orden.items.select_related(
+        'producto', 'variante',
+    ).prefetch_related('distribuciones__variante')
+    for item in qs_items:
+        almacen_destino = item.almacen or orden.almacen
+        if not almacen_destino:
+            raise ValueError(
+                'Cada ítem de compra debe tener almacén destino antes de recibir la orden.'
+            )
+
+        distribuciones = list(item.distribuciones.all())
+        if distribuciones:
+            filas = [
+                (d.cantidad, d.variante)
+                for d in distribuciones
+                if d.cantidad and d.variante_id
+            ]
+        elif item.variante_id:
+            filas = [(item.cantidad, item.variante)]
+        elif product_has_variants(item.producto_id):
+            raise ValueError(
+                f'"{item.producto.name}": indique distribución por variante '
+                f'antes de recibir la compra.'
+            )
+        else:
+            filas = [(item.cantidad, None)]
+
+        for cant_u, variante in filas:
+            if not cant_u:
+                continue
+            apply_stock_delta(
+                product=item.producto,
+                almacen=almacen_destino,
+                delta=int(cant_u),
+                variant=variante,
+                usuario=orden.created_by,
+                motivo='compra',
+                documento_ref=f'OC-{orden.numero}',
+                notas=f'Compra OC-{orden.numero}',
+                costo_promedio=item.costo_unitario_total,
+                update_purchase_cost=item.costo_unitario_total,
+            )
+
+        if item.precio_venta_sugerido and item.precio_venta_sugerido > 0:
+            producto = item.producto
+            producto.price = item.precio_venta_sugerido
+            producto.save(update_fields=['price'])
+
+    orden._inventario_recepcion_aplicado = True
+
+
+def _inventory_lote_item_compra(item, orden):
+    """
+    Sin FK directa OrdenCompraItem → Inventory.
+    Busca el lote PEPS: mismo producto + almacén (ítem o cabecera), stock > 0.
+    """
+    almacen = item.almacen or orden.almacen
+    if not almacen:
+        return None
+    return (
+        Inventory.objects.filter(
+            product=item.producto,
+            almacen=almacen,
+            is_active=True,
+            quantity__gt=0,
+        )
+        .order_by('created_at', 'id')
+        .first()
+    )
+
+
 class ProveedorPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
@@ -264,6 +349,9 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(proveedor_id=int(proveedor_id))
             except (TypeError, ValueError):
                 pass
+        numero = self.request.query_params.get('numero', '').strip()
+        if numero:
+            qs = qs.filter(numero__icontains=numero)
         return qs.order_by('-fecha', '-created_at')
 
     def perform_destroy(self, instance):
@@ -390,6 +478,11 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
                         },
                         status=400,
                     )
+            try:
+                from products.stock_service import StockError
+                _procesar_recepcion_inventario(orden)
+            except (ValueError, StockError) as exc:
+                return Response({'error': str(exc)}, status=400)
             orden.estado = 'recibida'
             orden.save()  # dispara la señal pre_save
 
@@ -407,6 +500,102 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         orden.estado = 'cancelada'
         orden.save()
         return Response(OrdenCompraSerializer(orden).data)
+
+    @action(methods=['patch'], detail=True, url_path='actualizar-precios')
+    def actualizar_precios(self, request, pk=None):
+        """
+        Edita precio_venta_sugerido de ítems en orden recibida y actualiza
+        Inventory.precio_venta del lote PEPS correspondiente.
+        """
+        orden = self.get_object()
+
+        if orden.estado != 'recibida':
+            return Response(
+                {'error': 'Solo se puede editar precios de órdenes recibidas'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        items_data = request.data.get('items', [])
+        if not isinstance(items_data, list) or not items_data:
+            return Response(
+                {'error': 'Debe enviar items: [{ id, precio_venta_sugerido }, ...]'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        actualizados = []
+        errores = []
+
+        with transaction.atomic():
+            for item_data in items_data:
+                if not isinstance(item_data, dict):
+                    errores.append({
+                        'item_id': None,
+                        'error': 'Cada ítem debe ser un objeto',
+                    })
+                    continue
+
+                item_id = item_data.get('id')
+                try:
+                    item = OrdenCompraItem.objects.select_related(
+                        'producto',
+                    ).get(id=item_id, orden=orden)
+                except OrdenCompraItem.DoesNotExist:
+                    errores.append({
+                        'item_id': item_id,
+                        'error': 'Ítem no pertenece a esta orden',
+                    })
+                    continue
+
+                try:
+                    nuevo_precio = Decimal(str(item_data['precio_venta_sugerido']))
+                except (KeyError, ValueError, TypeError, InvalidOperation):
+                    errores.append({
+                        'item_id': item_id,
+                        'error': 'Precio inválido',
+                    })
+                    continue
+
+                if nuevo_precio <= 0:
+                    errores.append({
+                        'item_id': item_id,
+                        'error': 'El precio debe ser mayor a 0',
+                    })
+                    continue
+
+                precio_anterior = item.precio_venta_sugerido
+
+                item.precio_venta_sugerido = nuevo_precio
+                item.precio_venta_es_manual = True
+                item.save(update_fields=[
+                    'precio_venta_sugerido',
+                    'precio_venta_es_manual',
+                    'costo_unitario_total',
+                    'subtotal',
+                ])
+
+                inv = _inventory_lote_item_compra(item, orden)
+                if inv:
+                    inv.precio_venta = nuevo_precio
+                    inv.save(update_fields=['precio_venta', 'updated_at'])
+                    actualizados.append({
+                        'item_id': item.id,
+                        'producto': item.producto.name,
+                        'precio_anterior': float(precio_anterior),
+                        'precio_nuevo': float(nuevo_precio),
+                        'inventory_id': inv.id,
+                        'stock_restante': inv.quantity,
+                    })
+                else:
+                    errores.append({
+                        'item_id': item.id,
+                        'error': 'No se encontró inventory activo para este producto',
+                    })
+
+        return Response({
+            'actualizados': actualizados,
+            'errores': errores,
+            'mensaje': f'{len(actualizados)} precios actualizados correctamente',
+        })
 
 
 class BuscarDevolucionView(APIView):

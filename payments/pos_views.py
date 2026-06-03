@@ -7,7 +7,7 @@ from datetime import date, timedelta, datetime as dt
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import F, Max, Q, Sum, Count, Case, When, DecimalField
+from django.db.models import F, Max, Q, Sum, Count, Case, When, DecimalField, Exists, OuterRef
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -34,11 +34,12 @@ from products.stock_service import (
     apply_inventory_kardex_delta,
     apply_stock_delta,
     apply_variant_stock_delta,
+    get_precio_venta_lote,
 )
 from products.serializers import ProductPOSSerializer
 
 from .models import (
-    VentaPOS, VentaPOSItem, MetodoPago, Cupon,
+    VentaPOS, VentaPOSItem, VentaPOSPago, MetodoPago, Cupon,
     CategoriaGasto, GastoOperativo, PagoCredito,
 )
 from .serializers import (
@@ -46,6 +47,11 @@ from .serializers import (
     MetodoPagoSerializer, CuponSerializer,
     CategoriaGastoSerializer, GastoOperativoSerializer,
     PagoCreditoSerializer,
+)
+from .utils import (
+    _metodo_venta_arqueo,
+    _aggregate_ventas_arqueo,
+    _calc_efectivo_esperado_turno,
 )
 
 
@@ -77,153 +83,12 @@ def _safe_int(value, default, min_value=None, max_value=None):
     return parsed
 
 
-def _to_decimal(val):
-    """
-    SQLite aggregates sometimes return float; mixing Decimal + float raises TypeError.
-    """
-    if val is None:
-        return Decimal('0')
-    if isinstance(val, Decimal):
-        return val
-    try:
-        return Decimal(str(val))
-    except Exception:
-        return Decimal('0')
-
-
 def _ventas_incluidas_arqueo_q():
     """Ventas que cuentan en arqueos: completadas + crédito pendiente o cobrado."""
     return (
         Q(status='completada')
         | Q(es_credito=True, status__in=['credito', 'completada'])
     )
-
-
-def _calc_efectivo_esperado_turno(turno):
-    """
-    Efectivo que debería haber en caja al cerrar el turno.
-    Incluye ventas al contado en efectivo, abonos de crédito en efectivo
-    y créditos cobrados de una vez (sin abonos parciales), sin doble contar.
-    """
-    ventas_contado_ef = VentaPOS.objects.filter(
-        turno=turno,
-        status='completada',
-        es_credito=False,
-        metodo_pago__tipo='efectivo',
-    ).aggregate(t=Sum('total'))['t'] or Decimal('0')
-
-    pagos_ef = PagoCredito.objects.filter(
-        venta__turno=turno,
-        metodo_pago__tipo='efectivo',
-    ).aggregate(t=Sum('monto'))['t'] or Decimal('0')
-
-    ventas_credito_ef = VentaPOS.objects.filter(
-        turno=turno,
-        status='completada',
-        es_credito=True,
-        metodo_pago__tipo='efectivo',
-    ).annotate(n_pagos=Count('pagos_credito')).filter(n_pagos=0).aggregate(
-        t=Sum('total')
-    )['t'] or Decimal('0')
-
-    ingresos = MovimientoCaja.objects.filter(turno=turno, tipo='ingreso').aggregate(
-        t=Sum('monto')
-    )['t'] or Decimal('0')
-    retiros = MovimientoCaja.objects.filter(turno=turno, tipo='retiro').aggregate(
-        t=Sum('monto')
-    )['t'] or Decimal('0')
-
-    ventas_contado_ef = _to_decimal(ventas_contado_ef)
-    pagos_ef = _to_decimal(pagos_ef)
-    ventas_credito_ef = _to_decimal(ventas_credito_ef)
-    total_efectivo_ventas = ventas_contado_ef + pagos_ef + ventas_credito_ef
-    efectivo_esperado = (
-        _to_decimal(turno.monto_apertura)
-        + total_efectivo_ventas
-        + _to_decimal(ingresos)
-        - _to_decimal(retiros)
-    )
-
-    return {
-        'efectivo_esperado': efectivo_esperado,
-        'ventas_contado_efectivo': ventas_contado_ef,
-        'pagos_credito_efectivo': pagos_ef,
-        'creditos_cobrados_efectivo': ventas_credito_ef,
-        'total_efectivo_ventas': total_efectivo_ventas,
-        'total_ingresos': _to_decimal(ingresos),
-        'total_retiros': _to_decimal(retiros),
-    }
-
-
-def _metodo_venta_arqueo(venta):
-    if venta.es_credito:
-        return 'credito', 'Crédito'
-    if venta.metodo_pago:
-        return venta.metodo_pago.tipo or 'otro', venta.metodo_pago.nombre
-    return 'otro', 'Otro'
-
-
-def _aggregate_ventas_arqueo(ventas_qs):
-    """Totales por cajero y por método (incluye Crédito) para arqueos."""
-    cajero_map = {}
-    global_metodo = {}
-    for v in ventas_qs.select_related('metodo_pago', 'usuario'):
-        tipo, nombre = _metodo_venta_arqueo(v)
-        monto = _to_decimal(v.total)
-
-        uid = v.usuario_id
-        if uid is not None:
-            if uid not in cajero_map:
-                nom = (getattr(v.usuario, 'nombre', None) or '').strip()
-                ape = (getattr(v.usuario, 'apellido', None) or '').strip()
-                name = f'{nom} {ape}'.strip()
-                if not name:
-                    name = getattr(v.usuario, 'email', None) or '—'
-                cajero_map[uid] = {
-                    'id': uid, 'nombre': name,
-                    'total': Decimal('0'), 'por_metodo': {},
-                }
-            cajero_map[uid]['total'] += monto
-            pm = cajero_map[uid]['por_metodo'].setdefault(
-                tipo, {'nombre': nombre, 'total': Decimal('0'), 'cantidad': 0}
-            )
-            pm['total'] += monto
-            pm['cantidad'] += 1
-
-        gm = global_metodo.setdefault(
-            tipo, {'nombre': nombre, 'total': Decimal('0'), 'cantidad': 0}
-        )
-        gm['total'] += monto
-        gm['cantidad'] += 1
-
-    totales_por_cajero = [
-        {
-            'id': v['id'],
-            'nombre': v['nombre'],
-            'total': str(_to_decimal(v['total']).quantize(Decimal('0.01'))),
-            'por_metodo': [
-                {'tipo': k, 'nombre': m['nombre'],
-                 'total': str(_to_decimal(m['total']).quantize(Decimal('0.01'))),
-                 'cantidad': m['cantidad']}
-                for k, m in v['por_metodo'].items()
-            ],
-        }
-        for v in cajero_map.values()
-    ]
-    totales_por_metodo = sorted(
-        [
-            {
-                'tipo': tipo,
-                'nombre': m['nombre'],
-                'total': str(_to_decimal(m['total']).quantize(Decimal('0.01'))),
-                'cantidad': m['cantidad'],
-            }
-            for tipo, m in global_metodo.items()
-        ],
-        key=lambda x: Decimal(x['total']),
-        reverse=True,
-    )
-    return totales_por_cajero, totales_por_metodo
 
 
 def _emit_vendor_update(vendor_id, event_type, data):
@@ -236,6 +101,31 @@ def _emit_vendor_update(vendor_id, event_type, data):
         )
     except Exception:
         pass
+
+
+def _almacen_id_desde_sucursal(sucursal_id):
+    """Primer almacén activo de la sucursal (para precio PEPS en POS)."""
+    if not sucursal_id:
+        return None
+    alm = Almacen.objects.filter(
+        sucursal_id=sucursal_id, activo=True,
+    ).order_by('id').first()
+    return alm.id if alm else None
+
+
+def _serialize_producto_pos(product, request):
+    """Producto POS con precio del lote activo (PEPS) o fallback a Product.price."""
+    params = getattr(request, 'query_params', request.GET)
+    sucursal_id = _safe_int(params.get('sucursal_id'), default=None)
+    almacen_id = _almacen_id_desde_sucursal(sucursal_id)
+    precio_venta_lote = get_precio_venta_lote(product.id, almacen_id)
+    precio_display = precio_venta_lote if precio_venta_lote is not None else product.price
+    payload = ProductPOSSerializer(product, context={'request': request}).data
+    payload['precio_venta_lote'] = (
+        str(precio_venta_lote) if precio_venta_lote is not None else None
+    )
+    payload['precio'] = str(precio_display)
+    return payload
 
 
 # ─── VentaPOS ────────────────────────────────────────────────────────────────
@@ -309,6 +199,7 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             'sucursal', 'metodo_pago', 'cupon', 'caja', 'turno', 'usuario',
         ).prefetch_related(
             'items__product', 'items__variant',
+            'pagos__metodo_pago',
         ).order_by('-created_at')
 
         p = self.request.query_params
@@ -330,7 +221,20 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             except (TypeError, ValueError):
                 pass
         if p.get('metodo_pago_tipo'):
-            qs = qs.filter(metodo_pago__tipo=p['metodo_pago_tipo'])
+            tipo = p['metodo_pago_tipo']
+            qs = qs.filter(
+                Q(metodo_pago__tipo=tipo)
+                | Q(pagos__metodo_pago__tipo=tipo)
+            ).distinct()
+        if p.get('metodo_pago_id'):
+            try:
+                mp_id = int(p['metodo_pago_id'])
+                qs = qs.filter(
+                    Q(metodo_pago_id=mp_id)
+                    | Q(pagos__metodo_pago_id=mp_id)
+                ).distinct()
+            except (TypeError, ValueError):
+                pass
         if p.get('status'):
             qs = qs.filter(status=p['status'])
         elif p.get('excluir_inactivas', '').lower() in ('1', 'true', 'yes'):
@@ -438,9 +342,54 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         venta = get_object_or_404(self.get_queryset(), pk=pk)
         return Response(VentaPOSSerializer(venta).data)
 
+    def _crear_pagos_venta(self, venta, vendor, total, data, metodo_pago_legacy):
+        """Registra VentaPOSPago y ajusta VentaPOS.metodo_pago (mixto si hay 2+ métodos)."""
+        pagos_input = data.get('pagos') or []
+        metodos_usados = []
+
+        if pagos_input:
+            for idx, p in enumerate(pagos_input):
+                mp = get_object_or_404(
+                    MetodoPago, id=p['metodo_pago_id'], vendor=vendor, activo=True,
+                )
+                VentaPOSPago.objects.create(
+                    venta=venta,
+                    metodo_pago=mp,
+                    monto=p['monto'],
+                    orden=idx,
+                )
+                metodos_usados.append(mp)
+        elif metodo_pago_legacy:
+            VentaPOSPago.objects.create(
+                venta=venta,
+                metodo_pago=metodo_pago_legacy,
+                monto=total,
+                orden=0,
+            )
+            metodos_usados.append(metodo_pago_legacy)
+
+        if len(metodos_usados) > 1:
+            header_mp = (
+                MetodoPago.objects.filter(
+                    vendor=vendor, tipo='mixto', activo=True,
+                ).order_by('orden', 'id').first()
+                or metodos_usados[0]
+            )
+        elif metodos_usados:
+            header_mp = metodos_usados[0]
+        else:
+            header_mp = None
+
+        if venta.metodo_pago_id != (header_mp.id if header_mp else None):
+            venta.metodo_pago = header_mp
+            venta.save(update_fields=['metodo_pago'])
+
     def create(self, request):
         vendor = self._get_vendor()
-        ser = VentaPOSCreateSerializer(data=request.data)
+        ser = VentaPOSCreateSerializer(
+            data=request.data,
+            context={'vendor': vendor, 'request': request},
+        )
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
 
@@ -492,6 +441,23 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                         raise ValidationError({
                             'items': f"El producto '{nombre}' tiene variantes. Debe seleccionar una variante."
                         })
+
+            # ── 1b. Precio unitario por lote PEPS (si el frontend no lo envía) ─
+            from products.models import Product
+            for item in items_data:
+                if item.get('precio_unitario') is not None:
+                    continue
+                pid = item['product_id']
+                lotes = inventories_by_product[pid]
+                product = lotes[0].product if lotes else get_object_or_404(
+                    Product, pk=pid, vendor=vendor,
+                )
+                almacen_id = (
+                    lotes[0].almacen_id if lotes
+                    else _almacen_id_desde_sucursal(sucursal.id)
+                )
+                precio_lote = get_precio_venta_lote(pid, almacen_id)
+                item['precio_unitario'] = precio_lote or product.price
 
             # ── 2. Validar cupón ──────────────────────────────────────────────
             cupon = None
@@ -609,7 +575,15 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                         raise ValidationError({'items': str(exc)}) from exc
 
                 cantidad_pendiente = item['cantidad']
-                precio = item['precio_unitario']
+                product = lotes[0].product if lotes else get_object_or_404(
+                    Product, pk=pid, vendor=vendor,
+                )
+                almacen_id = (
+                    lotes[0].almacen_id if lotes
+                    else _almacen_id_desde_sucursal(sucursal.id)
+                )
+                precio_lote = get_precio_venta_lote(pid, almacen_id)
+                precio = item.get('precio_unitario') or precio_lote or product.price
 
                 # Costos ponderados para calcular costo_unitario del item
                 costo_total_lotes = Decimal('0')
@@ -664,6 +638,9 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             if cupon:
                 Cupon.objects.filter(pk=cupon.pk).update(
                     usos_actuales=F('usos_actuales') + 1)
+
+            # ── 11. Pagos mixtos (VentaPOSPago) ───────────────────────────────
+            self._crear_pagos_venta(venta, vendor, total, data, metodo_pago)
 
         venta.refresh_from_db()
         _emit_vendor_update(
@@ -880,8 +857,9 @@ class ProductoPOSSearchView(APIView):
         # Barcode exacto primero, luego nombre
         qs = qs.filter(Q(barcode=q) | Q(name__icontains=q))[:10]
 
-        ser = ProductPOSSerializer(qs, many=True, context={'request': request})
-        return Response(ser.data)
+        return Response([
+            _serialize_producto_pos(p, request) for p in qs
+        ])
 
 
 class POSScanView(APIView):
@@ -917,10 +895,9 @@ class POSScanView(APIView):
             exact_match = base_qs.filter(sku=code).first()
 
         if exact_match:
-            ser = ProductPOSSerializer(exact_match, context={'request': request})
             return Response({
                 'match': 'exact',
-                'product': ser.data
+                'product': _serialize_producto_pos(exact_match, request),
             })
 
         # 2. Si no hay match exacto, buscar parcial
@@ -933,10 +910,11 @@ class POSScanView(APIView):
         if not partial_qs:
             return Response({'match': 'none'})
 
-        ser = ProductPOSSerializer(partial_qs, many=True, context={'request': request})
         return Response({
             'match': 'partial',
-            'products': ser.data
+            'products': [
+                _serialize_producto_pos(p, request) for p in partial_qs
+            ],
         })
 
 
@@ -1061,24 +1039,20 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
 
         ventas = VentaPOS.objects.filter(
             turno=turno,
-        ).filter(_ventas_incluidas_arqueo_q()).select_related('metodo_pago')
+        ).filter(_ventas_incluidas_arqueo_q()).select_related(
+            'metodo_pago',
+        ).prefetch_related('pagos__metodo_pago')
 
         agg = ventas.aggregate(total=Sum('total'), cantidad=Count('id'))
         total_ventas = agg['total'] or Decimal('0')
 
-        # Ventas agrupadas por método de pago
         por_metodo: dict = {}
         for v in ventas:
-            if v.metodo_pago:
-                nombre = v.metodo_pago.nombre
-            elif v.es_credito:
-                nombre = 'Crédito'
-            else:
-                nombre = 'Sin método'
-            if nombre not in por_metodo:
-                por_metodo[nombre] = {'total': Decimal('0'), 'cantidad': 0}
-            por_metodo[nombre]['total'] += v.total
-            por_metodo[nombre]['cantidad'] += 1
+            for _tipo, nombre, monto in _metodo_venta_arqueo(v):
+                if nombre not in por_metodo:
+                    por_metodo[nombre] = {'total': Decimal('0'), 'cantidad': 0}
+                por_metodo[nombre]['total'] += monto
+                por_metodo[nombre]['cantidad'] += 1
 
         arqueo = _calc_efectivo_esperado_turno(turno)
         efectivo_esperado = arqueo['efectivo_esperado']
@@ -1287,13 +1261,21 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             if metodo_pago_tipo:
                 if metodo_pago_tipo == 'credito':
                     ventas_qs = ventas_qs.filter(
-                        Q(es_credito=True) | Q(metodo_pago__tipo='credito')
-                    )
+                        Q(es_credito=True)
+                        | Q(metodo_pago__tipo='credito')
+                        | Q(pagos__metodo_pago__tipo='credito')
+                    ).distinct()
                 else:
+                    tiene_pagos = VentaPOSPago.objects.filter(venta_id=OuterRef('pk'))
                     ventas_qs = ventas_qs.filter(
-                        metodo_pago__tipo=metodo_pago_tipo,
                         es_credito=False,
-                    )
+                    ).filter(
+                        Q(pagos__metodo_pago__tipo=metodo_pago_tipo)
+                        | (
+                            Q(metodo_pago__tipo=metodo_pago_tipo)
+                            & ~Exists(tiene_pagos)
+                        )
+                    ).distinct()
             totales_por_cajero, totales_por_metodo = _aggregate_ventas_arqueo(ventas_qs)
 
         # ── Paginación ────────────────────────────────────────────────────────

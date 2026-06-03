@@ -280,25 +280,24 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
 
     def get_metodos_pago(self, obj):
         from django.db.models import Q
+        from payments.utils import _metodo_venta_arqueo
+
         try:
             resultado = {}
             ventas = obj.ventas.filter(
                 Q(status='completada')
                 | Q(es_credito=True, status__in=['credito', 'completada'])
-            ).select_related('metodo_pago')
+            ).select_related('metodo_pago').prefetch_related('pagos__metodo_pago')
             for v in ventas:
-                if v.es_credito:
-                    nombre = 'Crédito'
-                else:
-                    nombre = v.metodo_pago.nombre if v.metodo_pago else 'Sin método'
-                try:
-                    monto_f = float(v.total) if v.total is not None else 0.0
-                except (TypeError, ValueError):
-                    monto_f = 0.0
-                if nombre not in resultado:
-                    resultado[nombre] = {'monto': 0.0, 'cantidad': 0}
-                resultado[nombre]['monto'] += monto_f
-                resultado[nombre]['cantidad'] += 1
+                for _tipo, nombre, monto in _metodo_venta_arqueo(v):
+                    try:
+                        monto_f = float(monto)
+                    except (TypeError, ValueError):
+                        monto_f = 0.0
+                    if nombre not in resultado:
+                        resultado[nombre] = {'monto': 0.0, 'cantidad': 0}
+                    resultado[nombre]['monto'] += monto_f
+                    resultado[nombre]['cantidad'] += 1
             return resultado
         except Exception:
             return {}

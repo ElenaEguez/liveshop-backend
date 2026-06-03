@@ -337,7 +337,7 @@ class VendorDashboardView(APIView):
 
     def get(self, request, *args, **kwargs):
         from django.utils import timezone
-        from payments.models import Payment, VentaPOS, VentaPOSItem, GastoOperativo
+        from payments.models import Payment, VentaPOS, VentaPOSItem, VentaPOSPago, GastoOperativo
         from orders.models import Reservation
 
         vendor = get_vendor_for_user(request.user)
@@ -379,9 +379,29 @@ class VendorDashboardView(APIView):
         ingreso_total = ingreso_agg['total']
         monthly_sales = float(ingreso_total)
 
-        # ── Ventas por método de pago ─────────────────────────────────────────
-        ventas_por_metodo_qs = (
-            ventas_qs
+        # ── Ventas por método de pago (líneas VentaPOSPago + fallback legacy) ─
+        ventas_por_metodo_pago = {}
+        pagos_por_metodo_qs = (
+            VentaPOSPago.objects.filter(
+                venta__in=ventas_qs,
+            )
+            .values('metodo_pago__nombre')
+            .annotate(
+                total=Coalesce(Sum('monto'), Decimal('0')),
+                cantidad=Count('id'),
+            )
+            .order_by('metodo_pago__nombre')
+        )
+        for item in pagos_por_metodo_qs:
+            nombre = item['metodo_pago__nombre'] or 'Sin método'
+            ventas_por_metodo_pago[nombre] = {
+                'total': float(item['total']),
+                'cantidad': item['cantidad'],
+            }
+
+        ventas_sin_pagos_qs = (
+            ventas_qs.annotate(n_pagos=Count('pagos'))
+            .filter(n_pagos=0)
             .values('metodo_pago__nombre')
             .annotate(
                 total=Coalesce(Sum('total'), Decimal('0')),
@@ -389,13 +409,16 @@ class VendorDashboardView(APIView):
             )
             .order_by('metodo_pago__nombre')
         )
-        ventas_por_metodo_pago = {}
-        for item in ventas_por_metodo_qs:
+        for item in ventas_sin_pagos_qs:
             nombre = item['metodo_pago__nombre'] or 'Sin método'
-            ventas_por_metodo_pago[nombre] = {
-                'total': float(item['total']),
-                'cantidad': item['cantidad'],
-            }
+            if nombre not in ventas_por_metodo_pago:
+                ventas_por_metodo_pago[nombre] = {
+                    'total': float(item['total']),
+                    'cantidad': item['cantidad'],
+                }
+            else:
+                ventas_por_metodo_pago[nombre]['total'] += float(item['total'])
+                ventas_por_metodo_pago[nombre]['cantidad'] += item['cantidad']
 
         # ── Costo total de lo vendido (suma cantidad × costo_unitario) ────────
         costo_agg = VentaPOSItem.objects.filter(

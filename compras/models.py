@@ -148,7 +148,8 @@ class OrdenCompraItem(models.Model):
     )
     precio_venta_sugerido = models.DecimalField(
         max_digits=12, decimal_places=2, default=0,
-        help_text='Precio de venta calculado (costo * (1 + %ganancia/100))'
+        verbose_name='Precio de venta sugerido al recibir',
+        help_text='Se copia a Inventory.precio_venta al confirmar la orden',
     )
     precio_venta_es_manual = models.BooleanField(
         default=False,

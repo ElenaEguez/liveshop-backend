@@ -5,7 +5,11 @@ from compras.models import Proveedor, OrdenCompra, OrdenCompraItem
 class OrdenCompraItemInline(admin.TabularInline):
     model = OrdenCompraItem
     extra = 0
-    fields = ['producto', 'variante', 'descripcion', 'cantidad', 'precio_unitario', 'subtotal']
+    fields = [
+        'producto', 'variante', 'descripcion', 'cantidad',
+        'costo_mercaderia', 'flete_unitario', 'porcentaje_ganancia',
+        'precio_venta_sugerido', 'precio_unitario', 'subtotal',
+    ]
     readonly_fields = ['subtotal']
 
 
