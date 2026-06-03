@@ -27,7 +27,6 @@ from compras.serializers import (
     OrdenCompraSerializer,
     DevolucionCompraSerializer,
     DevolucionCompraCreateSerializer,
-    _tiene_ventas_registradas,
     _cantidad_ya_devuelta_en_orden,
     _variante_descripcion,
 )
@@ -677,12 +676,13 @@ class BuscarDevolucionView(APIView):
                         ya_dev = _cantidad_ya_devuelta_en_orden(
                             orden, oi.producto_id, alm_id, var_id,
                         )
-                        puede = not _tiene_ventas_registradas(
-                            oi.producto,
-                            alm,
-                            variante,
-                            desde_fecha=orden.fecha,
-                        )
+                        inv_check = Inventory.objects.filter(
+                            product=oi.producto,
+                            almacen=alm,
+                            is_active=True,
+                        ).first()
+                        stock_disp = inv_check.quantity if inv_check else 0
+                        puede = stock_disp > 0 and ya_dev < dist.cantidad
                         items_out.append({
                             'item_id': dist.id,
                             'orden_item_id': oi.id,
@@ -702,12 +702,13 @@ class BuscarDevolucionView(APIView):
                     ya_dev = _cantidad_ya_devuelta_en_orden(
                         orden, oi.producto_id, alm_id, var_id,
                     )
-                    puede = not _tiene_ventas_registradas(
-                        oi.producto,
-                        alm,
-                        variante,
-                        desde_fecha=orden.fecha,
-                    )
+                    inv_check = Inventory.objects.filter(
+                        product=oi.producto,
+                        almacen=alm,
+                        is_active=True,
+                    ).first()
+                    stock_disp = inv_check.quantity if inv_check else 0
+                    puede = stock_disp > 0 and ya_dev < oi.cantidad
                     items_out.append({
                         'item_id': oi.id,
                         'orden_item_id': oi.id,

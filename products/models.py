@@ -1,4 +1,7 @@
+import io
+
 from django.db import models
+from PIL import Image, ImageOps
 from vendors.models import Vendor
 
 
@@ -109,6 +112,25 @@ class Product(models.Model):
 class ProductImage(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='products/images/')
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.image:
+            return
+        try:
+            img = Image.open(self.image.path)
+            img = ImageOps.exif_transpose(img)
+            output = io.BytesIO()
+            fmt = img.format or 'JPEG'
+            if fmt.upper() == 'JPEG':
+                img.save(output, format='JPEG', quality=90, optimize=True)
+            else:
+                img.save(output, format=fmt)
+            output.seek(0)
+            with open(self.image.path, 'wb') as f:
+                f.write(output.read())
+        except Exception:
+            pass
 
     def __str__(self):
         return f'Imagen de {self.product.name}'

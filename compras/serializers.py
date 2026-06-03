@@ -86,29 +86,20 @@ def _procesar_fila_devolucion(dev, vendor, user, row, documento_ref, notas):
         )
     cantidad = row['cantidad']
 
-    desde_fecha = row.get('desde_fecha')
-    _assert_sin_ventas_para_devolucion(
-        producto, almacen, variante, desde_fecha=desde_fecha,
-    )
-
     inv = Inventory.objects.select_for_update().filter(
         product=producto,
         almacen=almacen,
         is_active=True,
     ).first()
-    if not inv:
-        raise serializers.ValidationError(
-            {'items': f'Sin inventario en almacén para "{producto.name}".'}
-        )
-    if inv.quantity < cantidad:
-        raise serializers.ValidationError(
-            {
-                'items': (
-                    f'"{producto.name}": stock insuficiente en almacén '
-                    f'({inv.quantity} uds.).'
-                )
-            }
-        )
+    stock_disponible = inv.quantity if inv else 0
+    if stock_disponible < cantidad:
+        raise serializers.ValidationError({
+            'items': (
+                f'Stock insuficiente para devolver "{producto.name}": '
+                f'disponible {stock_disponible} uds, '
+                f'solicitado {cantidad} uds.'
+            )
+        })
 
     from products.stock_service import StockError, apply_stock_delta, product_has_variants
 
