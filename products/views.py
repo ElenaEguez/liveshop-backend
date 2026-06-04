@@ -599,6 +599,13 @@ class InventoryViewSet(viewsets.ModelViewSet):
 
         almacen_id = request.query_params.get('almacen_id')
         almacen_id_int = int(almacen_id) if almacen_id else None
+        sucursal_id_int = None
+        sucursal_id = request.query_params.get('sucursal_id')
+        if sucursal_id and not almacen_id_int:
+            try:
+                sucursal_id_int = int(sucursal_id)
+            except (TypeError, ValueError):
+                sucursal_id_int = None
 
         qs = self.filter_queryset(self.get_queryset())
         agg_qs = (
@@ -653,7 +660,7 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 'updated_at': None,
                 'variante': None,
             }
-            enrich_inventory_row(item, almacen_id_int)
+            enrich_inventory_row(item, almacen_id_int, sucursal_id_int)
             variante_id = request.query_params.get('variante_id')
             if variante_id:
                 try:

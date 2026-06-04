@@ -29,8 +29,13 @@ from vendors.models import (
 from vendors.permissions import IsVendorOrTeamMember, get_vendor_for_user
 from vendors.serializers import TurnoCajaSerializer, MovimientoCajaSerializer
 from products.models import Inventory, ProductVariant
+from products.inventory_stock import (
+    filter_inventories_sucursal_lotes,
+    inventory_disponible_sucursal,
+)
 from products.stock_service import (
     StockError,
+    align_single_variant_stock_from_inventory,
     apply_inventory_kardex_delta,
     apply_stock_delta,
     apply_variant_stock_delta,
@@ -396,9 +401,6 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         with transaction.atomic():
             # ── Sucursal ─────────────────────────────────────────────────────
             sucursal = get_object_or_404(Sucursal, id=data['sucursal_id'], vendor=vendor)
-            almacen_ids_sucursal = list(
-                Almacen.objects.filter(sucursal=sucursal, activo=True).values_list('id', flat=True)
-            )
 
             # Método de inventario configurado por el vendor (PEPS/UEPS/promedio)
             inv_method = vendor.inventory_method  # 'peps', 'ueps', 'promedio'
@@ -412,11 +414,12 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                 # Ordenar lotes según método de inventario (solo almacenes de la sucursal)
                 order = 'created_at' if inv_method == 'peps' else '-created_at'
                 lotes_qs = Inventory.objects.select_for_update().filter(
-                    product_id=pid, product__vendor=vendor,
+                    product__vendor=vendor,
                     is_active=True, quantity__gt=0,
                 )
-                if almacen_ids_sucursal:
-                    lotes_qs = lotes_qs.filter(almacen_id__in=almacen_ids_sucursal)
+                lotes_qs = filter_inventories_sucursal_lotes(
+                    lotes_qs, pid, sucursal.id,
+                )
                 lotes = list(lotes_qs.order_by(order))
                 total_avail = sum(
                     max(0, l.quantity - l.reserved_quantity) for l in lotes
@@ -568,6 +571,10 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                     variant = get_object_or_404(
                         ProductVariant,
                         id=item['variant_id'], product_id=pid,
+                    )
+                    inv_sucursal = inventory_disponible_sucursal(pid, sucursal.id)
+                    align_single_variant_stock_from_inventory(
+                        variant, inv_sucursal, item['cantidad'],
                     )
                     try:
                         apply_variant_stock_delta(variant, -item['cantidad'])

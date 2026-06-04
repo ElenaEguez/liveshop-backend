@@ -363,6 +363,30 @@ def apply_inventory_kardex_delta(
 
 
 @transaction.atomic
+def align_single_variant_stock_from_inventory(
+    variant: ProductVariant,
+    inventario_disponible: int,
+    cantidad: int,
+) -> None:
+    """
+    Una sola variante activa con inventario en sucursal pero stock_extra en 0:
+    alinea el catálogo al físico antes de descontar en POS.
+    """
+    if cantidad <= 0 or inventario_disponible < cantidad:
+        return
+    n_active = ProductVariant.objects.filter(
+        product_id=variant.product_id, is_active=True,
+    ).count()
+    if n_active != 1:
+        return
+    if int(variant.stock_extra or 0) >= cantidad:
+        return
+    ProductVariant.objects.filter(pk=variant.pk).update(
+        stock_extra=max(0, int(inventario_disponible)),
+    )
+    variant.refresh_from_db()
+
+
 def apply_variant_stock_delta(variant: ProductVariant, delta: int) -> int:
     """Solo stock_extra de variante (una vez por venta multi-lote)."""
     delta = int(delta)
