@@ -1,5 +1,7 @@
 from django.db.models import Q
 
+import logging
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -31,6 +33,8 @@ from compras.serializers import (
     _variante_descripcion,
 )
 from vendors.permissions import get_vendor_for_user
+
+logger = logging.getLogger(__name__)
 
 
 def _get_vendor(request):
@@ -456,34 +460,51 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         if not vendor:
             return Response({'error': 'Sin vendor asignado'}, status=400)
 
-        with transaction.atomic():
-            orden = OrdenCompra.objects.select_for_update().get(
-                pk=pk,
-                vendor=vendor,
-            )
-            if orden.estado != 'pendiente':
-                return Response(
-                    {'error': 'Solo se pueden confirmar órdenes pendientes'},
-                    status=400,
-                )
-            for it in orden.items.all():
-                if not it.almacen_id and not orden.almacen_id:
+        from products.stock_service import StockError
+
+        try:
+            with transaction.atomic():
+                try:
+                    orden = OrdenCompra.objects.select_for_update().get(
+                        pk=pk,
+                        vendor=vendor,
+                    )
+                except OrdenCompra.DoesNotExist:
+                    return Response({'error': 'Orden no encontrada.'}, status=404)
+
+                if orden.estado != 'pendiente':
                     return Response(
-                        {
-                            'error': (
-                                'Indique almacén destino en la cabecera de la orden '
-                                'o en cada línea antes de confirmar.'
-                            ),
-                        },
+                        {'error': 'Solo se pueden confirmar órdenes pendientes'},
                         status=400,
                     )
-            try:
-                from products.stock_service import StockError
+                for it in orden.items.all():
+                    if not it.almacen_id and not orden.almacen_id:
+                        return Response(
+                            {
+                                'error': (
+                                    'Indique almacén destino en la cabecera de la orden '
+                                    'o en cada línea antes de confirmar.'
+                                ),
+                            },
+                            status=400,
+                        )
+
                 _procesar_recepcion_inventario(orden)
-            except (ValueError, StockError) as exc:
-                return Response({'error': str(exc)}, status=400)
-            orden.estado = 'recibida'
-            orden.save()  # dispara la señal pre_save
+                orden.estado = 'recibida'
+                orden.save()
+        except (ValueError, StockError) as exc:
+            return Response({'error': str(exc)}, status=400)
+        except Exception:
+            logger.exception('Error confirmando orden de compra pk=%s', pk)
+            return Response(
+                {
+                    'error': (
+                        'No se pudo confirmar la orden por un error interno. '
+                        'Revise los logs del servidor o contacte soporte.'
+                    ),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         orden.refresh_from_db()
         return Response(OrdenCompraSerializer(orden).data)

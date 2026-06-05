@@ -9,12 +9,15 @@ Reglas:
 """
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
 
 from .models import Inventory, Product, ProductVariant
+
+logger = logging.getLogger(__name__)
 
 
 class StockError(ValueError):
@@ -52,6 +55,71 @@ def kardex_product_visible(product_id: int) -> bool:
     return not product_has_variant_draft(product_id)
 
 
+def _inventory_rows_for_lote(product: Product, almacen, *, lock: bool = False):
+    """Filas de inventario para producto + almacén (incluye duplicados legacy)."""
+    qs = Inventory.objects.filter(product=product, almacen=almacen).order_by(
+        'created_at', 'id',
+    )
+    if lock:
+        ids = list(qs.values_list('pk', flat=True))
+        if not ids:
+            return []
+        return list(
+            Inventory.objects.select_for_update().filter(pk__in=ids).order_by(
+                'created_at', 'id',
+            )
+        )
+    return list(qs)
+
+
+def _merge_duplicate_inventories(rows: list[Inventory]) -> Inventory:
+    """
+    Consolida lotes duplicados (mismo producto + almacén) en el registro más antiguo.
+    Los duplicados se desactivan con cantidad 0 para no romper kardex histórico.
+    """
+    if not rows:
+        raise StockError('No hay inventario para consolidar.')
+    primary = rows[0]
+    if len(rows) == 1:
+        return primary
+
+    total_qty = sum(int(r.quantity or 0) for r in rows)
+    total_reserved = sum(int(r.reserved_quantity or 0) for r in rows)
+
+    for row in reversed(rows):
+        if row.purchase_cost is not None:
+            primary.purchase_cost = row.purchase_cost
+        if row.precio_venta is not None:
+            primary.precio_venta = row.precio_venta
+
+    primary.quantity = total_qty
+    primary.reserved_quantity = total_reserved
+    primary.is_active = True
+    primary.save(update_fields=[
+        'quantity', 'reserved_quantity', 'purchase_cost', 'precio_venta',
+        'is_active', 'updated_at',
+    ])
+
+    dup_ids = []
+    for dup in rows[1:]:
+        dup.quantity = 0
+        dup.reserved_quantity = 0
+        dup.is_active = False
+        dup.save(update_fields=['quantity', 'reserved_quantity', 'is_active', 'updated_at'])
+        dup_ids.append(dup.pk)
+
+    logger.warning(
+        'Inventario duplicado consolidado: product_id=%s almacen_id=%s '
+        'primary_id=%s merged_ids=%s total_qty=%s',
+        primary.product_id,
+        primary.almacen_id,
+        primary.pk,
+        dup_ids,
+        total_qty,
+    )
+    return primary
+
+
 def get_or_create_inventory(
     product: Product,
     almacen,
@@ -66,15 +134,16 @@ def get_or_create_inventory(
     }
     if defaults:
         base_defaults.update(defaults)
-    qs = Inventory.objects
-    if lock:
-        qs = qs.select_for_update()
-    inv, _ = qs.get_or_create(
+
+    rows = _inventory_rows_for_lote(product, almacen, lock=lock)
+    if rows:
+        return _merge_duplicate_inventories(rows)
+
+    return Inventory.objects.create(
         product=product,
         almacen=almacen,
-        defaults=base_defaults,
+        **base_defaults,
     )
-    return inv
 
 
 def get_system_stock(product_id: int, almacen_id, variant_id=None) -> int:
