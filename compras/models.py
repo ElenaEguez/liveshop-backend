@@ -50,7 +50,7 @@ class OrdenCompra(models.Model):
         Proveedor, on_delete=models.SET_NULL,
         null=True, blank=True
     )
-    numero = models.CharField(max_length=20, unique=True)
+    numero = models.CharField(max_length=20)
     factura_compra = models.CharField(max_length=80, blank=True, default='')
     fecha = models.DateField()
     fecha_entrega = models.DateField(null=True, blank=True)
@@ -80,15 +80,26 @@ class OrdenCompra(models.Model):
         ordering = ['-created_at']
         verbose_name = 'Orden de Compra'
         verbose_name_plural = 'Órdenes de Compra'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['vendor', 'numero'],
+                name='compras_ordencompra_vendor_numero_uniq',
+            ),
+        ]
 
     def __str__(self):
         return f'OC-{self.numero}'
 
     def save(self, *args, **kwargs):
-        # Auto-número por vendor
         if not self.pk and not self.numero:
+            vendor_id = self.vendor_id
+            if not vendor_id and self.vendor:
+                vendor_id = self.vendor.pk
+            if not vendor_id:
+                raise ValueError('La orden de compra requiere un vendor.')
+
             numeros = OrdenCompra.objects.filter(
-                vendor=self.vendor
+                vendor_id=vendor_id,
             ).values_list('numero', flat=True)
             max_numero = 0
             for numero in numeros:
@@ -96,7 +107,17 @@ class OrdenCompra(models.Model):
                 if numero_txt.isdigit():
                     max_numero = max(max_numero, int(numero_txt))
             n = max_numero + 1
-            self.numero = str(n).zfill(6)
+            for _ in range(10000):
+                candidate = str(n).zfill(6)
+                if not OrdenCompra.objects.filter(
+                    vendor_id=vendor_id,
+                    numero=candidate,
+                ).exists():
+                    self.numero = candidate
+                    break
+                n += 1
+            else:
+                raise ValueError('No se pudo generar un número de orden único.')
         super().save(*args, **kwargs)
 
     def recalcular_totales(self):

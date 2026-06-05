@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.utils import IntegrityError
 
 from products.models import Product, ProductVariant, Inventory
 
@@ -101,6 +102,10 @@ def _prepare_orden_item_row(raw):
         item['precio_venta_es_manual'] = v in (True, 'true', 'True', '1', 1, 'on', 'yes')
     item.pop('subtotal', None)
     item.pop('costo_unitario_total', None)
+    if 'precio_unitario' not in item:
+        cm = _decimal_from_request(item.get('costo_mercaderia'))
+        fl = _decimal_from_request(item.get('flete_unitario'))
+        item['precio_unitario'] = cm + fl
 
     dist_list = None
     if dist_raw is not None:
@@ -396,12 +401,40 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         except ValueError as exc:
             return Response({'error': str(exc)}, status=400)
 
-        with transaction.atomic():
-            serializer = self.get_serializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            orden = serializer.save(vendor=vendor, created_by=request.user)
-            _persist_items(orden, items_data, orden_almacen_id)
-            orden.recalcular_totales()
+        try:
+            with transaction.atomic():
+                serializer = self.get_serializer(data=request.data)
+                serializer.is_valid(raise_exception=True)
+                orden = serializer.save(vendor=vendor, created_by=request.user)
+                _persist_items(orden, items_data, orden_almacen_id)
+                orden.recalcular_totales()
+        except ValidationError as exc:
+            detail = exc.detail
+            if isinstance(detail, dict):
+                first = next(iter(detail.values()))
+                msg = first[0] if isinstance(first, list) else str(first)
+            else:
+                msg = str(detail)
+            return Response({'error': msg}, status=400)
+        except IntegrityError as exc:
+            logger.exception('IntegrityError creando orden de compra')
+            return Response(
+                {'error': 'No se pudo guardar la orden. Verifique los datos e intente de nuevo.'},
+                status=400,
+            )
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=400)
+        except Exception:
+            logger.exception('Error creando orden de compra')
+            return Response(
+                {
+                    'error': (
+                        'No se pudo crear la orden por un error interno. '
+                        'Revise los logs del servidor o contacte soporte.'
+                    ),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         return Response(
             OrdenCompraSerializer(orden).data,
