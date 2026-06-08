@@ -260,8 +260,28 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
         except Exception:
             return '0.00'
 
+    def _ventas_arqueo_en_turno(self, obj):
+        from django.db.models import Q, Sum
+
+        ventas_q = (
+            Q(status='completada')
+            | Q(es_credito=True, status__in=['credito', 'completada'])
+        )
+        qs = obj.ventas.filter(ventas_q)
+        periodo_q = self.context.get('arqueo_ventas_periodo_q')
+        if periodo_q:
+            qs = qs.filter(periodo_q)
+        return qs
+
     def get_total_ventas(self, obj):
         try:
+            periodo_q = self.context.get('arqueo_ventas_periodo_q')
+            if periodo_q:
+                from django.db.models import Sum
+                total = self._ventas_arqueo_en_turno(obj).aggregate(
+                    total=Sum('total'),
+                )['total']
+                return self._safe_money_str(total or 0)
             return self._safe_money_str(obj.total_ventas)
         except Exception:
             return '0.00'
@@ -279,15 +299,13 @@ class TurnoCajaSerializer(serializers.ModelSerializer):
             return '0.00'
 
     def get_metodos_pago(self, obj):
-        from django.db.models import Q
         from payments.utils import _metodo_venta_arqueo
 
         try:
             resultado = {}
-            ventas = obj.ventas.filter(
-                Q(status='completada')
-                | Q(es_credito=True, status__in=['credito', 'completada'])
-            ).select_related('metodo_pago').prefetch_related('pagos__metodo_pago')
+            ventas = self._ventas_arqueo_en_turno(obj).select_related(
+                'metodo_pago',
+            ).prefetch_related('pagos__metodo_pago')
             for v in ventas:
                 for _tipo, nombre, monto in _metodo_venta_arqueo(v):
                     try:

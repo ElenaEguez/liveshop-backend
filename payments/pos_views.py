@@ -2,6 +2,7 @@
 POS views: VentaPOS, TurnoCaja, GastoOperativo, CategoriaGasto, Cupon,
            búsqueda de productos, y validación de cupones.
 """
+import calendar
 import re
 from datetime import date, timedelta, datetime as dt
 from decimal import Decimal
@@ -93,6 +94,112 @@ def _ventas_incluidas_arqueo_q():
     return (
         Q(status='completada')
         | Q(es_credito=True, status__in=['credito', 'completada'])
+    )
+
+
+def _local_datetime_range_q(field_name, start_date, end_date):
+    """Rango [start_date, end_date] en calendario local (TIME_ZONE)."""
+    tz = timezone.get_current_timezone()
+    start = timezone.make_aware(dt.combine(start_date, dt.min.time()), tz)
+    end = timezone.make_aware(dt.combine(end_date, dt.min.time()), tz) + timedelta(days=1)
+    return Q(**{f'{field_name}__gte': start, f'{field_name}__lt': end})
+
+
+def _ventas_arqueo_periodo_q(periodo, today, semana=None):
+    """Filtro de ventas POS por período (fecha local de created_at)."""
+    if periodo == 'today':
+        return _local_datetime_range_q('created_at', today, today)
+    if periodo == 'week':
+        week_start = today - timedelta(days=today.weekday())
+        return _local_datetime_range_q('created_at', week_start, today)
+    if periodo == 'month':
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        if semana is not None and 1 <= semana <= 5:
+            dia_inicio = (semana - 1) * 7 + 1
+            dia_fin = min(semana * 7, last_day)
+            start = date(today.year, today.month, dia_inicio)
+            end = date(today.year, today.month, dia_fin)
+            return _local_datetime_range_q('created_at', start, end)
+        start = date(today.year, today.month, 1)
+        end = date(today.year, today.month, last_day)
+        return _local_datetime_range_q('created_at', start, end)
+    if periodo == 'year':
+        start = date(today.year, 1, 1)
+        end = date(today.year, 12, 31)
+        return _local_datetime_range_q('created_at', start, end)
+    return Q()
+
+
+def _turno_apertura_periodo_q(periodo, today):
+    """Filtro de turnos por fecha de apertura (calendario local)."""
+    if periodo == 'today':
+        return Q(fecha_apertura__date=today)
+    if periodo == 'week':
+        week_start = today - timedelta(days=today.weekday())
+        return Q(
+            fecha_apertura__date__gte=week_start,
+            fecha_apertura__date__lte=today,
+        )
+    if periodo == 'month':
+        return Q(
+            fecha_apertura__year=today.year,
+            fecha_apertura__month=today.month,
+        )
+    if periodo == 'year':
+        return Q(fecha_apertura__year=today.year)
+    return Q()
+
+
+def _turno_apertura_semana_mes_q(today, semana):
+    """Filtro de turnos abiertos en la semana N del mes (1–5)."""
+    last_day = calendar.monthrange(today.year, today.month)[1]
+    dia_inicio = (semana - 1) * 7 + 1
+    dia_fin = min(semana * 7, last_day)
+    return Q(
+        fecha_apertura__year=today.year,
+        fecha_apertura__month=today.month,
+        fecha_apertura__day__gte=dia_inicio,
+        fecha_apertura__day__lte=dia_fin,
+    )
+
+
+def _expand_turnos_con_ventas_periodo(qs, vendor, ventas_periodo_q):
+    """Incluye turnos con ventas en el período aunque se hayan abierto antes."""
+    if not ventas_periodo_q:
+        return qs
+    turno_ids_from_sales = list(
+        VentaPOS.objects.filter(
+            ventas_periodo_q,
+            vendor=vendor,
+            turno_id__isnull=False,
+        )
+        .filter(_ventas_incluidas_arqueo_q())
+        .values_list('turno_id', flat=True)
+        .distinct()
+    )
+    if not turno_ids_from_sales:
+        return qs
+    base_ids = set(qs.values_list('id', flat=True))
+    all_ids = base_ids | set(turno_ids_from_sales)
+    return TurnoCaja.objects.filter(
+        id__in=all_ids,
+        caja__sucursal__vendor=vendor,
+    ).select_related('caja__sucursal', 'usuario').order_by('-fecha_apertura')
+
+
+def _turno_ids_con_ventas_usuarios(vendor, user_ids):
+    """Turnos que tienen ventas registradas por alguno de los usuarios indicados."""
+    if not user_ids:
+        return []
+    return list(
+        VentaPOS.objects.filter(
+            vendor=vendor,
+            usuario_id__in=user_ids,
+            turno_id__isnull=False,
+        )
+        .filter(_ventas_incluidas_arqueo_q())
+        .values_list('turno_id', flat=True)
+        .distinct()
     )
 
 
@@ -1187,65 +1294,49 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
 
         periodo = request.query_params.get('periodo', 'month')
         today = timezone.localdate()
-        ventas_periodo_filter = Q()
-        if periodo == 'today':
-            qs = qs.filter(fecha_apertura__date=today)
-            ventas_periodo_filter = Q(created_at__date=today)
-        elif periodo == 'week':
-            week_start = today - timedelta(days=today.weekday())  # lunes
-            qs = qs.filter(fecha_apertura__date__gte=week_start, fecha_apertura__date__lte=today)
-            ventas_periodo_filter = Q(created_at__date__gte=week_start, created_at__date__lte=today)
-        elif periodo == 'month':
-            qs = qs.filter(fecha_apertura__year=today.year, fecha_apertura__month=today.month)
-            ventas_periodo_filter = Q(created_at__year=today.year, created_at__month=today.month)
-        elif periodo == 'year':
-            qs = qs.filter(fecha_apertura__year=today.year)
-            ventas_periodo_filter = Q(created_at__year=today.year)
-
-        # Incluye turnos que tengan ventas en el período aunque se hayan abierto fuera del rango.
-        if ventas_periodo_filter:
-            turno_ids_from_sales = list(
-                VentaPOS.objects.filter(
-                    ventas_periodo_filter,
-                    vendor=vendor,
-                    turno_id__isnull=False,
-                ).values_list('turno_id', flat=True).distinct()
-            )
-            if turno_ids_from_sales:
-                qs = TurnoCaja.objects.filter(
-                    Q(id__in=qs.values_list('id', flat=True)) | Q(id__in=turno_ids_from_sales),
-                    caja__sucursal__vendor=vendor,
-                ).select_related('caja__sucursal', 'usuario').order_by('-fecha_apertura')
-
-        # Filtro semana del mes (solo periodo=month)
         semana_param = request.query_params.get('semana')
+        semana_mes = None
         if semana_param and periodo == 'month':
             try:
-                semana = int(semana_param)
-                if 1 <= semana <= 5:
-                    dia_inicio = (semana - 1) * 7 + 1
-                    dia_fin = min(semana * 7, 31)
-                    qs = qs.filter(
-                        fecha_apertura__day__gte=dia_inicio,
-                        fecha_apertura__day__lte=dia_fin,
-                    )
+                semana_mes = int(semana_param)
+                if not (1 <= semana_mes <= 5):
+                    semana_mes = None
             except (ValueError, TypeError):
-                pass
+                semana_mes = None
+
+        ventas_periodo_q = _ventas_arqueo_periodo_q(periodo, today, semana=semana_mes)
+        qs = qs.filter(_turno_apertura_periodo_q(periodo, today))
+        qs = _expand_turnos_con_ventas_periodo(qs, vendor, ventas_periodo_q)
+
+        if semana_mes is not None:
+            qs_apertura = qs.filter(_turno_apertura_semana_mes_q(today, semana_mes))
+            ventas_semana_q = _ventas_arqueo_periodo_q('month', today, semana=semana_mes)
+            qs = _expand_turnos_con_ventas_periodo(qs_apertura, vendor, ventas_semana_q)
+            ventas_periodo_q = ventas_semana_q
 
         # Filtros opcionales
         cajero_id = request.query_params.get('cajero_id')
         if cajero_id:
-            qs = qs.filter(usuario_id=cajero_id)
+            try:
+                cid = int(cajero_id)
+                turno_ids_vendedor = _turno_ids_con_ventas_usuarios(vendor, [cid])
+                qs = qs.filter(Q(usuario_id=cid) | Q(id__in=turno_ids_vendedor))
+            except (TypeError, ValueError):
+                pass
+
         rol_id = request.query_params.get('rol_id')
         if rol_id:
             try:
                 rid = int(rol_id)
-                user_ids = TeamMember.objects.filter(
-                    vendor=vendor,
-                    is_active=True,
-                    custom_role_id=rid,
-                ).values_list('user_id', flat=True)
-                qs = qs.filter(usuario_id__in=list(user_ids))
+                user_ids = list(
+                    TeamMember.objects.filter(
+                        vendor=vendor,
+                        is_active=True,
+                        custom_role_id=rid,
+                    ).values_list('user_id', flat=True)
+                )
+                turno_ids_rol = _turno_ids_con_ventas_usuarios(vendor, user_ids)
+                qs = qs.filter(Q(usuario_id__in=user_ids) | Q(id__in=turno_ids_rol))
             except (TypeError, ValueError):
                 pass
 
@@ -1265,6 +1356,8 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             ventas_qs = VentaPOS.objects.filter(
                 turno_id__in=turno_ids,
             ).filter(_ventas_incluidas_arqueo_q())
+            if ventas_periodo_q:
+                ventas_qs = ventas_qs.filter(ventas_periodo_q)
             if metodo_pago_tipo:
                 if metodo_pago_tipo == 'credito':
                     ventas_qs = ventas_qs.filter(
@@ -1296,7 +1389,14 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             'count': total_count,
             'page': page_num,
             'pages': max(1, -(-total_count // page_size)),
-            'results': TurnoCajaSerializer(qs_page, many=True).data,
+            'results': TurnoCajaSerializer(
+                qs_page,
+                many=True,
+                context={
+                    'request': request,
+                    'arqueo_ventas_periodo_q': ventas_periodo_q,
+                },
+            ).data,
             'totales_por_cajero': totales_por_cajero,
             'totales_por_metodo': totales_por_metodo,
         })
