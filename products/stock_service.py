@@ -81,6 +81,10 @@ def _merge_duplicate_inventories(rows: list[Inventory]) -> Inventory:
         raise StockError('No hay inventario para consolidar.')
     primary = rows[0]
     if len(rows) == 1:
+        # Lote único inactivo (p. ej. legacy fix_stock): reactivar para que POS lo vea.
+        if not primary.is_active:
+            primary.is_active = True
+            primary.save(update_fields=['is_active', 'updated_at'])
         return primary
 
     total_qty = sum(int(r.quantity or 0) for r in rows)
@@ -242,7 +246,12 @@ def apply_stock_delta(
             f'Disponible: {inv.quantity}.'
         )
     inv.quantity = nuevo_inv
-    inv.save(update_fields=['quantity', 'purchase_cost'] if update_purchase_cost is not None else ['quantity'])
+    # Entrada de stock (compra, ajuste, etc.): el lote debe quedar activo y visible en POS.
+    inv.is_active = True
+    if update_purchase_cost is not None:
+        inv.save(update_fields=['quantity', 'purchase_cost', 'is_active'])
+    else:
+        inv.save(update_fields=['quantity', 'is_active'])
 
     movimiento = None
     if create_kardex:

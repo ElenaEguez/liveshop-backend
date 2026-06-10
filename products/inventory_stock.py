@@ -135,9 +135,16 @@ def variant_stock_breakdown_sucursal(product_id: int, sucursal_id: int | None = 
         for v in variantes:
             v['disponible'] = 0
         variant_sum = 0
-    elif variant_sum <= 0 and len(variantes) == 1:
-        # Una sola variante: el físico en sucursal es vendible aunque stock_extra esté en 0
-        variantes[0]['disponible'] = inv_disponible
+    elif variant_sum <= 0 and len(variantes) >= 1:
+        # Catálogo sin stock_extra pero con físico en sucursal: el inventario es vendible en POS.
+        # 1 variante → todo el físico; N variantes en 0 → reparto 1/N (floor), resto a la primera.
+        if len(variantes) == 1:
+            variantes[0]['disponible'] = inv_disponible
+        else:
+            per = inv_disponible // len(variantes)
+            remainder = inv_disponible - per * len(variantes)
+            for i, v in enumerate(variantes):
+                v['disponible'] = per + (remainder if i == 0 else 0)
         variant_sum = inv_disponible
     elif variant_sum > 0:
         variantes, variant_sum = _scale_variants_to_cap(variantes, inv_disponible)
