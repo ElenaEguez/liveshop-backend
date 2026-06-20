@@ -10,7 +10,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
-from django.db.models import Q, Sum, Min, Count
+from django.db.models import Q, Sum, Min, Count, Prefetch
 from django.db.models.deletion import ProtectedError
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from vendors.permissions import get_vendor_for_user
@@ -120,7 +120,17 @@ class ProductViewSet(viewsets.ModelViewSet):
                 Q(variants__icontains=f'"color": "{color}"')
             ).distinct()
 
-        return qs
+        return qs.select_related('category', 'vendor').prefetch_related(
+            Prefetch(
+                'variant_objects',
+                queryset=ProductVariant.objects.filter(is_active=True).select_related('product'),
+            ),
+            Prefetch(
+                'inventories',
+                queryset=Inventory.objects.filter(is_active=True).select_related('almacen'),
+            ),
+            'images',
+        )
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -428,7 +438,6 @@ class ProductViewSet(viewsets.ModelViewSet):
         self._validate_images_limit(None, self.request, is_update=False)
         product = serializer.save(
             vendor=vendor,
-            price=0,
             stock=self._parse_stock(self.request),
             variants=variants,
         )
@@ -595,7 +604,7 @@ class InventoryViewSet(viewsets.ModelViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
-        from .inventory_stock import enrich_inventory_row
+        from .inventory_stock import apply_stock_to_inventory_row, bulk_variant_stock_breakdown
 
         almacen_id = request.query_params.get('almacen_id')
         almacen_id_int = int(almacen_id) if almacen_id else None
@@ -627,7 +636,14 @@ class InventoryViewSet(viewsets.ModelViewSet):
         )
 
         page = self.paginate_queryset(agg_qs)
-        iterable = page if page is not None else agg_qs
+        iterable = list(page if page is not None else agg_qs)
+
+        product_ids = [row['product_id'] for row in iterable]
+        stock_map = bulk_variant_stock_breakdown(
+            product_ids,
+            almacen_id_int,
+            sucursal_id_int,
+        )
 
         rows = []
         for row in iterable:
@@ -660,7 +676,17 @@ class InventoryViewSet(viewsets.ModelViewSet):
                 'updated_at': None,
                 'variante': None,
             }
-            enrich_inventory_row(item, almacen_id_int, sucursal_id_int)
+            stock = stock_map.get(
+                row['product_id'],
+                {
+                    'disponible_total': 0,
+                    'variantes': [],
+                    'sin_asignar_variante': 0,
+                    'inventario_disponible': 0,
+                    'stock_scope': 'global',
+                },
+            )
+            apply_stock_to_inventory_row(item, stock)
             variante_id = request.query_params.get('variante_id')
             if variante_id:
                 try:

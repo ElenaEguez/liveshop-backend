@@ -11,7 +11,7 @@ from rest_framework.filters import OrderingFilter
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
@@ -93,8 +93,14 @@ class PublicCatalogView(ListAPIView):
         qs = (
             Product.objects
             .filter(vendor=vendor, is_active=True, is_active_web=True)
-            .select_related('category')
-            .prefetch_related('images', 'variant_objects')
+            .select_related('category', 'vendor')
+            .prefetch_related(
+                'images',
+                Prefetch(
+                    'variant_objects',
+                    queryset=ProductVariant.objects.filter(is_active=True),
+                ),
+            )
         )
 
         category = self.request.query_params.get('category')
@@ -131,8 +137,14 @@ class PublicProductDetailView(RetrieveAPIView):
         vendor = get_object_or_404(Vendor, slug=self.kwargs['vendor_slug'])
         return get_object_or_404(
             Product.objects
-            .select_related('category')
-            .prefetch_related('images', 'variant_objects'),
+            .select_related('category', 'vendor')
+            .prefetch_related(
+                'images',
+                Prefetch(
+                    'variant_objects',
+                    queryset=ProductVariant.objects.filter(is_active=True),
+                ),
+            ),
             pk=self.kwargs['pk'],
             vendor=vendor,
             is_active=True,

@@ -74,10 +74,18 @@ class PublicProductSerializer(serializers.ModelSerializer):
         return int(pct.quantize(Decimal('1')))
 
     def get_transfer_price(self, obj):
-        """Precio con 10% de descuento por transferencia (convención tienda)."""
+        """
+        Precio con descuento por transferencia.
+        El porcentaje se configura en Vendor.transfer_discount_percent.
+        Si es 0, no se muestra segundo precio (retorna None).
+        """
         if not obj.price:
             return None
-        discounted = (obj.price * Decimal('0.90')).quantize(
+        discount_pct = getattr(obj.vendor, 'transfer_discount_percent', Decimal('10.00'))
+        if not discount_pct or discount_pct <= 0:
+            return None
+        factor = (Decimal('100') - discount_pct) / Decimal('100')
+        discounted = (obj.price * factor).quantize(
             Decimal('0.01'), rounding=ROUND_HALF_UP,
         )
         return str(discounted)

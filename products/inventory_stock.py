@@ -202,9 +202,196 @@ def enrich_inventory_row(row: dict, almacen_id=None, sucursal_id=None) -> dict:
         stock = variant_stock_breakdown_sucursal(int(pid), sucursal_id)
     else:
         stock = variant_stock_breakdown(int(pid), almacen_id)
+    return apply_stock_to_inventory_row(row, stock)
+
+
+def apply_stock_to_inventory_row(row: dict, stock: dict) -> dict:
     row['available_quantity'] = stock['disponible_total']
     row['variantes'] = stock['variantes']
     row['sin_asignar_variante'] = stock['sin_asignar_variante']
     row['inventario_disponible'] = stock['inventario_disponible']
     row['stock_scope'] = stock.get('stock_scope', 'global')
     return row
+
+
+def _empty_stock_breakdown(scope: str = 'global') -> dict:
+    return {
+        'disponible_total': 0,
+        'variantes': [],
+        'sin_asignar_variante': 0,
+        'inventario_disponible': 0,
+        'stock_scope': scope,
+    }
+
+
+def _bulk_inventory_disponible(product_ids: list[int], almacen_id=None) -> dict[int, int]:
+    if not product_ids:
+        return {}
+    qs = Inventory.objects.filter(product_id__in=product_ids, is_active=True)
+    if almacen_id is not None:
+        qs = qs.filter(almacen_id=almacen_id)
+    rows = qs.values('product_id').annotate(q=Sum('quantity'), r=Sum('reserved_quantity'))
+    result = {pid: 0 for pid in product_ids}
+    for row in rows:
+        q = int(row['q'] or 0)
+        r = int(row['r'] or 0)
+        result[row['product_id']] = max(0, q - r)
+    return result
+
+
+def _bulk_inventory_disponible_sucursal(product_ids: list[int], sucursal_id: int | None) -> dict[int, int]:
+    if not product_ids:
+        return {}
+    result = {pid: 0 for pid in product_ids}
+    alm_ids = _alm_ids_sucursal(sucursal_id)
+    if alm_ids:
+        rows = (
+            Inventory.objects.filter(
+                product_id__in=product_ids,
+                is_active=True,
+                almacen_id__in=alm_ids,
+            )
+            .values('product_id')
+            .annotate(q=Sum('quantity'), r=Sum('reserved_quantity'))
+        )
+        for row in rows:
+            q = int(row['q'] or 0)
+            r = int(row['r'] or 0)
+            result[row['product_id']] = max(0, q - r)
+
+        assigned = set(
+            Inventory.objects.filter(
+                product_id__in=product_ids,
+                is_active=True,
+                almacen_id__in=alm_ids,
+            ).values_list('product_id', flat=True).distinct()
+        )
+    else:
+        assigned = set()
+
+    need_legacy = [pid for pid in product_ids if result[pid] == 0 and pid not in assigned]
+    if need_legacy:
+        legacy_rows = (
+            Inventory.objects.filter(
+                product_id__in=need_legacy,
+                is_active=True,
+                almacen__isnull=True,
+            )
+            .values('product_id')
+            .annotate(q=Sum('quantity'), r=Sum('reserved_quantity'))
+        )
+        for row in legacy_rows:
+            q = int(row['q'] or 0)
+            r = int(row['r'] or 0)
+            result[row['product_id']] = max(0, q - r)
+    return result
+
+
+def _bulk_variant_list_global(product_ids: list[int]) -> dict[int, list[dict]]:
+    by_product = {pid: [] for pid in product_ids}
+    if not product_ids:
+        return by_product
+    for v in ProductVariant.objects.filter(
+        product_id__in=product_ids,
+        is_active=True,
+    ).order_by('product_id', 'talla', 'color', 'id'):
+        d = max(0, int(v.stock_extra or 0))
+        by_product[v.product_id].append({
+            'id': v.id,
+            'talla': v.talla or '',
+            'color': v.color or '',
+            'color_hex': v.color_hex or '',
+            'sku': v.sku or '',
+            'disponible': d,
+        })
+    return by_product
+
+
+def _breakdown_from_parts(
+    *,
+    inv_disponible: int,
+    has_var: bool,
+    variantes: list[dict],
+    almacen_id=None,
+    scope: str,
+) -> dict:
+    if not has_var:
+        return {
+            'disponible_total': inv_disponible,
+            'variantes': [],
+            'sin_asignar_variante': 0,
+            'inventario_disponible': inv_disponible,
+            'stock_scope': scope,
+        }
+
+    variantes = [dict(v) for v in variantes]
+    variant_sum = sum(v['disponible'] for v in variantes)
+
+    if scope == 'sucursal':
+        if inv_disponible <= 0:
+            for v in variantes:
+                v['disponible'] = 0
+            variant_sum = 0
+        elif variant_sum <= 0 and len(variantes) >= 1:
+            if len(variantes) == 1:
+                variantes[0]['disponible'] = inv_disponible
+            else:
+                per = inv_disponible // len(variantes)
+                remainder = inv_disponible - per * len(variantes)
+                for i, v in enumerate(variantes):
+                    v['disponible'] = per + (remainder if i == 0 else 0)
+            variant_sum = inv_disponible
+        elif variant_sum > 0:
+            variantes, variant_sum = _scale_variants_to_cap(variantes, inv_disponible)
+        sin_asignar = max(0, inv_disponible - variant_sum)
+    else:
+        if variant_sum > 0 and inv_disponible > 0 and almacen_id is not None:
+            variantes, variant_sum = _scale_variants_to_cap(variantes, inv_disponible)
+        sin_asignar = max(0, inv_disponible - variant_sum)
+
+    return {
+        'disponible_total': variant_sum,
+        'variantes': variantes,
+        'sin_asignar_variante': sin_asignar,
+        'inventario_disponible': inv_disponible,
+        'stock_scope': scope,
+    }
+
+
+def bulk_variant_stock_breakdown(
+    product_ids: list[int],
+    almacen_id=None,
+    sucursal_id=None,
+) -> dict[int, dict]:
+    """
+    Misma forma que variant_stock_breakdown por producto, en pocas queries.
+    Usado por InventoryViewSet.list para evitar N+1.
+    """
+    ids = [int(p) for p in product_ids if p]
+    if not ids:
+        return {}
+
+    if sucursal_id is not None and almacen_id is None:
+        inv_map = _bulk_inventory_disponible_sucursal(ids, sucursal_id)
+        scope = 'sucursal'
+    else:
+        inv_map = _bulk_inventory_disponible(ids, almacen_id)
+        scope = 'almacen' if almacen_id is not None else 'global'
+
+    has_var_set = set(
+        ProductVariant.objects.filter(product_id__in=ids, is_active=True)
+        .values_list('product_id', flat=True)
+        .distinct()
+    )
+    variants_map = _bulk_variant_list_global(ids)
+
+    return {
+        pid: _breakdown_from_parts(
+            inv_disponible=inv_map.get(pid, 0),
+            has_var=pid in has_var_set,
+            variantes=variants_map.get(pid, []),
+            almacen_id=almacen_id,
+            scope=scope,
+        )
+        for pid in ids
+    }

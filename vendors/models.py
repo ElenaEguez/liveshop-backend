@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.conf import settings
@@ -67,6 +69,13 @@ class Vendor(models.Model):
     notas_admin = models.TextField(
         blank=True, default='',
         help_text='Notas internas del superadmin (no visibles para el vendor)'
+    )
+    transfer_discount_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('10.00'),
+        verbose_name="Descuento por transferencia (%)",
+        help_text="Porcentaje de descuento aplicado al precio web por pago con transferencia. 0 = sin segundo precio.",
     )
 
     class Meta:

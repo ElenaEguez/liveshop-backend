@@ -122,8 +122,25 @@ DATABASES = {
         'OPTIONS': {
             'timeout': 30,  # wait up to 30s for write lock (SQLite parallel writes)
         },
+        'CONN_MAX_AGE': 60,
     }
 }
+
+# SQLite PRAGMAs (init_command is MySQL-only; applied on each new connection)
+from django.db.backends.signals import connection_created
+
+
+def _configure_sqlite_connection(sender, connection, **kwargs):
+    if connection.vendor != 'sqlite':
+        return
+    with connection.cursor() as cursor:
+        cursor.execute('PRAGMA journal_mode=WAL')
+        cursor.execute('PRAGMA synchronous=NORMAL')
+        cursor.execute('PRAGMA cache_size=10000')
+        cursor.execute('PRAGMA temp_store=MEMORY')
+
+
+connection_created.connect(_configure_sqlite_connection)
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

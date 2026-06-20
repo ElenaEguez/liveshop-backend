@@ -134,6 +134,10 @@ class VendorAdmin(admin.ModelAdmin):
         ('Redes Sociales', {
             'fields': ('whatsapp', 'tiktok_url', 'facebook_url', 'instagram_url')
         }),
+        ('Tienda Web', {
+            'fields': ('transfer_discount_percent',),
+            'description': 'Configura el descuento por pago con transferencia bancaria. Poner 0 para ocultar el segundo precio.',
+        }),
         ('Estados', {
             'fields': ('is_verified', 'created_at', 'updated_at')
         }),

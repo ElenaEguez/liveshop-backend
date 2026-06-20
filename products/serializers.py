@@ -75,7 +75,7 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'vendor', 'images', 'variants', 'variantes', 'stock_disponible', 'stock_real',
-            'price', 'stock', 'created_at', 'updated_at',
+            'stock', 'created_at', 'updated_at',
         ]
 
     def get_stock_disponible(self, obj):
