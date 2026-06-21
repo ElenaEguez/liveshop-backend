@@ -77,6 +77,13 @@ class Vendor(models.Model):
         verbose_name="Descuento por transferencia (%)",
         help_text="Porcentaje de descuento aplicado al precio web por pago con transferencia. 0 = sin segundo precio.",
     )
+    precio_editable = models.BooleanField(
+        default=True,
+        verbose_name="Precio editable desde panel",
+        help_text="Si está desactivado, el precio del producto "
+                  "solo se actualiza al recibir órdenes de compra. "
+                  "El campo precio no aparece en el formulario de producto.",
+    )
 
     class Meta:
         verbose_name = 'Vendedor'
