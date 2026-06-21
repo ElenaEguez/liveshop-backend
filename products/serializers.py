@@ -1,5 +1,6 @@
 import json
 import logging
+from decimal import Decimal
 
 from rest_framework import serializers
 
@@ -9,6 +10,7 @@ from config.request_utils import secure_absolute_uri
 from .barcode_utils import is_valid_ean13, normalize_barcode_value
 from .models import Category, Product, ProductImage, Inventory, ProductVariant
 from vendors.models import KardexMovimiento
+from vendors.permissions import get_vendor_for_user
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -78,6 +80,40 @@ class ProductSerializer(serializers.ModelSerializer):
             'stock', 'created_at', 'updated_at',
         ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self._precio_editable():
+            price_field = self.fields.get('price')
+            if price_field is not None:
+                price_field.required = False
+                price_field.allow_null = True
+
+    def _vendor_from_context(self):
+        request = self.context.get('request')
+        if request is None or not getattr(request, 'user', None):
+            return None
+        return get_vendor_for_user(request.user)
+
+    def _precio_editable(self):
+        vendor = self._vendor_from_context()
+        if vendor is None:
+            return True
+        return getattr(vendor, 'precio_editable', True)
+
+    def validate_price(self, value):
+        if not self._precio_editable() and value in (None, ''):
+            return None
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if not self._precio_editable():
+            if attrs.get('price') in (None, ''):
+                attrs.pop('price', None)
+        elif self.instance is None and attrs.get('price') in (None, ''):
+            raise serializers.ValidationError({'price': 'Este campo es requerido.'})
+        return attrs
+
     def get_stock_disponible(self, obj):
         from .inventory_stock import variant_stock_breakdown
         return variant_stock_breakdown(obj.id)['disponible_total']
@@ -118,6 +154,8 @@ class ProductSerializer(serializers.ModelSerializer):
         return normalize_barcode_value(value, existing_products=qs)
 
     def create(self, validated_data):
+        if validated_data.get('price') is None:
+            validated_data['price'] = Decimal('0')
         validated_data['barcode'] = self._ensure_scannable_barcode(
             validated_data.get('barcode'),
         )
