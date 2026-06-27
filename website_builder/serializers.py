@@ -61,6 +61,7 @@ class PublicProductSerializer(serializers.ModelSerializer):
     )
     category = PublicCategoryInlineSerializer(read_only=True)
     stock_available = serializers.SerializerMethodField()
+    stock_total = serializers.SerializerMethodField()
     discount_percent = serializers.SerializerMethodField()
 
     class Meta:
@@ -68,13 +69,17 @@ class PublicProductSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'price', 'compare_at_price',
             'web_is_bestseller', 'web_is_new',
-            'stock_available', 'discount_percent',
+            'stock_available', 'stock_total', 'discount_percent',
             'images', 'variants', 'category', 'is_active',
         ]
 
     def get_stock_available(self, obj):
         from products.inventory_stock import variant_stock_breakdown
         return variant_stock_breakdown(obj.id)['disponible_total'] > 0
+
+    def get_stock_total(self, obj):
+        from products.inventory_stock import variant_stock_breakdown
+        return int(variant_stock_breakdown(obj.id)['disponible_total'])
 
     def get_discount_percent(self, obj):
         compare = obj.compare_at_price
