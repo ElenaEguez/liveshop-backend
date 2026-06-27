@@ -84,6 +84,15 @@ class Vendor(models.Model):
                   "solo se actualiza al recibir órdenes de compra. "
                   "El campo precio no aparece en el formulario de producto.",
     )
+    # MODO SIMPLE - vendedores pequeños sin módulos avanzados
+    modo_simple = models.BooleanField(
+        default=False,
+        help_text=(
+            'Activo: vendedor usa flujo simplificado. '
+            'Sin compras, sin PEPS, sin almacenes múltiples. '
+            'Solo activar desde el admin con la acción correspondiente.'
+        )
+    )
 
     class Meta:
         verbose_name = 'Vendedor'

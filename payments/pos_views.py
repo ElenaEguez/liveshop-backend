@@ -33,6 +33,7 @@ from products.models import Inventory, ProductVariant
 from products.inventory_stock import (
     filter_inventories_sucursal_lotes,
     inventory_disponible_sucursal,
+    variant_stock_breakdown_sucursal,
 )
 from products.stock_service import (
     StockError,
@@ -550,6 +551,26 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                         nombre = lotes[0].product.name if lotes else f'product_id={pid}'
                         raise ValidationError({
                             'items': f"El producto '{nombre}' tiene variantes. Debe seleccionar una variante."
+                        })
+                elif item.get('variant_id'):
+                    vid = item['variant_id']
+                    bd = variant_stock_breakdown_sucursal(pid, sucursal.id)
+                    disp_map = {v['id']: int(v['disponible']) for v in bd['variantes']}
+                    disp = disp_map.get(vid, 0)
+                    if disp < item['cantidad']:
+                        nombre = lotes[0].product.name if lotes else f'product_id={pid}'
+                        try:
+                            var_obj = ProductVariant.objects.get(pk=vid, product_id=pid)
+                            label = ' / '.join(
+                                p for p in [var_obj.talla, var_obj.color] if p
+                            ) or 'variante'
+                        except ProductVariant.DoesNotExist:
+                            label = f'variante #{vid}'
+                        raise ValidationError({
+                            'items': (
+                                f"Stock insuficiente para '{nombre}' ({label}): "
+                                f"disponible {disp}, solicitado {item['cantidad']}."
+                            )
                         })
 
             # ── 1b. Precio unitario por lote PEPS (si el frontend no lo envía) ─

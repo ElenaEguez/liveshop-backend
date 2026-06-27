@@ -54,9 +54,9 @@ class VendorProfileSerializer(serializers.ModelSerializer):
         fields = ('id', 'user', 'user_id', 'nombre_tienda', 'slug', 'logo', 'descripcion',
                   'whatsapp', 'tiktok_url', 'facebook_url', 'instagram_url',
                   'payment_qr_image', 'payment_instructions', 'accepted_payment_methods',
-                  'inventory_method', 'precio_editable',
+                  'inventory_method', 'precio_editable', 'modo_simple',
                   'is_verified', 'created_at', 'updated_at')
-        read_only_fields = ('id', 'user', 'user_id', 'slug', 'created_at', 'updated_at', 'is_verified', 'precio_editable')
+        read_only_fields = ('id', 'user', 'user_id', 'slug', 'created_at', 'updated_at', 'is_verified', 'precio_editable', 'modo_simple')
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

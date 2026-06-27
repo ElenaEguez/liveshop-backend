@@ -19,15 +19,27 @@ class PublicVariantSerializer(serializers.ModelSerializer):
         model = ProductVariant
         fields = ['id', 'size', 'color', 'color_hex', 'stock', 'price', 'disponible']
 
+    def _disponible_variante(self, obj) -> int:
+        cache_key = f'_vsb_{obj.product_id}'
+        if cache_key not in self.context:
+            from products.inventory_stock import variant_stock_breakdown
+            bd = variant_stock_breakdown(obj.product_id)
+            self.context[cache_key] = {
+                v['id']: int(v['disponible']) for v in bd['variantes']
+            }
+        stock_map = self.context[cache_key]
+        if obj.id in stock_map:
+            return stock_map[obj.id]
+        return max(0, int(obj.stock_extra or 0))
+
     def get_stock(self, obj):
-        return obj.stock_extra if obj.stock_extra > 0 else obj.product.stock
+        return self._disponible_variante(obj)
 
     def get_price(self, obj):
         return str(obj.product.price)
 
     def get_disponible(self, obj):
-        stock = obj.stock_extra if obj.stock_extra > 0 else obj.product.stock
-        return stock > 0
+        return self._disponible_variante(obj) > 0
 
 
 class PublicProductImageSerializer(serializers.ModelSerializer):

@@ -205,6 +205,59 @@ class ProductViewSet(viewsets.ModelViewSet):
             if dist_sum != stock_total:
                 raise ValidationError({'inventory_distribution': f'La suma distribuida ({dist_sum}) debe ser igual al stock total ({stock_total}).'})
 
+    def _almacen_principal_vendor(self, vendor):
+        """
+        # MODO SIMPLE - almacén de la sucursal principal del vendor.
+        """
+        from vendors.models import Sucursal, Almacen
+        sucursal = (
+            Sucursal.objects.filter(vendor=vendor, activa=True)
+            .order_by('-es_principal', 'id')
+            .first()
+        )
+        if not sucursal:
+            return None
+        return (
+            Almacen.objects.filter(sucursal=sucursal, activo=True)
+            .order_by('id')
+            .first()
+        )
+
+    def _sync_inventory_modo_simple(self, product, vendor, variants):
+        """
+        # MODO SIMPLE - crea Inventory básico sin kardex de entrada.
+        # Solo para vendors con modo_simple=True.
+        # NUNCA llamar para Gaia ni vendors con modo_simple=False.
+        """
+        almacen = self._almacen_principal_vendor(vendor)
+        stock_total = int(product.stock or 0)
+
+        inv, created = Inventory.objects.get_or_create(
+            product=product,
+            almacen=almacen,
+            defaults={
+                'quantity': stock_total,
+                'reserved_quantity': 0,
+                'is_active': True,
+            }
+        )
+        if not created:
+            inv.quantity = stock_total
+            inv.is_active = True
+            inv.save(update_fields=['quantity', 'is_active', 'updated_at'])
+
+        active_variants = list(
+            ProductVariant.objects.filter(
+                product=product, is_active=True
+            )
+        )
+        if active_variants and stock_total > 0:
+            per = stock_total // len(active_variants)
+            remainder = stock_total - per * len(active_variants)
+            for i, pv in enumerate(active_variants):
+                pv.stock_extra = per + (remainder if i == 0 else 0)
+                pv.save(update_fields=['stock_extra'])
+
     def _sync_inventory_distribution(self, product, vendor, distribution):
         if not distribution:
             inv, _ = Inventory.objects.get_or_create(
@@ -443,7 +496,14 @@ class ProductViewSet(viewsets.ModelViewSet):
         )
         self._save_images(product, self.request)
         self._sync_variant_objects(product, variants, is_create=True)
-        self._sync_inventory_distribution(product, vendor, distribution)
+
+        # MODO SIMPLE - bifurcación según tipo de vendor
+        if getattr(vendor, 'modo_simple', False):
+            # Vendedor simple: inventario directo sin compras ni kardex entrada
+            self._sync_inventory_modo_simple(product, vendor, variants)
+        else:
+            # Flujo completo (Gaia): código original intacto
+            self._sync_inventory_distribution(product, vendor, distribution)
 
     def perform_update(self, serializer):
         current = self.get_object()

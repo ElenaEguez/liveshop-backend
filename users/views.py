@@ -14,7 +14,7 @@ User = get_user_model()
 
 CUSTOM_CLAIMS = [
     'vendor_id', 'store_name', 'role', 'is_vendor_owner',
-    'role_name', 'perms', 'precio_editable',
+    'role_name', 'perms', 'precio_editable', 'modo_simple',
 ]
 
 
@@ -67,6 +67,7 @@ def _get_tokens_for_user(user):
             'is_vendor_owner': True,
             'role_name': 'Propietario',
             'precio_editable': getattr(vp, 'precio_editable', True),
+            'modo_simple': getattr(vp, 'modo_simple', False),
             'perms': {
                 'products': True, 'categories': True, 'inventory': True,
                 'live_sessions': True, 'my_store': True,
@@ -91,6 +92,7 @@ def _get_tokens_for_user(user):
                 'store_name': tm.vendor.nombre_tienda,
                 'is_vendor_owner': False,
                 'precio_editable': getattr(tm.vendor, 'precio_editable', True),
+                'modo_simple': getattr(tm.vendor, 'modo_simple', False),
             }
             cr = tm.custom_role
             if cr:
@@ -126,6 +128,7 @@ def _get_tokens_for_user(user):
                 'role_name': None,
                 'is_vendor_owner': False,
                 'precio_editable': True,
+                'modo_simple': False,
                 'perms': {
                     'products': False, 'categories': False, 'inventory': False,
                     'live_sessions': False, 'my_store': False,

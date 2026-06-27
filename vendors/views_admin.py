@@ -29,6 +29,7 @@ class VendorAdminSerializer(VendorSerializer):
         fields = tuple(list(VendorSerializer.Meta.fields) + [
             'plan', 'max_usuarios', 'estado_suscripcion',
             'fecha_vencimiento', 'notas_admin', 'usuarios_activos',
+            'modo_simple',
         ])
 
 

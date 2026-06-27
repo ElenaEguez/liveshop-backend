@@ -17,6 +17,113 @@ from .models import (
 )
 
 
+def _get_almacen_principal(vendor):
+    """
+    # MODO SIMPLE - retorna primer almacén activo
+    # de la sucursal principal del vendor.
+    """
+    sucursal = (
+        Sucursal.objects.filter(vendor=vendor, activa=True)
+        .order_by('-es_principal', 'id')
+        .first()
+    )
+    if not sucursal:
+        return None
+    return (
+        Almacen.objects.filter(sucursal=sucursal, activo=True)
+        .order_by('id')
+        .first()
+    )
+
+
+@admin.action(description='✓ Activar modo simple + crear inventario inicial')
+def activar_modo_simple(modeladmin, request, queryset):
+    """
+    # MODO SIMPLE - acción admin para activar cuenta simple.
+    # Marca modo_simple=True y crea Inventory(quantity=0)
+    # para productos existentes del vendor.
+    # Solo opera sobre vendors con modo_simple=False
+    # para evitar doble ejecución.
+    """
+    from products.models import Inventory, ProductVariant
+
+    vendors_activados = 0
+    productos_procesados = 0
+    errores = []
+
+    for vendor in queryset:
+        if vendor.modo_simple:
+            errores.append(
+                f'{vendor.nombre_tienda}: ya tiene modo_simple=True, omitido.'
+            )
+            continue
+
+        tiene_kardex = vendor.products.filter(
+            inventories__quantity__gt=0
+        ).exists()
+        if tiene_kardex:
+            errores.append(
+                f'{vendor.nombre_tienda}: tiene inventario real con stock > 0. '
+                f'No se puede convertir a modo simple desde aquí. '
+                f'Consultar con administrador técnico.'
+            )
+            continue
+
+        almacen = _get_almacen_principal(vendor)
+
+        vendor.modo_simple = True
+        vendor.save(update_fields=['modo_simple'])
+        vendors_activados += 1
+
+        productos = vendor.products.filter(is_active=True)
+        for product in productos:
+            inv, created = Inventory.objects.get_or_create(
+                product=product,
+                almacen=almacen,
+                defaults={
+                    'quantity': 0,
+                    'reserved_quantity': 0,
+                    'is_active': True,
+                }
+            )
+            if not created:
+                if not inv.is_active:
+                    inv.is_active = True
+                    inv.save(update_fields=['is_active', 'updated_at'])
+
+            variantes = ProductVariant.objects.filter(
+                product=product, is_active=True
+            )
+            for v in variantes:
+                if v.stock_extra != 0:
+                    v.stock_extra = 0
+                    v.save(update_fields=['stock_extra'])
+
+            productos_procesados += 1
+
+    partes = []
+    if vendors_activados:
+        partes.append(
+            f'{vendors_activados} vendor(s) activado(s) como modo simple. '
+            f'{productos_procesados} producto(s) con Inventory inicial creado.'
+        )
+    if errores:
+        partes.append('Omitidos: ' + ' | '.join(errores))
+
+    if vendors_activados:
+        modeladmin.message_user(
+            request,
+            ' '.join(partes),
+            level='success' if not errores else 'warning'
+        )
+    else:
+        modeladmin.message_user(
+            request,
+            ' '.join(partes) or 'No se procesó ningún vendor.',
+            level='warning'
+        )
+
+
 class CustomRoleInline(admin.TabularInline):
     model = CustomRole
     extra = 0
@@ -123,10 +230,11 @@ class PromocionAdmin(admin.ModelAdmin):
 @admin.register(Vendor)
 class VendorAdmin(admin.ModelAdmin):
     inlines = [CustomRoleInline, TeamMemberInline, SucursalInline]
-    list_display = ('nombre_tienda', 'user', 'moneda', 'is_verified', 'created_at')
-    list_filter = ('is_verified', 'created_at')
+    list_display = ('nombre_tienda', 'user', 'moneda', 'is_verified', 'created_at', 'modo_simple')
+    list_filter = ('is_verified', 'created_at', 'modo_simple')
     search_fields = ('nombre_tienda', 'user__email', 'user__nombre', 'user__apellido')
     readonly_fields = ('slug', 'created_at', 'updated_at')
+    actions = ['activar_modo_simple']
     fieldsets = (
         ('Información de la Tienda', {
             'fields': ('user', 'nombre_tienda', 'slug', 'descripcion', 'logo', 'moneda')
@@ -135,7 +243,7 @@ class VendorAdmin(admin.ModelAdmin):
             'fields': ('whatsapp', 'tiktok_url', 'facebook_url', 'instagram_url')
         }),
         ('Tienda Web', {
-            'fields': ('transfer_discount_percent', 'precio_editable'),
+            'fields': ('transfer_discount_percent', 'precio_editable', 'modo_simple'),
             'description': 'Configura el descuento por pago con transferencia bancaria. Poner 0 para ocultar el segundo precio.',
         }),
         ('Estados', {
