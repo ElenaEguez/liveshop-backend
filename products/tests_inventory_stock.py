@@ -111,3 +111,16 @@ class ScaleVariantsTests(TestCase):
         scaled, total = _scale_variants_to_cap(variantes, 6)
         self.assertEqual(total, 6)
         self.assertEqual(sum(v['disponible'] for v in scaled), 6)
+
+    def test_zero_stock_variant_does_not_receive_remainder(self):
+        variantes = [
+            {'id': 1, 'talla': 'UNICA', 'color': 'BLANCA', 'disponible': 3},
+            {'id': 2, 'talla': 'UNICA', 'color': 'BORDO', 'disponible': 3},
+            {'id': 3, 'talla': 'UNICA', 'color': 'CAFE', 'disponible': 5},
+            {'id': 4, 'talla': 'UNICA', 'color': 'NEGRO', 'disponible': 0},
+        ]
+        scaled, total = _scale_variants_to_cap(variantes, 2)
+        by_color = {v['color']: v['disponible'] for v in scaled}
+        self.assertEqual(by_color['NEGRO'], 0)
+        self.assertEqual(total, 2)
+        self.assertEqual(sum(v['disponible'] for v in scaled), 2)

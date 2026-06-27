@@ -51,19 +51,29 @@ def _has_assigned_inventory_sucursal(product_id: int, alm_ids: list[int]) -> boo
 
 def _scale_variants_to_cap(variantes: list[dict], cap: int) -> tuple[list[dict], int]:
     """Reduce disponible por variante si la suma supera el inventario físico en sucursal."""
-    total = sum(v['disponible'] for v in variantes)
-    if total <= cap or total <= 0:
-        return variantes, total
+    positive = [v for v in variantes if int(v.get('disponible') or 0) > 0]
+    if not positive:
+        return [{**v, 'disponible': 0} for v in variantes], 0
+
+    total = sum(int(v['disponible']) for v in positive)
+    if total <= cap:
+        return [
+            {**v, 'disponible': int(v.get('disponible') or 0) if int(v.get('disponible') or 0) > 0 else 0}
+            for v in variantes
+        ], total
 
     remaining = cap
-    scaled = []
-    for i, v in enumerate(variantes):
-        if i == len(variantes) - 1:
+    scaled_map: dict[int, int] = {}
+    for i, v in enumerate(positive):
+        vid = v['id']
+        if i == len(positive) - 1:
             d = remaining
         else:
-            d = int(v['disponible'] * cap / total)
+            d = int(int(v['disponible']) * cap / total)
             remaining -= d
-        scaled.append({**v, 'disponible': max(0, d)})
+        scaled_map[vid] = max(0, d)
+
+    scaled = [{**v, 'disponible': scaled_map.get(v['id'], 0)} for v in variantes]
     new_total = sum(x['disponible'] for x in scaled)
     return scaled, new_total
 
