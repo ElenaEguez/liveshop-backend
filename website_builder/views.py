@@ -429,7 +429,9 @@ class VendorCartOrderListView(ListAPIView):
     def get_queryset(self):
         from django.db.models import Q
         vendor = get_vendor_for_user(self.request.user)
-        qs = CartOrder.objects.filter(vendor=vendor).prefetch_related('items__product').order_by('-created_at')
+        qs = CartOrder.objects.filter(vendor=vendor).prefetch_related(
+            'items__product', 'items__product__images',
+        ).order_by('-created_at')
 
         status_filter = self.request.query_params.get('status')
         if status_filter:
@@ -440,8 +442,10 @@ class VendorCartOrderListView(ListAPIView):
             qs = qs.filter(
                 Q(customer_name__icontains=search) |
                 Q(customer_phone__icontains=search) |
-                Q(id__icontains=search)
-            )
+                Q(id__icontains=search) |
+                Q(items__product__internal_code__icontains=search) |
+                Q(items__product__barcode__icontains=search)
+            ).distinct()
 
         return qs
 
@@ -453,7 +457,11 @@ class VendorCartOrderDetailView(RetrieveAPIView):
 
     def get_object(self):
         vendor = get_vendor_for_user(self.request.user)
-        return get_object_or_404(CartOrder.objects.prefetch_related('items__product'), pk=self.kwargs['pk'], vendor=vendor)
+        return get_object_or_404(
+            CartOrder.objects.prefetch_related('items__product', 'items__product__images'),
+            pk=self.kwargs['pk'],
+            vendor=vendor,
+        )
 
 
 class VendorCartOrderConfirmView(APIView):

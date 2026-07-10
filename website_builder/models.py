@@ -82,7 +82,7 @@ class CartOrder(models.Model):
     ]
     PAYMENT_CHOICES = [
         ('tigo_money', 'Tigo Money'),
-        ('banco_union', 'Banco Unión'),
+        ('banco_union', 'Banco '),
         ('efectivo', 'Efectivo'),
     ]
 

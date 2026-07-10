@@ -3,6 +3,7 @@ from decimal import Decimal
 from rest_framework import serializers
 from django.utils.text import slugify
 
+from config.request_utils import secure_absolute_uri
 from products.models import Product, ProductImage, ProductVariant, Category
 from vendors.models import Vendor
 from payments.models import MetodoPago
@@ -193,11 +194,28 @@ class CartOrderCreateSerializer(serializers.Serializer):
 class CartOrderItemDetailSerializer(serializers.ModelSerializer):
     product_id = serializers.IntegerField(source='product.id')
     product_name = serializers.CharField(source='product.name')
+    product_code = serializers.SerializerMethodField()
+    product_image = serializers.SerializerMethodField()
     variant_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = CartOrderItem
-        fields = ['id', 'product_id', 'product_name', 'variant_id', 'variant_detail', 'quantity', 'unit_price', 'subtotal']
+        fields = [
+            'id', 'product_id', 'product_name', 'product_code', 'product_image',
+            'variant_id', 'variant_detail', 'quantity', 'unit_price', 'subtotal',
+        ]
+
+    def get_product_code(self, obj):
+        product = obj.product
+        return (product.internal_code or product.barcode or '').strip()
+
+    def get_product_image(self, obj):
+        request = self.context.get('request')
+        img = obj.product.images.first()
+        if not img:
+            return None
+        url = img.image.url
+        return secure_absolute_uri(request, url) if request else url
 
     def get_variant_detail(self, obj):
         if not obj.variant_id:
