@@ -82,7 +82,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if not self._precio_editable():
+        if not self._price_obligatorio():
             price_field = self.fields.get('price')
             if price_field is not None:
                 price_field.required = False
@@ -100,14 +100,24 @@ class ProductSerializer(serializers.ModelSerializer):
             return True
         return getattr(vendor, 'precio_editable', True)
 
+    def _modo_simple(self):
+        vendor = self._vendor_from_context()
+        if vendor is None:
+            return False
+        return getattr(vendor, 'modo_simple', False)
+
+    def _price_obligatorio(self):
+        """Precio requerido solo en cuentas simples con precio editable en panel."""
+        return self._modo_simple() and self._precio_editable()
+
     def validate_price(self, value):
-        if not self._precio_editable() and value in (None, ''):
+        if not self._price_obligatorio() and value in (None, ''):
             return None
         return value
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        if not self._precio_editable():
+        if not self._price_obligatorio():
             if attrs.get('price') in (None, ''):
                 attrs.pop('price', None)
         elif self.instance is None and attrs.get('price') in (None, ''):
