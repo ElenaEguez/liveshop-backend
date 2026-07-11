@@ -501,6 +501,10 @@ class ProductViewSet(viewsets.ModelViewSet):
         # MODO SIMPLE - bifurcación según tipo de vendor
         if getattr(vendor, 'modo_simple', False):
             # Vendedor simple: inventario directo sin compras ni kardex entrada
+            parsed_stock = self._parse_stock(self.request)
+            if product.stock != parsed_stock:
+                product.stock = parsed_stock
+                product.save(update_fields=['stock'])
             self._sync_inventory_modo_simple(product, vendor, variants)
         else:
             # Flujo completo (Gaia): código original intacto
