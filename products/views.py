@@ -487,7 +487,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             raise ValidationError({'detail': 'Sin perfil de vendedor asociado.'})
         variants = self._parse_variants(self.request)
         distribution = self._parse_inventory_distribution(self.request)
-        self._validate_stock_consistency(self.request, variants=variants, distribution=distribution)
+        if not getattr(vendor, 'modo_simple', False):
+            self._validate_stock_consistency(self.request, variants=variants, distribution=distribution)
         self._validate_images_limit(None, self.request, is_update=False)
         product = serializer.save(
             vendor=vendor,
