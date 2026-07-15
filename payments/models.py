@@ -186,6 +186,14 @@ class VentaPOS(models.Model):
     plazo_dias = models.IntegerField(null=True, blank=True)
     fecha_vencimiento_credito = models.DateField(null=True, blank=True)
     notas = models.TextField(blank=True)
+    anulada_at = models.DateTimeField(null=True, blank=True)
+    anulada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ventas_anuladas',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -287,6 +295,13 @@ class PagoCredito(models.Model):
         VentaPOS, on_delete=models.CASCADE,
         related_name='pagos_credito'
     )
+    turno = models.ForeignKey(
+        'vendors.TurnoCaja',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='pagos_credito',
+    )
     monto = models.DecimalField(max_digits=10, decimal_places=2)
     metodo_pago = models.ForeignKey(
         MetodoPago, on_delete=models.SET_NULL,
@@ -325,6 +340,13 @@ class Devolucion(models.Model):
         'vendors.Vendor',
         on_delete=models.CASCADE,
         related_name='devoluciones')
+    turno = models.ForeignKey(
+        'vendors.TurnoCaja',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='devoluciones',
+    )
     tipo = models.CharField(
         max_length=10,
         choices=TIPO_CHOICES,

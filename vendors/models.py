@@ -351,6 +351,8 @@ class TurnoCaja(models.Model):
     fecha_apertura = models.DateTimeField(auto_now_add=True)
     fecha_cierre = models.DateTimeField(null=True, blank=True)
     notas_cierre = models.TextField(blank=True)
+    # True = fórmula de arqueo íntegro (v2). Históricos quedan en False.
+    arqueo_v2 = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = 'Turno de Caja'
@@ -384,11 +386,14 @@ class MovimientoCaja(models.Model):
     TIPO_CHOICES = [
         ('ingreso', 'Ingreso'),
         ('retiro', 'Retiro'),
+        ('devolucion', 'Devolución'),
+        ('anulacion', 'Anulación'),
     ]
     turno = models.ForeignKey(
         TurnoCaja, on_delete=models.CASCADE,
         related_name='movimientos'
     )
+    # max_length=10: 'devolucion'(10) y 'anulacion'(9) caben sin alterar el campo.
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
     concepto = models.CharField(max_length=200)
     monto = models.DecimalField(max_digits=10, decimal_places=2)
