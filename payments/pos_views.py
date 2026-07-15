@@ -627,6 +627,29 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                     descuento_cupon = min(cupon.valor, base)
 
             total = max(base - descuento_cupon, Decimal('0'))
+
+            # ── 3b. Invariante total mostrado (FE) vs calculado — antes de escribir ─
+            # Retrocompat: si no viene total_esperado, se omite la validación.
+            # Debe ejecutarse ANTES de crear VentaPOS / consumir stock / kardex.
+            total_esperado_raw = request.data.get('total_esperado')
+            if total_esperado_raw is not None and total_esperado_raw != '':
+                try:
+                    total_esperado = Decimal(str(total_esperado_raw)).quantize(
+                        Decimal('0.01')
+                    )
+                except Exception:
+                    raise ValidationError({
+                        'error': 'total_esperado inválido.',
+                    })
+                if abs(total - total_esperado) > Decimal('0.01'):
+                    raise ValidationError({
+                        'error': (
+                            f'El total mostrado (Bs. {total_esperado}) no coincide '
+                            f'con el calculado (Bs. {total.quantize(Decimal("0.01"))}). '
+                            f'Actualiza la pantalla e intenta de nuevo.'
+                        ),
+                    })
+
             monto_recibido = data.get('monto_recibido')
             vuelto = max(
                 (monto_recibido or Decimal('0')) - total, Decimal('0')
