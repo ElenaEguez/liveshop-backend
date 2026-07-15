@@ -3,11 +3,14 @@ Helpers de arqueo POS (sin dependencia de pos_views para evitar imports circular
 """
 from decimal import Decimal
 
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 
 from vendors.models import MovimientoCaja
 
 from .models import VentaPOS, VentaPOSPago, PagoCredito
+
+
+_STATUSES_ENTRADA_V2 = ('completada', 'parcialmente_devuelto', 'devuelto')
 
 
 def _to_decimal(val):
@@ -24,9 +27,9 @@ def _to_decimal(val):
         return Decimal('0')
 
 
-def _calc_efectivo_esperado_turno(turno):
+def _calc_efectivo_esperado_turno_v1(turno):
     """
-    Efectivo que debería haber en caja al cerrar el turno.
+    Fórmula histórica (arqueo_v2=False). Intacta — no modificar comportamiento.
     Incluye ventas al contado en efectivo (por línea VentaPOSPago),
     abonos de crédito en efectivo y créditos cobrados de una vez, sin doble contar.
     """
@@ -98,6 +101,129 @@ def _calc_efectivo_esperado_turno(turno):
         'total_ingresos': _to_decimal(ingresos),
         'total_retiros': _to_decimal(retiros),
     }
+
+
+def _ids_ventas_anuladas_tardias(turno):
+    """
+    Anulaciones cuyo efectivo quedó en la caja de este turno:
+    - anulada_at NULL (legacy), o
+    - anulada_at posterior al cierre del turno (anulación tardía).
+    Anulación inmediata (anulada_at dentro del turno / turno aún abierto): excluir.
+    """
+    qs = VentaPOS.objects.filter(
+        turno=turno,
+        status='anulada',
+        es_credito=False,
+    )
+    if turno.fecha_cierre:
+        qs = qs.filter(
+            Q(anulada_at__isnull=True) | Q(anulada_at__gt=turno.fecha_cierre)
+        )
+    else:
+        qs = qs.filter(anulada_at__isnull=True)
+    return list(qs.values_list('id', flat=True))
+
+
+def _calc_efectivo_esperado_turno_v2(turno):
+    """
+    Arqueo íntegro (arqueo_v2=True):
+    - Cuenta el efectivo que ENTRÓ (completada / parcial/totalmente devuelto
+      + anulaciones tardías donde el dinero quedó en la caja del turno).
+    - Resta salidas físicas vía MovimientoCaja (devolucion / anulacion).
+    - Crédito: VentaPOSPago de es_credito=True NO suma; solo PagoCredito.turno.
+    """
+    # Contado: dinero que entró (status informativo; devoluciones restan por movimiento).
+    ventas_contado_ef = VentaPOSPago.objects.filter(
+        venta__turno=turno,
+        venta__status__in=_STATUSES_ENTRADA_V2,
+        venta__es_credito=False,
+        metodo_pago__tipo='efectivo',
+    ).aggregate(t=Sum('monto'))['t'] or Decimal('0')
+
+    ventas_contado_ef_legacy = VentaPOS.objects.filter(
+        turno=turno,
+        status__in=_STATUSES_ENTRADA_V2,
+        es_credito=False,
+        metodo_pago__tipo='efectivo',
+    ).annotate(n_pagos_pos=Count('pagos')).filter(
+        n_pagos_pos=0,
+    ).aggregate(t=Sum('total'))['t'] or Decimal('0')
+
+    anuladas_incluir_ids = _ids_ventas_anuladas_tardias(turno)
+    ventas_anuladas_ef = Decimal('0')
+    ventas_anuladas_ef_legacy = Decimal('0')
+    if anuladas_incluir_ids:
+        ventas_anuladas_ef = VentaPOSPago.objects.filter(
+            venta_id__in=anuladas_incluir_ids,
+            metodo_pago__tipo='efectivo',
+        ).aggregate(t=Sum('monto'))['t'] or Decimal('0')
+        ventas_anuladas_ef_legacy = VentaPOS.objects.filter(
+            id__in=anuladas_incluir_ids,
+            metodo_pago__tipo='efectivo',
+        ).annotate(n_pagos_pos=Count('pagos')).filter(
+            n_pagos_pos=0,
+        ).aggregate(t=Sum('total'))['t'] or Decimal('0')
+
+    # Abonos de crédito atados al turno donde se cobraron (no al de la venta).
+    pagos_ef = PagoCredito.objects.filter(
+        turno=turno,
+        metodo_pago__tipo='efectivo',
+    ).aggregate(t=Sum('monto'))['t'] or Decimal('0')
+
+    # C2: no sumar VentaPOSPago de ventas a crédito (evita doble conteo).
+    ventas_credito_ef = Decimal('0')
+
+    ingresos = MovimientoCaja.objects.filter(turno=turno, tipo='ingreso').aggregate(
+        t=Sum('monto')
+    )['t'] or Decimal('0')
+    retiros = MovimientoCaja.objects.filter(turno=turno, tipo='retiro').aggregate(
+        t=Sum('monto')
+    )['t'] or Decimal('0')
+    salidas_devolucion = MovimientoCaja.objects.filter(
+        turno=turno, tipo='devolucion',
+    ).aggregate(t=Sum('monto'))['t'] or Decimal('0')
+    salidas_anulacion = MovimientoCaja.objects.filter(
+        turno=turno, tipo='anulacion',
+    ).aggregate(t=Sum('monto'))['t'] or Decimal('0')
+
+    ventas_contado_ef = (
+        _to_decimal(ventas_contado_ef)
+        + _to_decimal(ventas_contado_ef_legacy)
+        + _to_decimal(ventas_anuladas_ef)
+        + _to_decimal(ventas_anuladas_ef_legacy)
+    )
+    pagos_ef = _to_decimal(pagos_ef)
+    total_efectivo_ventas = ventas_contado_ef + pagos_ef + ventas_credito_ef
+    efectivo_esperado = (
+        _to_decimal(turno.monto_apertura)
+        + total_efectivo_ventas
+        + _to_decimal(ingresos)
+        - _to_decimal(retiros)
+        - _to_decimal(salidas_devolucion)
+        - _to_decimal(salidas_anulacion)
+    )
+
+    return {
+        'efectivo_esperado': efectivo_esperado,
+        'ventas_contado_efectivo': ventas_contado_ef,
+        'pagos_credito_efectivo': pagos_ef,
+        'creditos_cobrados_efectivo': ventas_credito_ef,
+        'total_efectivo_ventas': total_efectivo_ventas,
+        'total_ingresos': _to_decimal(ingresos),
+        'total_retiros': _to_decimal(retiros),
+        'total_devoluciones_efectivo': _to_decimal(salidas_devolucion),
+        'total_anulaciones_efectivo': _to_decimal(salidas_anulacion),
+    }
+
+
+def _calc_efectivo_esperado_turno(turno):
+    """
+    Efectivo que debería haber en caja al cerrar el turno.
+    arqueo_v2=False → fórmula histórica intacta; True → arqueo íntegro.
+    """
+    if getattr(turno, 'arqueo_v2', False):
+        return _calc_efectivo_esperado_turno_v2(turno)
+    return _calc_efectivo_esperado_turno_v1(turno)
 
 
 def _metodo_venta_arqueo(venta):

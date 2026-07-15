@@ -21,8 +21,35 @@ from .serializers import (
     VentaPOSSimpleSerializer,
 )
 from orders.models import Reservation
-from vendors.models import Vendor
+from vendors.models import Vendor, TurnoCaja, MovimientoCaja
 from vendors.permissions import IsVendorOrTeamMember, get_vendor_for_user, get_role_for_user
+from vendors.role_permissions import role_perm_value
+
+
+def _user_has_modulo_perm(user, module_key: str) -> bool:
+    """Propietario tiene acceso total; miembro requiere perm_* del módulo."""
+    if hasattr(user, 'vendor_profile'):
+        return True
+    role = get_role_for_user(user)
+    return bool(role and role_perm_value(role, module_key))
+
+
+def _turno_abierto_para_caja_o_sucursal(venta, vendor):
+    """Turno abierto en la caja de la venta, o en alguna caja de su sucursal."""
+    if venta.caja_id:
+        turno = TurnoCaja.objects.filter(
+            caja_id=venta.caja_id, status='abierto',
+        ).first()
+        if turno:
+            return turno
+    sucursal_id = venta.sucursal_id
+    if sucursal_id:
+        return TurnoCaja.objects.filter(
+            caja__sucursal_id=sucursal_id,
+            caja__sucursal__vendor=vendor,
+            status='abierto',
+        ).order_by('-fecha_apertura').first()
+    return None
 
 
 def _emit_vendor_update(vendor_id, event_type, data):
@@ -377,6 +404,12 @@ class DevolucionViewSet(viewsets.ModelViewSet):
                 {'error': 'Sin vendor asignado'},
                 status=400)
 
+        if not _user_has_modulo_perm(request.user, 'devoluciones'):
+            return Response(
+                {'error': 'Tu rol no permite gestionar devoluciones.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         venta_id = request.data.get('venta')
         tipo_resolucion = request.data.get('tipo_resolucion') or 'devolucion_dinero'
         metodo_pago_id = request.data.get('metodo_pago_devolucion')
@@ -391,7 +424,7 @@ class DevolucionViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': 'Solo se permite devolución de dinero'},
                 status=400)
-        if not metodo_pago_id:
+        if metodo_pago_id in (None, '', 0, '0'):
             return Response(
                 {'error': 'metodo_pago_devolucion es requerido'},
                 status=400)
@@ -402,7 +435,7 @@ class DevolucionViewSet(viewsets.ModelViewSet):
 
         try:
             venta = VentaPOS.objects.select_related(
-                'caja__sucursal'
+                'caja__sucursal', 'sucursal',
             ).prefetch_related(
                 'items__devoluciones'
             ).get(id=venta_id, vendor=vendor)
@@ -423,6 +456,18 @@ class DevolucionViewSet(viewsets.ModelViewSet):
         if not metodo_pago:
             return Response(
                 {'error': 'Método de pago de devolución inválido'},
+                status=400,
+            )
+
+        turno_devolucion = _turno_abierto_para_caja_o_sucursal(venta, vendor)
+        if metodo_pago.tipo == 'efectivo' and not turno_devolucion:
+            return Response(
+                {
+                    'error': (
+                        'Para devolver en efectivo debe haber '
+                        'un turno de caja abierto.'
+                    ),
+                },
                 status=400,
             )
 
@@ -531,6 +576,7 @@ class DevolucionViewSet(viewsets.ModelViewSet):
             devolucion = Devolucion.objects.create(
                 venta=venta,
                 vendor=vendor,
+                turno=turno_devolucion,
                 tipo=tipo,
                 tipo_resolucion=tipo_resolucion,
                 metodo_pago_devolucion=metodo_pago,
@@ -569,6 +615,18 @@ class DevolucionViewSet(viewsets.ModelViewSet):
                             {'error': str(exc)},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
+
+            if metodo_pago.tipo == 'efectivo' and turno_devolucion:
+                MovimientoCaja.objects.create(
+                    turno=turno_devolucion,
+                    tipo='devolucion',
+                    monto=monto_total,
+                    concepto=(
+                        f'Devolución DEV-{devolucion.id} '
+                        f'ticket {venta.numero_ticket}'
+                    ),
+                    usuario=request.user,
+                )
 
             if tipo == 'total':
                 venta.status = 'devuelto'

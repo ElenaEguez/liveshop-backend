@@ -59,6 +59,7 @@ from .utils import (
     _metodo_venta_arqueo,
     _aggregate_ventas_arqueo,
     _calc_efectivo_esperado_turno,
+    _to_decimal,
 )
 
 
@@ -457,6 +458,14 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
 
     def _crear_pagos_venta(self, venta, vendor, total, data, metodo_pago_legacy):
         """Registra VentaPOSPago y ajusta VentaPOS.metodo_pago (mixto si hay 2+ métodos)."""
+        # C2: ventas a crédito NO crean VentaPOSPago. El efectivo entra solo
+        # vía PagoCredito.turno al cobrar (evita doble conteo en arqueo v2).
+        if venta.es_credito:
+            if metodo_pago_legacy and venta.metodo_pago_id != metodo_pago_legacy.id:
+                venta.metodo_pago = metodo_pago_legacy
+                venta.save(update_fields=['metodo_pago'])
+            return
+
         pagos_input = data.get('pagos') or []
         metodos_usados = []
 
@@ -823,12 +832,47 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             .first()
         )
 
+    def _monto_efectivo_venta(self, venta):
+        """Efectivo que entró por la venta (contado: VentaPOSPago; crédito: PagoCredito)."""
+        if venta.es_credito:
+            return venta.pagos_credito.filter(
+                metodo_pago__tipo='efectivo'
+            ).aggregate(t=Sum('monto'))['t'] or Decimal('0')
+        pagos = list(venta.pagos.select_related('metodo_pago').all())
+        if pagos:
+            return sum(
+                (p.monto for p in pagos
+                 if p.metodo_pago and p.metodo_pago.tipo == 'efectivo'),
+                Decimal('0'),
+            )
+        if venta.metodo_pago and venta.metodo_pago.tipo == 'efectivo':
+            return _to_decimal(venta.total)
+        return Decimal('0')
+
+    def _turno_abierto_caja_o_sucursal(self, venta, vendor):
+        if venta.caja_id:
+            turno = TurnoCaja.objects.filter(
+                caja_id=venta.caja_id, status='abierto',
+            ).first()
+            if turno:
+                return turno
+        if venta.sucursal_id:
+            return TurnoCaja.objects.filter(
+                caja__sucursal_id=venta.sucursal_id,
+                caja__sucursal__vendor=vendor,
+                status='abierto',
+            ).order_by('-fecha_apertura').first()
+        return None
+
     @action(detail=True, methods=['patch', 'post'])
     def anular(self, request, pk=None):
+        vendor = self._get_vendor()
         venta = get_object_or_404(
-            VentaPOS.objects.select_related('sucursal'),
+            VentaPOS.objects.select_related(
+                'sucursal', 'turno', 'metodo_pago', 'caja',
+            ).prefetch_related('pagos__metodo_pago'),
             pk=pk,
-            vendor=self._get_vendor(),
+            vendor=vendor,
         )
 
         if venta.status == 'anulada':
@@ -848,6 +892,29 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                 {'error': 'La venta no tiene sucursal/almacén asociado; no se puede restaurar stock.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        monto_efectivo = self._monto_efectivo_venta(venta)
+        turno_venta = venta.turno
+        anulacion_tardia = (
+            monto_efectivo > 0
+            and (
+                turno_venta is None
+                or turno_venta.status == 'cerrado'
+            )
+        )
+        turno_actual = None
+        if anulacion_tardia:
+            turno_actual = self._turno_abierto_caja_o_sucursal(venta, vendor)
+            if not turno_actual:
+                return Response(
+                    {
+                        'error': (
+                            'Para anular una venta con efectivo de un turno '
+                            'ya cerrado debe haber un turno de caja abierto.'
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         with transaction.atomic():
             for item in venta.items.select_related('product', 'variant').all():
@@ -880,8 +947,25 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
                 Cupon.objects.filter(pk=venta.cupon_id).update(
                     usos_actuales=F('usos_actuales') - 1)
 
+            now = timezone.now()
             venta.status = 'anulada'
-            venta.save(update_fields=['status'])
+            venta.anulada_at = now
+            venta.anulada_por = request.user
+            venta.save(update_fields=['status', 'anulada_at', 'anulada_por'])
+
+            # Anulación inmediata (mismo turno abierto): sin movimiento —
+            # la fórmula v2 excluye por anulada_at dentro del turno.
+            # Anulación tardía: salida de efectivo en el turno actual.
+            if anulacion_tardia and turno_actual:
+                MovimientoCaja.objects.create(
+                    turno=turno_actual,
+                    tipo='anulacion',
+                    monto=monto_efectivo,
+                    concepto=(
+                        f'Anulación ticket {venta.numero_ticket}'
+                    ),
+                    usuario=request.user,
+                )
 
         venta.refresh_from_db()
         _emit_vendor_update(
@@ -898,8 +982,13 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
 
     @action(detail=True, methods=['patch', 'post'], url_path='cobrar-credito')
     def cobrar_credito(self, request, pk=None):
-        """Marks a credit sale as paid (completada)."""
-        venta = get_object_or_404(VentaPOS, pk=pk, vendor=self._get_vendor())
+        """Marks a credit sale as paid (completada) and registra PagoCredito."""
+        vendor = self._get_vendor()
+        venta = get_object_or_404(
+            VentaPOS.objects.select_related('caja', 'sucursal'),
+            pk=pk,
+            vendor=vendor,
+        )
 
         if venta.status != 'credito':
             return Response(
@@ -910,15 +999,57 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         metodo_pago_id = request.data.get('metodo_pago_id')
         monto_recibido = request.data.get('monto_recibido')
 
-        venta.status = 'completada'
+        mp = None
         if metodo_pago_id:
-            from .models import MetodoPago
-            mp = MetodoPago.objects.filter(pk=metodo_pago_id, vendor=self._get_vendor()).first()
-            if mp:
-                venta.metodo_pago = mp
-        if monto_recibido is not None:
-            venta.monto_recibido = monto_recibido
-        venta.save(update_fields=['status', 'metodo_pago', 'monto_recibido'])
+            mp = MetodoPago.objects.filter(
+                pk=metodo_pago_id, vendor=vendor, activo=True,
+            ).first()
+            if not mp:
+                return Response(
+                    {'error': 'Método de pago inválido.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            return Response(
+                {'error': 'metodo_pago_id es requerido para cobrar el crédito.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pagado = venta.pagos_credito.aggregate(t=Sum('monto'))['t'] or Decimal('0')
+        saldo = _to_decimal(venta.total) - _to_decimal(pagado)
+        if saldo <= 0:
+            return Response(
+                {'error': 'Esta venta de crédito ya está saldada.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        turno_cobro = self._turno_abierto_caja_o_sucursal(venta, vendor)
+        if mp.tipo == 'efectivo' and not turno_cobro:
+            return Response(
+                {
+                    'error': (
+                        'Para cobrar crédito en efectivo debe haber '
+                        'un turno de caja abierto.'
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            PagoCredito.objects.create(
+                venta=venta,
+                turno=turno_cobro,
+                monto=saldo,
+                metodo_pago=mp,
+                usuario=request.user,
+                notas=request.data.get('notas', '') or 'Cobro total de crédito',
+            )
+            venta.status = 'completada'
+            venta.metodo_pago = mp
+            if monto_recibido is not None:
+                venta.monto_recibido = monto_recibido
+            venta.save(update_fields=['status', 'metodo_pago', 'monto_recibido'])
+
         _emit_vendor_update(
             venta.vendor_id,
             'venta_pos',
@@ -933,7 +1064,7 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
         """
         GET  → lista todos los pagos parciales de la venta a crédito.
         POST → registra un nuevo pago parcial:
-               { monto, metodo_pago_id (opt), notas (opt) }
+               { monto, metodo_pago_id, notas (opt) }
                Si el saldo llega a 0, la venta pasa a 'completada'.
         """
         venta = get_object_or_404(VentaPOS, pk=pk, vendor=self._get_vendor())
@@ -967,12 +1098,35 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
             )
 
         metodo_pago_id = request.data.get('metodo_pago_id')
-        metodo_pago = None
-        if metodo_pago_id:
-            metodo_pago = MetodoPago.objects.filter(pk=metodo_pago_id, vendor=self._get_vendor()).first()
+        if metodo_pago_id in (None, '', 0, '0'):
+            return Response(
+                {'error': 'metodo_pago_id es requerido.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        metodo_pago = MetodoPago.objects.filter(
+            pk=metodo_pago_id, vendor=self._get_vendor(), activo=True,
+        ).first()
+        if not metodo_pago:
+            return Response(
+                {'error': 'Método de pago inválido.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
+        # C2: atar el abono al turno abierto donde se cobra (arqueo v2).
+        turno_cobro = self._turno_abierto_caja_o_sucursal(venta, self._get_vendor())
+        if metodo_pago.tipo == 'efectivo' and not turno_cobro:
+            return Response(
+                {
+                    'error': (
+                        'Para abonar crédito en efectivo debe haber '
+                        'un turno de caja abierto.'
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         pago = PagoCredito.objects.create(
             venta=venta,
+            turno=turno_cobro,
             monto=monto,
             metodo_pago=metodo_pago,
             notas=request.data.get('notas', ''),
@@ -1119,6 +1273,7 @@ class TurnoCajaViewSet(viewsets.GenericViewSet):
             usuario=request.user,
             status='abierto',
             monto_apertura=monto_apertura,
+            arqueo_v2=True,
         )
         _emit_vendor_update(
             vendor.id,
