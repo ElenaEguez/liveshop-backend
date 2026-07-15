@@ -671,8 +671,13 @@ class VentaPOSViewSet(viewsets.GenericViewSet):
 
             # ── 5. Fecha vencimiento crédito ──────────────────────────────────
             fecha_venc = None
-            if data.get('es_credito') and data.get('plazo_dias'):
-                fecha_venc = date.today() + timedelta(days=data['plazo_dias'])
+            if data.get('es_credito'):
+                # El efectivo de crédito entra únicamente vía PagoCredito (abonos);
+                # un monto_recibido inicial sería dinero invisible para el arqueo v2.
+                monto_recibido = None
+                vuelto = Decimal('0')
+                if data.get('plazo_dias'):
+                    fecha_venc = date.today() + timedelta(days=data['plazo_dias'])
 
             # ── 6. MetodoPago ─────────────────────────────────────────────────
             metodo_pago = None
