@@ -204,6 +204,39 @@ def variant_stock_breakdown(product_id: int, almacen_id=None):
     }
 
 
+def live_variant_availability(product_id: int, available_cap: int) -> list[dict]:
+    """
+    Stock por variante para la página pública de live.
+
+    available_cap = inventario físico − reservas activas del producto (misma lógica
+    que PublicLiveSessionDetailView).
+
+    - Si hay stock_extra en catálogo: se usa y se escala al tope disponible.
+    - Si todo stock_extra está en 0 pero hay inventario (caso legacy / no sincronizado):
+      se reparte el disponible entre variantes (igual que POS en sucursal).
+    """
+    available_cap = max(0, int(available_cap or 0))
+    variantes = _variant_list_global(product_id)
+    if not variantes:
+        return []
+    if available_cap <= 0:
+        return [{**v, 'disponible': 0} for v in variantes]
+
+    variant_sum = sum(int(v['disponible']) for v in variantes)
+    if variant_sum <= 0:
+        if len(variantes) == 1:
+            variantes[0]['disponible'] = available_cap
+        else:
+            per = available_cap // len(variantes)
+            remainder = available_cap - per * len(variantes)
+            for i, v in enumerate(variantes):
+                v['disponible'] = per + (remainder if i == 0 else 0)
+        return variantes
+
+    scaled, _ = _scale_variants_to_cap(variantes, available_cap)
+    return scaled
+
+
 def enrich_inventory_row(row: dict, almacen_id=None, sucursal_id=None) -> dict:
     pid = row.get('product') or row.get('product_id')
     if not pid:

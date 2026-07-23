@@ -16,9 +16,10 @@ class PublicLiveSessionDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, slug):
-        from products.models import Product, Inventory, ProductImage, ProductVariant
+        from products.models import Product, Inventory, ProductImage
         from orders.models import Reservation
         from django.db.models import Sum
+        from products.inventory_stock import live_variant_availability
 
         session = get_object_or_404(LiveSession, slug=slug)
 
@@ -72,26 +73,21 @@ class PublicLiveSessionDetailView(APIView):
         for img in ProductImage.objects.filter(product_id__in=ids_finales):
             images_map.setdefault(img.product_id, []).append(img)
 
-        # Pre-fetch variantes estructuradas (con stock por variante)
-        variants_map: dict = {}
-        for v in ProductVariant.objects.filter(
-            product_id__in=ids_finales, is_active=True
-        ).order_by('id'):
-            variants_map.setdefault(v.product_id, []).append(v)
-
         products_data = []
         for producto, available in productos_finales:
             imgs = images_map.get(producto.id, [])
-            product_variants = variants_map.get(producto.id, [])
+            # available ya es inventario − reservas live; alinear variantes con esa misma lógica
+            variant_rows = live_variant_availability(producto.id, available)
             variants_data = [
                 {
-                    'id': v.id,
-                    'size': v.talla,
-                    'color': v.color,
-                    'stock': max(0, v.stock_extra),
-                    'disponible': v.stock_extra > 0,
+                    'id': v['id'],
+                    'size': v['talla'],
+                    'color': v['color'],
+                    'color_hex': v.get('color_hex') or '',
+                    'stock': max(0, int(v['disponible'])),
+                    'disponible': int(v['disponible']) > 0,
                 }
-                for v in product_variants
+                for v in variant_rows
             ]
             products_data.append({
                 'id': producto.id,

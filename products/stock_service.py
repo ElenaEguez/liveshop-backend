@@ -366,12 +366,28 @@ def check_available_for_sale(product_id: int, quantity: int, variant_id=None) ->
     qty = int(quantity)
     if variant_id:
         v = ProductVariant.objects.get(pk=variant_id, product_id=product_id, is_active=True)
-        if v.stock_extra < qty:
-            raise StockError(
-                f'Stock insuficiente para variante ({v.talla} / {v.color}). '
-                f'Disponible: {v.stock_extra}.'
-            )
-        return
+        stock_var = int(v.stock_extra or 0)
+        if stock_var >= qty:
+            return
+
+        # Catálogo sin stock_extra (o insuficiente) pero con inventario físico:
+        # misma regla que POS / live público — permitir si el físico alcanza.
+        from django.db.models import Sum
+        total_extra = (
+            ProductVariant.objects.filter(product_id=product_id, is_active=True)
+            .aggregate(t=Sum('stock_extra'))['t']
+            or 0
+        )
+        if int(total_extra) <= 0:
+            inv = get_primary_inventory(product_id)
+            disp = inv.available_quantity if inv else 0
+            if disp >= qty:
+                return
+
+        raise StockError(
+            f'Stock insuficiente para variante ({v.talla} / {v.color}). '
+            f'Disponible: {stock_var}.'
+        )
     if product_has_variants(product_id):
         raise StockError('Este producto tiene variantes. Debe seleccionar talla/color.')
     inv = get_primary_inventory(product_id)
