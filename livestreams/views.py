@@ -113,6 +113,7 @@ class PublicLiveSessionDetailView(APIView):
             'status': session.status,
             'platform': session.platform,
             'vendor_name': session.vendor.nombre_tienda,
+            'whatsapp': session.vendor.whatsapp or '',
             'payment_qr_image': (
                 request.build_absolute_uri(session.payment_qr_image.url)
                 if session.payment_qr_image
