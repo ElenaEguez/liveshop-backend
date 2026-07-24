@@ -13,6 +13,9 @@ class Reservation(models.Model):
         ('paid', 'Pagada'),
     ]
 
+    # Stock comprometido en live (catálogo / inventario). pending no entra.
+    COMMITTED_STATUSES = ('confirmed', 'paid', 'shipped', 'recibido')
+
     session = models.ForeignKey(LiveSession, on_delete=models.CASCADE, related_name='reservations')
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reservations')
     variant = models.ForeignKey(

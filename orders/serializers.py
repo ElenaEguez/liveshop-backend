@@ -30,10 +30,9 @@ class PublicReservationSerializer(serializers.ModelSerializer):
 
         base_stock = inventory.quantity if inventory else product.stock
 
-        from .models import Reservation
         reserved = Reservation.objects.filter(
             product=product,
-            status__in=['pending', 'confirmed', 'paid']
+            status__in=Reservation.COMMITTED_STATUSES
         ).aggregate(total=Sum('quantity'))['total'] or 0
 
         available = max(0, base_stock - reserved)

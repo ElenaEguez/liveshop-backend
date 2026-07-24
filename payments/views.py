@@ -94,18 +94,30 @@ class PublicPaymentCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        payment = Payment.objects.create(
-            reservation=reservation,
-            amount=reservation.total_price,
-            payment_method=payment_method,
-            receipt_image=receipt_image,
-            customer_reference=customer_reference,
-            status='submitted',
-            submitted_at=timezone.now()
-        )
+        from products.stock_service import StockError, reserve_stock
 
-        reservation.status = 'confirmed'
-        reservation.save()
+        try:
+            with transaction.atomic():
+                # Comprometer stock al subir comprobante (confirmed = compra en proceso)
+                reserve_stock(reservation.product, reservation.quantity)
+
+                payment = Payment.objects.create(
+                    reservation=reservation,
+                    amount=reservation.total_price,
+                    payment_method=payment_method,
+                    receipt_image=receipt_image,
+                    customer_reference=customer_reference,
+                    status='submitted',
+                    submitted_at=timezone.now()
+                )
+
+                reservation.status = 'confirmed'
+                reservation.save(update_fields=['status', 'updated_at'])
+        except StockError as exc:
+            return Response(
+                {'error': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         _emit_vendor_update(
             reservation.session.vendor_id,
@@ -251,9 +263,13 @@ class PaymentViewSet(viewsets.ModelViewSet):
             payment.vendor_notes = serializer.validated_data.get('vendor_notes', '')
             payment.save()
 
-            # Actualizar estado de la reserva a 'pending'
+            # Actualizar estado de la reserva a 'pending' y liberar stock comprometido
+            from products.stock_service import release_reservation
+            from orders.models import Reservation as ReservationModel
+            if payment.reservation.status in ReservationModel.COMMITTED_STATUSES:
+                release_reservation(payment.reservation.product, payment.reservation.quantity)
             payment.reservation.status = 'pending'
-            payment.reservation.save()
+            payment.reservation.save(update_fields=['status', 'updated_at'])
 
         _emit_vendor_update(
             payment.reservation.session.vendor_id,

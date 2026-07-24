@@ -33,12 +33,11 @@ class PublicLiveSessionDetailView(APIView):
 
         product_ids = [p.id for p in all_products]
 
-        # Pre-fetch reservas activas (una sola query)
-        active_statuses = ['pending', 'confirmed', 'paid']
+        # pending no resta: el producto sigue en el live hasta comprobante/compra
         reserved_map = dict(
             Reservation.objects.filter(
                 product_id__in=product_ids,
-                status__in=active_statuses
+                status__in=Reservation.COMMITTED_STATUSES
             ).values('product_id').annotate(total=Sum('quantity')).values_list('product_id', 'total')
         )
 

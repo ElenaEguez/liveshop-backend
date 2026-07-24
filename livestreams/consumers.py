@@ -3,7 +3,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from livestreams.models import LiveSession
 from orders.models import Reservation
-from products.stock_service import StockError, check_available_for_sale, reserve_stock
+from products.stock_service import StockError, check_available_for_sale
 from django.utils import timezone
 
 
@@ -162,7 +162,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
                     quantity=qty,
                     status='pending',
                 )
-                reserve_stock(product, qty)
+                # pending no compromete stock; se reserva al subir comprobante
 
                 return {
                     'id': reservation.id,

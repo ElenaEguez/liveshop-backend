@@ -142,7 +142,8 @@ class PublicReservationCreateView(generics.CreateAPIView):
                 Cupon.objects.filter(pk=cupon.pk).update(
                     usos_actuales=F('usos_actuales') + 1
                 )
-            reserve_stock(product, quantity)
+            # No reserve_stock aquí: pending = cliente aún en pago.
+            # El stock se compromete al subir comprobante (confirmed).
 
         channel_layer = get_channel_layer()
 
@@ -276,8 +277,19 @@ class ReservationViewSet(viewsets.ModelViewSet):
                     )
                 except StockError as exc:
                     return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            elif (
+                new_status in Reservation.COMMITTED_STATUSES
+                and old_status == 'pending'
+            ):
+                # Comprometer stock si el vendedor avanza el pedido sin pasar por comprobante
+                try:
+                    reserve_stock(instance.product, instance.quantity)
+                except StockError as exc:
+                    return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             elif new_status == 'cancelled' and old_status not in ('cancelled', 'delivered'):
-                release_reservation(instance.product, instance.quantity)
+                # Solo liberar si la reserva ya había comprometido inventario
+                if old_status in Reservation.COMMITTED_STATUSES:
+                    release_reservation(instance.product, instance.quantity)
 
         return super().partial_update(request, *args, **kwargs)
 
